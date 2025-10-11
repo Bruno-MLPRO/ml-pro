@@ -27,7 +27,16 @@ const Index = () => {
   }, [user, userRole, loading, navigate]);
 
   if (loading) {
-    return null;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <div className="w-20 h-20 rounded-2xl bg-primary flex items-center justify-center mx-auto animate-pulse">
+            <span className="text-primary-foreground font-display font-bold text-3xl">ML</span>
+          </div>
+          <p className="text-foreground-secondary">Carregando...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

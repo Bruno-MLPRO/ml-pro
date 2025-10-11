@@ -151,26 +151,53 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          caixa: number | null
           created_at: string | null
           email: string
+          estrutura_vendedor: string | null
           full_name: string
+          hub_logistico: string | null
           id: string
+          mentoria_status: string | null
+          phone: string | null
+          possui_contador: boolean | null
+          sistemas_externos: string | null
+          tipo_pj: string | null
+          turma: string | null
           updated_at: string | null
         }
         Insert: {
           avatar_url?: string | null
+          caixa?: number | null
           created_at?: string | null
           email: string
+          estrutura_vendedor?: string | null
           full_name: string
+          hub_logistico?: string | null
           id: string
+          mentoria_status?: string | null
+          phone?: string | null
+          possui_contador?: boolean | null
+          sistemas_externos?: string | null
+          tipo_pj?: string | null
+          turma?: string | null
           updated_at?: string | null
         }
         Update: {
           avatar_url?: string | null
+          caixa?: number | null
           created_at?: string | null
           email?: string
+          estrutura_vendedor?: string | null
           full_name?: string
+          hub_logistico?: string | null
           id?: string
+          mentoria_status?: string | null
+          phone?: string | null
+          possui_contador?: boolean | null
+          sistemas_externos?: string | null
+          tipo_pj?: string | null
+          turma?: string | null
           updated_at?: string | null
         }
         Relationships: []

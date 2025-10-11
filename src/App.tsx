@@ -11,6 +11,7 @@ import StudentJourney from "./pages/StudentJourney";
 import StudentProfile from "./pages/StudentProfile";
 import JourneyManagement from "./pages/JourneyManagement";
 import TeamManagement from "./pages/TeamManagement";
+import StudentsManagement from "./pages/StudentsManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/gestor/dashboard" element={<GestorDashboard />} />
             <Route path="/gestor/jornada" element={<JourneyManagement />} />
+            <Route path="/gestor/alunos" element={<StudentsManagement />} />
             <Route path="/gestor/equipe" element={<TeamManagement />} />
             <Route path="/aluno/jornada" element={<StudentJourney />} />
             <Route path="/aluno/:id" element={<StudentProfile />} />

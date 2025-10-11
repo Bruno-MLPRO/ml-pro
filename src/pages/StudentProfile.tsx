@@ -7,7 +7,9 @@ import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, Mail, Calendar, TrendingUp } from 'lucide-react';
+import { Loader2, Mail, Calendar, TrendingUp, CheckCircle2, Circle, AlertCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 
 interface Profile {
   full_name: string;
@@ -24,7 +26,9 @@ interface Journey {
 }
 
 interface Milestone {
+  id: string;
   title: string;
+  description: string;
   status: string;
   progress: number;
   phase: string;
@@ -37,7 +41,9 @@ const StudentProfile = () => {
   const [journey, setJourney] = useState<Journey | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [journeyId, setJourneyId] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -69,10 +75,11 @@ const StudentProfile = () => {
 
       if (journeyError) throw journeyError;
       setJourney(journeyData);
+      setJourneyId(journeyData.id);
 
       const { data: milestonesData, error: milestonesError } = await supabase
         .from('milestones')
-        .select('title, status, progress, phase')
+        .select('*')
         .eq('journey_id', journeyData.id)
         .order('order_index');
 
@@ -82,6 +89,66 @@ const StudentProfile = () => {
       console.error('Error loading student data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateMilestoneStatus = async (milestoneId: string, newStatus: 'not_started' | 'in_progress' | 'completed' | 'blocked') => {
+    try {
+      const { error } = await supabase
+        .from('milestones')
+        .update({ 
+          status: newStatus,
+          progress: newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0
+        })
+        .eq('id', milestoneId);
+
+      if (error) throw error;
+
+      // Update local state
+      setMilestones(prev => prev.map(m => 
+        m.id === milestoneId 
+          ? { ...m, status: newStatus, progress: newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0 }
+          : m
+      ));
+
+      toast({
+        title: "Status atualizado",
+        description: "O status do milestone foi atualizado com sucesso.",
+      });
+
+      // Recalculate journey progress
+      loadStudentData();
+    } catch (error) {
+      console.error('Error updating milestone status:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o status.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle2 className="w-6 h-6 text-success" />;
+      case 'in_progress':
+        return <Loader2 className="w-6 h-6 text-warning" />;
+      case 'blocked':
+        return <AlertCircle className="w-6 h-6 text-warning" />;
+      default:
+        return <Circle className="w-6 h-6 text-foreground-secondary" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-success/10 border-success text-success';
+      case 'in_progress':
+        return 'bg-warning/10 border-warning text-warning';
+      default:
+        return 'bg-secondary border-secondary-foreground/20 text-secondary-foreground';
     }
   };
 
@@ -126,16 +193,6 @@ const StudentProfile = () => {
       blocked: 'Bloqueado',
     };
     return labels[status] || status;
-  };
-
-  const getStatusVariant = (status: string) => {
-    const variants: Record<string, string> = {
-      not_started: 'secondary',
-      in_progress: 'default',
-      completed: 'outline',
-      blocked: 'destructive',
-    };
-    return variants[status] as any;
   };
 
   return (
@@ -203,19 +260,57 @@ const StudentProfile = () => {
                   Nenhuma etapa cadastrada
                 </p>
               ) : (
-                milestones.map((milestone, index) => (
-                  <div key={index} className="border border-border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <h3 className="font-semibold text-foreground">{milestone.title}</h3>
-                      <Badge variant="outline">{milestone.phase}</Badge>
-                    </div>
-                    <div>
-                      <Badge variant={getStatusVariant(milestone.status)}>
-                        {getStatusLabel(milestone.status)}
-                      </Badge>
-                    </div>
-                  </div>
-                ))
+                <div className="relative">
+                  <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-background-elevated" />
+                  {milestones.map((milestone, index) => (
+                    <Card key={milestone.id} className="p-6 mb-4 relative ml-16">
+                      <div className="absolute -left-16 top-6">
+                        {getStatusIcon(milestone.status)}
+                      </div>
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="text-lg font-semibold text-foreground">
+                          {milestone.title}
+                        </h3>
+                        <Badge variant="outline">{milestone.phase}</Badge>
+                      </div>
+                      {milestone.description && (
+                        <p className="text-foreground-secondary mb-3">
+                          {milestone.description}
+                        </p>
+                      )}
+                      <div>
+                        <Select 
+                          value={milestone.status} 
+                          onValueChange={(value) => updateMilestoneStatus(milestone.id, value as 'not_started' | 'in_progress' | 'completed' | 'blocked')}
+                        >
+                          <SelectTrigger className={`w-[180px] ${getStatusColor(milestone.status)}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="not_started">
+                              <span className="flex items-center gap-2">
+                                <Circle className="w-4 h-4" />
+                                Não Iniciado
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="in_progress">
+                              <span className="flex items-center gap-2">
+                                <Loader2 className="w-4 h-4" />
+                                Em Progresso
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="completed">
+                              <span className="flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4" />
+                                Concluído
+                              </span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               )}
             </div>
           </Card>

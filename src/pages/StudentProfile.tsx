@@ -118,6 +118,26 @@ const StudentProfile = () => {
       .slice(0, 2);
   };
 
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      not_started: 'Não Iniciado',
+      in_progress: 'Em Progresso',
+      completed: 'Concluído',
+      blocked: 'Bloqueado',
+    };
+    return labels[status] || status;
+  };
+
+  const getStatusVariant = (status: string) => {
+    const variants: Record<string, string> = {
+      not_started: 'secondary',
+      in_progress: 'default',
+      completed: 'outline',
+      blocked: 'destructive',
+    };
+    return variants[status] as any;
+  };
+
   return (
     <div className="flex min-h-screen">
       <Sidebar />
@@ -187,22 +207,12 @@ const StudentProfile = () => {
                   <div key={index} className="border border-border rounded-lg p-4">
                     <div className="flex justify-between items-start mb-3">
                       <h3 className="font-semibold text-foreground">{milestone.title}</h3>
-                      <Badge variant={milestone.status === 'completed' ? 'outline' : 'default'}>
-                        {milestone.status === 'completed' ? 'Concluído' : 
-                         milestone.status === 'in_progress' ? 'Em Progresso' : 
-                         milestone.status === 'blocked' ? 'Bloqueado' : 'Não Iniciado'}
-                      </Badge>
+                      <Badge variant="outline">{milestone.phase}</Badge>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <Badge variant="outline" className="text-xs">
-                        {milestone.phase}
+                    <div>
+                      <Badge variant={getStatusVariant(milestone.status)}>
+                        {getStatusLabel(milestone.status)}
                       </Badge>
-                      <div className="flex-1">
-                        <Progress value={milestone.progress} className="h-2" />
-                      </div>
-                      <span className="text-sm font-semibold text-foreground-secondary">
-                        {milestone.progress}%
-                      </span>
                     </div>
                   </div>
                 ))

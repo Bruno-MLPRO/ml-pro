@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      call_schedules: {
+        Row: {
+          created_at: string | null
+          date: string
+          description: string | null
+          id: string
+          theme: string
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          description?: string | null
+          id?: string
+          theme: string
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          description?: string | null
+          id?: string
+          theme?: string
+        }
+        Relationships: []
+      }
+      important_links: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          order_index: number | null
+          title: string
+          url: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          order_index?: number | null
+          title: string
+          url: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          order_index?: number | null
+          title?: string
+          url?: string
+        }
+        Relationships: []
+      }
       journey_templates: {
         Row: {
           created_at: string | null
@@ -147,6 +201,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notices: {
+        Row: {
+          content: string
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          priority: string | null
+          title: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          priority?: string | null
+          title: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          priority?: string | null
+          title?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {

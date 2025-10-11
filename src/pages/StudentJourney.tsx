@@ -29,6 +29,8 @@ const StudentJourney = () => {
   const { user, userRole, loading: authLoading } = useAuth();
   const [journey, setJourney] = useState<Journey | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [journeys, setJourneys] = useState<any[]>([]);
+  const [selectedJourneyId, setSelectedJourneyId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -40,16 +42,42 @@ const StudentJourney = () => {
     }
 
     if (user && userRole === 'student') {
-      loadJourneyData();
+      loadJourneys();
     }
   }, [user, userRole, authLoading, navigate]);
 
-  const loadJourneyData = async () => {
+  useEffect(() => {
+    if (selectedJourneyId) {
+      loadJourneyData(selectedJourneyId);
+    }
+  }, [selectedJourneyId]);
+
+  const loadJourneys = async () => {
+    try {
+      const { data: journeysData, error: journeysError } = await supabase
+        .from('student_journeys')
+        .select('*')
+        .eq('student_id', user!.id);
+
+      if (journeysError) throw journeysError;
+      
+      setJourneys(journeysData || []);
+      if (journeysData && journeysData.length > 0) {
+        setSelectedJourneyId(journeysData[0].id);
+      }
+    } catch (error) {
+      console.error('Error loading journeys:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadJourneyData = async (journeyId: string) => {
     try {
       const { data: journeyData, error: journeyError } = await supabase
         .from('student_journeys')
         .select('*')
-        .eq('student_id', user!.id)
+        .eq('id', journeyId)
         .single();
 
       if (journeyError) throw journeyError;
@@ -58,15 +86,13 @@ const StudentJourney = () => {
       const { data: milestonesData, error: milestonesError } = await supabase
         .from('milestones')
         .select('*')
-        .eq('journey_id', journeyData.id)
+        .eq('journey_id', journeyId)
         .order('order_index');
 
       if (milestonesError) throw milestonesError;
       setMilestones(milestonesData || []);
     } catch (error) {
       console.error('Error loading journey:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -108,7 +134,9 @@ const StudentJourney = () => {
       });
 
       // Recalculate journey progress
-      loadJourneyData();
+      if (selectedJourneyId) {
+        loadJourneyData(selectedJourneyId);
+      }
     } catch (error) {
       console.error('Error updating milestone status:', error);
       toast({
@@ -156,12 +184,28 @@ const StudentJourney = () => {
       <Sidebar />
       <main className="flex-1 p-8">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-display font-semibold text-foreground mb-2">
-            Minha Jornada
-          </h1>
-          <p className="text-foreground-secondary mb-8">
-            Acompanhe seu progresso e conquiste suas metas
-          </p>
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-4xl font-display font-semibold text-foreground mb-2">
+                Jornadas
+              </h1>
+              <p className="text-foreground-secondary">
+                Selecione uma jornada para acompanhar seu progresso
+              </p>
+            </div>
+            <Select value={selectedJourneyId} onValueChange={setSelectedJourneyId}>
+              <SelectTrigger className="w-[280px]">
+                <SelectValue placeholder="Selecione uma jornada" />
+              </SelectTrigger>
+              <SelectContent>
+                {journeys.map((j) => (
+                  <SelectItem key={j.id} value={j.id}>
+                    Jornada - {j.current_phase || 'Em andamento'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {journey && (
             <Card className="p-6 mb-8">

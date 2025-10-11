@@ -18,7 +18,7 @@ export const Sidebar = () => {
 
       {/* Menu Items */}
       <nav className="flex-1 flex flex-col gap-2">
-        {userRole === 'manager' ? (
+      {userRole === 'manager' ? (
           <>
             <Button
               variant="ghost"
@@ -78,20 +78,36 @@ export const Sidebar = () => {
             </Button>
           </>
         ) : (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate('/aluno/jornada')}
-            className={cn(
-              "w-12 h-12 rounded-xl transition-all duration-200",
-              location.pathname === '/aluno/jornada'
-                ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-                : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
-            )}
-            title="Minha Jornada"
-          >
-            <Home className="w-5 h-5" strokeWidth={1.5} />
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/aluno/dashboard')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/aluno/dashboard'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Dashboard"
+            >
+              <Home className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/aluno/jornadas')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/aluno/jornadas'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Jornadas"
+            >
+              <ListChecks className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+          </>
         )}
         <Button
           variant="ghost"

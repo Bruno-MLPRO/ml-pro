@@ -13,7 +13,7 @@ const Index = () => {
         if (userRole === 'manager') {
           navigate('/gestor/dashboard');
         } else if (userRole === 'student') {
-          navigate('/aluno/jornada');
+          navigate('/aluno/dashboard');
         }
       } else if (user && !userRole) {
         // User is authenticated but has no role - wait for role to load

@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import GestorDashboard from "./pages/GestorDashboard";
+import StudentDashboard from "./pages/StudentDashboard";
 import StudentJourney from "./pages/StudentJourney";
 import StudentProfile from "./pages/StudentProfile";
 import JourneyManagement from "./pages/JourneyManagement";
@@ -31,7 +32,8 @@ const App = () => (
             <Route path="/gestor/jornada" element={<JourneyManagement />} />
             <Route path="/gestor/alunos" element={<StudentsManagement />} />
             <Route path="/gestor/equipe" element={<TeamManagement />} />
-            <Route path="/aluno/jornada" element={<StudentJourney />} />
+            <Route path="/aluno/dashboard" element={<StudentDashboard />} />
+            <Route path="/aluno/jornadas" element={<StudentJourney />} />
             <Route path="/aluno/:id" element={<StudentProfile />} />
             <Route path="/perfil" element={<Profile />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

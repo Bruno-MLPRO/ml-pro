@@ -8,9 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, User as UserIcon, Lock } from "lucide-react";
+import { Loader2, User as UserIcon, Lock, Check } from "lucide-react";
 import { z } from "zod";
+import { cn } from "@/lib/utils";
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Senha atual é obrigatória"),
@@ -25,6 +28,8 @@ interface ProfileData {
   full_name: string;
   email: string;
   phone: string | null;
+  cpf: string | null;
+  cnpj: string | null;
   turma: string | null;
   estrutura_vendedor: string | null;
   tipo_pj: string | null;
@@ -53,6 +58,11 @@ export default function Profile() {
   const [editForm, setEditForm] = useState({
     full_name: "",
     email: "",
+    phone: "",
+    cpf: "",
+    tipo_pj: "",
+    cnpj: "",
+    possui_contador: false,
   });
 
   useEffect(() => {
@@ -80,6 +90,11 @@ export default function Profile() {
       setEditForm({
         full_name: data?.full_name || "",
         email: data?.email || "",
+        phone: data?.phone || "",
+        cpf: data?.cpf || "",
+        tipo_pj: data?.tipo_pj || "",
+        cnpj: data?.cnpj || "",
+        possui_contador: data?.possui_contador || false,
       });
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -162,6 +177,11 @@ export default function Profile() {
         .update({
           full_name: editForm.full_name,
           email: editForm.email,
+          phone: editForm.phone,
+          cpf: editForm.cpf,
+          tipo_pj: editForm.tipo_pj === "Não tenho" ? null : editForm.tipo_pj,
+          cnpj: editForm.tipo_pj === "Não tenho" ? null : editForm.cnpj,
+          possui_contador: editForm.possui_contador,
         })
         .eq('id', user?.id);
 
@@ -242,12 +262,17 @@ export default function Profile() {
                     <div className="flex gap-2">
                       <Button 
                         onClick={() => {
-                          setIsEditingProfile(false);
-                          setEditForm({
-                            full_name: profileData?.full_name || "",
-                            email: profileData?.email || "",
-                          });
-                        }} 
+                      setIsEditingProfile(false);
+                      setEditForm({
+                        full_name: profileData?.full_name || "",
+                        email: profileData?.email || "",
+                        phone: profileData?.phone || "",
+                        cpf: profileData?.cpf || "",
+                        tipo_pj: profileData?.tipo_pj || "",
+                        cnpj: profileData?.cnpj || "",
+                        possui_contador: profileData?.possui_contador || false,
+                      });
+                    }}
                         variant="outline"
                       >
                         Cancelar
@@ -295,11 +320,99 @@ export default function Profile() {
                       <p className="text-foreground font-medium mt-1">{profileData?.email}</p>
                     )}
                   </div>
-                  {profileData?.phone && (
+                  {profileData?.phone !== undefined && (
                     <div>
-                      <Label className="text-foreground-secondary">Telefone</Label>
-                      <p className="text-foreground font-medium mt-1">{profileData.phone}</p>
+                      <Label htmlFor="phone">Telefone</Label>
+                      {isEditingProfile ? (
+                        <Input
+                          id="phone"
+                          value={editForm.phone}
+                          onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                          placeholder="(00) 00000-0000"
+                          className="mt-1"
+                        />
+                      ) : (
+                        <p className="text-foreground font-medium mt-1">{profileData.phone || "-"}</p>
+                      )}
                     </div>
+                  )}
+                  {userRole === 'student' && (
+                    <>
+                      <div>
+                        <Label htmlFor="cpf">CPF</Label>
+                        {isEditingProfile ? (
+                          <Input
+                            id="cpf"
+                            value={editForm.cpf}
+                            onChange={(e) => setEditForm({ ...editForm, cpf: e.target.value })}
+                            placeholder="000.000.000-00"
+                            className="mt-1"
+                          />
+                        ) : (
+                          <p className="text-foreground font-medium mt-1">{profileData?.cpf || "-"}</p>
+                        )}
+                      </div>
+                      <div>
+                        <Label htmlFor="tipo_cnpj">Tipo de CNPJ</Label>
+                        {isEditingProfile ? (
+                          <Select 
+                            value={editForm.tipo_pj || "Não tenho"} 
+                            onValueChange={(value) => setEditForm({ ...editForm, tipo_pj: value, cnpj: value === "Não tenho" ? "" : editForm.cnpj })}
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Não tenho">Não tenho</SelectItem>
+                              <SelectItem value="MEI">MEI</SelectItem>
+                              <SelectItem value="ME">ME</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <p className="text-foreground font-medium mt-1">{profileData?.tipo_pj || "Não tenho"}</p>
+                        )}
+                      </div>
+                      {(isEditingProfile ? editForm.tipo_pj !== "Não tenho" && editForm.tipo_pj : profileData?.tipo_pj) && (
+                        <div>
+                          <Label htmlFor="cnpj">Número do CNPJ</Label>
+                          {isEditingProfile ? (
+                            <Input
+                              id="cnpj"
+                              value={editForm.cnpj}
+                              onChange={(e) => setEditForm({ ...editForm, cnpj: e.target.value })}
+                              placeholder="00.000.000/0000-00"
+                              className="mt-1"
+                            />
+                          ) : (
+                            <p className="text-foreground font-medium mt-1">{profileData?.cnpj || "-"}</p>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex items-center space-x-2 pt-2">
+                        {isEditingProfile ? (
+                          <>
+                            <Checkbox
+                              id="possui_contador"
+                              checked={editForm.possui_contador}
+                              onCheckedChange={(checked) => setEditForm({ ...editForm, possui_contador: checked === true })}
+                            />
+                            <Label htmlFor="possui_contador" className="cursor-pointer font-normal">
+                              Tenho contador
+                            </Label>
+                          </>
+                        ) : (
+                          <>
+                            <div className={cn(
+                              "h-4 w-4 rounded-sm border flex items-center justify-center",
+                              profileData?.possui_contador ? "bg-primary border-primary" : "border-input"
+                            )}>
+                              {profileData?.possui_contador && <Check className="h-3 w-3 text-primary-foreground" />}
+                            </div>
+                            <Label className="font-normal">Tenho contador</Label>
+                          </>
+                        )}
+                      </div>
+                    </>
                   )}
                   {profileData?.turma && (
                     <div>
@@ -307,49 +420,11 @@ export default function Profile() {
                       <p className="text-foreground font-medium mt-1">{profileData.turma}</p>
                     </div>
                   )}
-                  {userRole === 'student' && (
-                    <>
-                      {profileData?.estrutura_vendedor && (
-                        <div>
-                          <Label className="text-foreground-secondary">Estrutura de Vendedor</Label>
-                          <p className="text-foreground font-medium mt-1">
-                            {profileData.estrutura_vendedor === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física (CPF)'}
-                          </p>
-                        </div>
-                      )}
-                      {profileData?.tipo_pj && (
-                        <div>
-                          <Label className="text-foreground-secondary">Tipo de PJ</Label>
-                          <p className="text-foreground font-medium mt-1">{profileData.tipo_pj}</p>
-                        </div>
-                      )}
-                      {profileData?.caixa !== null && (
-                        <div>
-                          <Label className="text-foreground-secondary">Caixa (Capital de Giro)</Label>
-                          <p className="text-foreground font-medium mt-1">
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(profileData.caixa)}
-                          </p>
-                        </div>
-                      )}
-                      {profileData?.hub_logistico && (
-                        <div>
-                          <Label className="text-foreground-secondary">Hub Logístico</Label>
-                          <p className="text-foreground font-medium mt-1">{profileData.hub_logistico}</p>
-                        </div>
-                      )}
-                      {profileData?.sistemas_externos && (
-                        <div>
-                          <Label className="text-foreground-secondary">Sistemas Externos</Label>
-                          <p className="text-foreground font-medium mt-1">{profileData.sistemas_externos}</p>
-                        </div>
-                      )}
-                      {profileData?.mentoria_status && (
-                        <div>
-                          <Label className="text-foreground-secondary">Status da Mentoria</Label>
-                          <p className="text-foreground font-medium mt-1">{profileData.mentoria_status}</p>
-                        </div>
-                      )}
-                    </>
+                  {userRole === 'student' && profileData?.mentoria_status && (
+                    <div>
+                      <Label className="text-foreground-secondary">Status da Mentoria</Label>
+                      <p className="text-foreground font-medium mt-1">{profileData.mentoria_status}</p>
+                    </div>
                   )}
                 </div>
               </CardContent>

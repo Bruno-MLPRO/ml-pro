@@ -372,22 +372,21 @@ export default function Profile() {
                           <p className="text-foreground font-medium mt-1">{profileData?.tipo_pj || "Não tenho"}</p>
                         )}
                       </div>
-                      {(isEditingProfile ? editForm.tipo_pj !== "Não tenho" && editForm.tipo_pj : profileData?.tipo_pj) && (
-                        <div>
-                          <Label htmlFor="cnpj">Número do CNPJ</Label>
-                          {isEditingProfile ? (
-                            <Input
-                              id="cnpj"
-                              value={editForm.cnpj}
-                              onChange={(e) => setEditForm({ ...editForm, cnpj: e.target.value })}
-                              placeholder="00.000.000/0000-00"
-                              className="mt-1"
-                            />
-                          ) : (
-                            <p className="text-foreground font-medium mt-1">{profileData?.cnpj || "-"}</p>
-                          )}
-                        </div>
-                      )}
+                      <div>
+                        <Label htmlFor="cnpj">Número do CNPJ</Label>
+                        {isEditingProfile ? (
+                          <Input
+                            id="cnpj"
+                            value={editForm.cnpj}
+                            onChange={(e) => setEditForm({ ...editForm, cnpj: e.target.value })}
+                            placeholder="00.000.000/0000-00"
+                            disabled={editForm.tipo_pj === "Não tenho" || !editForm.tipo_pj}
+                            className="mt-1"
+                          />
+                        ) : (
+                          <p className="text-foreground font-medium mt-1">{profileData?.cnpj || "-"}</p>
+                        )}
+                      </div>
                       <div className="flex items-center space-x-2 pt-2">
                         {isEditingProfile ? (
                           <>

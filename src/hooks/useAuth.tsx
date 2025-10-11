@@ -56,7 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .from('user_roles')
         .select('role')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       setUserRole(data?.role as 'student' | 'manager');
@@ -86,21 +86,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
+          role: role,
         },
       },
     });
 
-    if (!error && data.user) {
-      await supabase.from('user_roles').insert({
-        user_id: data.user.id,
-        role: role,
+    if (!error && data.user && role === 'student') {
+      await supabase.from('student_journeys').insert({
+        student_id: data.user.id,
       });
-
-      if (role === 'student') {
-        await supabase.from('student_journeys').insert({
-          student_id: data.user.id,
-        });
-      }
     }
 
     return { error };

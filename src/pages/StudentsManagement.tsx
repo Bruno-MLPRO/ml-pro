@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +52,8 @@ interface Student {
 const DEFAULT_PASSWORD = "12345678";
 
 export default function StudentsManagement() {
+  const { user, userRole, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -72,8 +76,15 @@ export default function StudentsManagement() {
   });
 
   useEffect(() => {
-    fetchStudents();
-  }, []);
+    if (!authLoading && (!user || userRole !== 'manager')) {
+      navigate('/auth');
+      return;
+    }
+
+    if (user && userRole === 'manager') {
+      fetchStudents();
+    }
+  }, [user, userRole, authLoading, navigate]);
 
   const fetchStudents = async () => {
     const { data: rolesData } = await supabase

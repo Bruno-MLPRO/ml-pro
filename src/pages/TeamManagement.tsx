@@ -24,6 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,14 +41,24 @@ interface Manager {
   id: string;
   full_name: string;
   email: string;
+  phone: string | null;
   active_students_pro: number;
   active_students_starter: number;
+}
+
+interface Student {
+  id: string;
+  full_name: string;
+  email: string;
+  journey_id: string;
 }
 
 export default function TeamManagement() {
   const { user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [managers, setManagers] = useState<Manager[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -56,6 +68,7 @@ export default function TeamManagement() {
   const [formData, setFormData] = useState({
     full_name: "",
     email: "",
+    phone: "",
     password: "",
   });
 
@@ -68,8 +81,35 @@ export default function TeamManagement() {
   useEffect(() => {
     if (user && userRole === 'manager') {
       loadManagers();
+      loadStudents();
     }
   }, [user, userRole]);
+
+  const loadStudents = async () => {
+    try {
+      // Get all students with their journey info
+      const { data: journeys, error } = await supabase
+        .from('student_journeys')
+        .select(`
+          id,
+          student_id,
+          profiles!student_journeys_student_id_fkey(id, full_name, email)
+        `);
+
+      if (error) throw error;
+
+      const studentsData = journeys?.map((journey: any) => ({
+        id: journey.profiles.id,
+        full_name: journey.profiles.full_name,
+        email: journey.profiles.email,
+        journey_id: journey.id,
+      })) || [];
+
+      setStudents(studentsData);
+    } catch (error) {
+      console.error('Error loading students:', error);
+    }
+  };
 
   const loadManagers = async () => {
     try {
@@ -93,7 +133,7 @@ export default function TeamManagement() {
       // Get profiles for these managers
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, phone')
         .in('id', managerIds);
 
       if (profilesError) throw profilesError;
@@ -111,6 +151,7 @@ export default function TeamManagement() {
             id: profile.id,
             full_name: profile.full_name,
             email: profile.email,
+            phone: profile.phone,
             active_students_pro: Math.floor((totalStudents || 0) * 0.6), // Mock data
             active_students_starter: Math.ceil((totalStudents || 0) * 0.4), // Mock data
           };
@@ -129,7 +170,7 @@ export default function TeamManagement() {
   const handleCreateManager = async () => {
     try {
       if (!formData.full_name || !formData.email || !formData.password) {
-        toast.error('Preencha todos os campos');
+        toast.error('Preencha todos os campos obrigatórios');
         return;
       }
 
@@ -148,9 +189,31 @@ export default function TeamManagement() {
 
       if (authError) throw authError;
 
+      if (authData.user) {
+        // Update profile with phone
+        await supabase
+          .from('profiles')
+          .update({ phone: formData.phone })
+          .eq('id', authData.user.id);
+
+        // Assign students to this manager
+        if (selectedStudentIds.length > 0) {
+          const updates = selectedStudentIds.map(studentId => {
+            const student = students.find(s => s.id === studentId);
+            return supabase
+              .from('student_journeys')
+              .update({ manager_id: authData.user!.id })
+              .eq('id', student!.journey_id);
+          });
+
+          await Promise.all(updates);
+        }
+      }
+
       toast.success('Gestor criado com sucesso');
       setIsCreateDialogOpen(false);
-      setFormData({ full_name: "", email: "", password: "" });
+      setFormData({ full_name: "", email: "", phone: "", password: "" });
+      setSelectedStudentIds([]);
       loadManagers();
     } catch (error: any) {
       console.error('Error creating manager:', error);
@@ -158,15 +221,76 @@ export default function TeamManagement() {
     }
   };
 
+  const handleEditManager = async () => {
+    if (!selectedManager) return;
+
+    try {
+      // Update profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: formData.full_name,
+          email: formData.email,
+          phone: formData.phone,
+        })
+        .eq('id', selectedManager.id);
+
+      if (profileError) throw profileError;
+
+      // Update email in auth if it changed
+      if (formData.email !== selectedManager.email) {
+        const { error: emailError } = await supabase.auth.updateUser({
+          email: formData.email,
+        });
+
+        if (emailError) throw emailError;
+      }
+
+      // First, remove this manager from all students
+      await supabase
+        .from('student_journeys')
+        .update({ manager_id: null })
+        .eq('manager_id', selectedManager.id);
+
+      // Then assign selected students to this manager
+      if (selectedStudentIds.length > 0) {
+        const updates = selectedStudentIds.map(studentId => {
+          const student = students.find(s => s.id === studentId);
+          return supabase
+            .from('student_journeys')
+            .update({ manager_id: selectedManager.id })
+            .eq('id', student!.journey_id);
+        });
+
+        await Promise.all(updates);
+      }
+
+      toast.success('Gestor atualizado com sucesso');
+      setIsEditDialogOpen(false);
+      setSelectedManager(null);
+      setFormData({ full_name: "", email: "", phone: "", password: "" });
+      setSelectedStudentIds([]);
+      loadManagers();
+    } catch (error: any) {
+      console.error('Error updating manager:', error);
+      toast.error(error.message || 'Erro ao atualizar gestor');
+    }
+  };
+
   const handleDeleteManager = async () => {
     if (!selectedManager) return;
 
     try {
-      // Note: Deleting auth users requires admin privileges
-      // This would typically be done via an edge function or admin API
-      toast.info('Funcionalidade de exclusão em desenvolvimento');
+      // Remove manager assignment from all their students
+      await supabase
+        .from('student_journeys')
+        .update({ manager_id: null })
+        .eq('manager_id', selectedManager.id);
+
+      toast.success('Vínculo com alunos removido. Gestor desvinculado com sucesso.');
       setIsDeleteDialogOpen(false);
       setSelectedManager(null);
+      loadManagers();
     } catch (error) {
       console.error('Error deleting manager:', error);
       toast.error('Erro ao excluir gestor');
@@ -254,13 +378,23 @@ export default function TeamManagement() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => {
+                            onClick={async () => {
                               setSelectedManager(manager);
                               setFormData({
                                 full_name: manager.full_name,
                                 email: manager.email,
+                                phone: manager.phone || "",
                                 password: ""
                               });
+
+                              // Load students assigned to this manager
+                              const { data: assignedJourneys } = await supabase
+                                .from('student_journeys')
+                                .select('student_id')
+                                .eq('manager_id', manager.id);
+
+                              const assignedStudentIds = assignedJourneys?.map(j => j.student_id) || [];
+                              setSelectedStudentIds(assignedStudentIds);
                               setIsEditDialogOpen(true);
                             }}
                           >
@@ -289,46 +423,90 @@ export default function TeamManagement() {
 
       {/* Create Manager Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Criar Novo Gestor</DialogTitle>
             <DialogDescription>
               Preencha os dados para criar um novo gestor
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome Completo</Label>
-              <Input
-                id="name"
-                value={formData.full_name}
-                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                placeholder="Digite o nome completo"
-              />
+          <ScrollArea className="max-h-[60vh] pr-4">
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Nome Completo *</Label>
+                <Input
+                  id="name"
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  placeholder="Digite o nome completo"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Celular</Label>
+                <Input
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Senha *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Senha temporária"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Alunos Atribuídos</Label>
+                <div className="border rounded-lg p-4 space-y-2 max-h-[200px] overflow-y-auto">
+                  {students.length === 0 ? (
+                    <p className="text-sm text-foreground-secondary">Nenhum aluno disponível</p>
+                  ) : (
+                    students.map((student) => (
+                      <div key={student.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`student-${student.id}`}
+                          checked={selectedStudentIds.includes(student.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedStudentIds([...selectedStudentIds, student.id]);
+                            } else {
+                              setSelectedStudentIds(selectedStudentIds.filter(id => id !== student.id));
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`student-${student.id}`}
+                          className="text-sm font-normal cursor-pointer flex-1"
+                        >
+                          {student.full_name} ({student.email})
+                        </Label>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="email@exemplo.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Senha temporária"
-              />
-            </div>
-          </div>
+          </ScrollArea>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setIsCreateDialogOpen(false);
+              setSelectedStudentIds([]);
+            }}>
               Cancelar
             </Button>
             <Button onClick={handleCreateManager}>Criar Gestor</Button>
@@ -338,17 +516,83 @@ export default function TeamManagement() {
 
       {/* Edit Manager Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Editar Gestor</DialogTitle>
             <DialogDescription>
-              Funcionalidade em desenvolvimento
+              Atualize os dados do gestor e gerencie seus alunos
             </DialogDescription>
           </DialogHeader>
+          <ScrollArea className="max-h-[60vh] pr-4">
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Nome Completo</Label>
+                <Input
+                  id="edit-name"
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  placeholder="Digite o nome completo"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-phone">Celular</Label>
+                <Input
+                  id="edit-phone"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Alunos Atribuídos</Label>
+                <div className="border rounded-lg p-4 space-y-2 max-h-[200px] overflow-y-auto">
+                  {students.length === 0 ? (
+                    <p className="text-sm text-foreground-secondary">Nenhum aluno disponível</p>
+                  ) : (
+                    students.map((student) => (
+                      <div key={student.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`edit-student-${student.id}`}
+                          checked={selectedStudentIds.includes(student.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedStudentIds([...selectedStudentIds, student.id]);
+                            } else {
+                              setSelectedStudentIds(selectedStudentIds.filter(id => id !== student.id));
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`edit-student-${student.id}`}
+                          className="text-sm font-normal cursor-pointer flex-1"
+                        >
+                          {student.full_name} ({student.email})
+                        </Label>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              Fechar
+            <Button variant="outline" onClick={() => {
+              setIsEditDialogOpen(false);
+              setSelectedStudentIds([]);
+            }}>
+              Cancelar
             </Button>
+            <Button onClick={handleEditManager}>Salvar Alterações</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -359,8 +603,8 @@ export default function TeamManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir Gestor</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir o gestor {selectedManager?.full_name}? 
-              Esta ação não pode ser desfeita.
+              Tem certeza que deseja remover o gestor {selectedManager?.full_name}? 
+              Todos os alunos atribuídos a este gestor ficarão sem gestor.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

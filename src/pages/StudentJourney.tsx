@@ -75,7 +75,7 @@ const StudentJourney = () => {
       case 'completed':
         return <CheckCircle2 className="w-6 h-6 text-success" />;
       case 'in_progress':
-        return <Loader2 className="w-6 h-6 text-primary animate-spin" />;
+        return <Loader2 className="w-6 h-6 text-warning" />;
       case 'blocked':
         return <AlertCircle className="w-6 h-6 text-warning" />;
       default:

@@ -95,6 +95,7 @@ export type Database = {
           phase: string
           progress: number | null
           status: Database["public"]["Enums"]["milestone_status"] | null
+          template_id: string | null
           title: string
           updated_at: string | null
         }
@@ -110,6 +111,7 @@ export type Database = {
           phase: string
           progress?: number | null
           status?: Database["public"]["Enums"]["milestone_status"] | null
+          template_id?: string | null
           title: string
           updated_at?: string | null
         }
@@ -125,6 +127,7 @@ export type Database = {
           phase?: string
           progress?: number | null
           status?: Database["public"]["Enums"]["milestone_status"] | null
+          template_id?: string | null
           title?: string
           updated_at?: string | null
         }
@@ -134,6 +137,13 @@ export type Database = {
             columns: ["journey_id"]
             isOneToOne: false
             referencedRelation: "student_journeys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "milestones_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "milestone_templates"
             referencedColumns: ["id"]
           },
         ]
@@ -253,6 +263,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      initialize_student_milestones_from_templates: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
     }
     Enums: {

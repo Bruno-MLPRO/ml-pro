@@ -252,16 +252,14 @@ const JourneyManagement = () => {
             <h1 className="text-4xl font-display font-semibold text-foreground mb-2">
               Gerenciar Jornadas
             </h1>
-            <p className="text-foreground-secondary">
+            <p className="text-foreground-secondary mb-6">
               Edite os templates de jornada que podem ser aplicados aos alunos
             </p>
-          </div>
-
-          <Card className="p-6 mb-8">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-1">
+            
+            <div className="flex items-end gap-4">
+              <div className="flex-1 max-w-md">
                 <label className="text-sm font-medium text-foreground mb-2 block">
-                  Selecione a Jornada para Gerenciar
+                  Selecione a Jornada
                 </label>
                 <Select value={selectedJourneyId} onValueChange={setSelectedJourneyId}>
                   <SelectTrigger className="w-full">
@@ -280,78 +278,85 @@ const JourneyManagement = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                {journeyTemplates.find(j => j.id === selectedJourneyId)?.description && (
-                  <p className="text-sm text-foreground-secondary mt-2">
-                    {journeyTemplates.find(j => j.id === selectedJourneyId)?.description}
-                  </p>
-                )}
               </div>
-              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="gap-2">
-                    <Plus className="w-4 h-4" />
-                    Adicionar Etapa
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Adicionar Nova Etapa</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 mt-4">
-                    <div>
-                      <label className="text-sm font-medium text-foreground mb-2 block">
-                        Título
-                      </label>
-                      <Input
-                        value={newMilestone.title}
-                        onChange={(e) =>
-                          setNewMilestone({ ...newMilestone, title: e.target.value })
-                        }
-                        placeholder="Ex: Criar conta Mercado Livre"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-foreground mb-2 block">
-                        Descrição
-                      </label>
-                      <Textarea
-                        value={newMilestone.description}
-                        onChange={(e) =>
-                          setNewMilestone({ ...newMilestone, description: e.target.value })
-                        }
-                        placeholder="Descreva a etapa..."
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-foreground mb-2 block">
-                        Fase
-                      </label>
-                      <Select
-                        value={newMilestone.phase}
-                        onValueChange={(value) =>
-                          setNewMilestone({ ...newMilestone, phase: value })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PHASES.map((phase) => (
-                            <SelectItem key={phase} value={phase}>
-                              {phase}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button onClick={addMilestone} className="w-full">
-                      Adicionar
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
             </div>
-          </Card>
+            
+            {journeyTemplates.find(j => j.id === selectedJourneyId)?.description && (
+              <p className="text-sm text-foreground-secondary mt-3 max-w-2xl">
+                {journeyTemplates.find(j => j.id === selectedJourneyId)?.description}
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-display font-semibold text-foreground">
+              Etapas da Jornada
+            </h2>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Adicionar Etapa
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Adicionar Nova Etapa</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-2 block">
+                      Título
+                    </label>
+                    <Input
+                      value={newMilestone.title}
+                      onChange={(e) =>
+                        setNewMilestone({ ...newMilestone, title: e.target.value })
+                      }
+                      placeholder="Ex: Criar conta Mercado Livre"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-2 block">
+                      Descrição
+                    </label>
+                    <Textarea
+                      value={newMilestone.description}
+                      onChange={(e) =>
+                        setNewMilestone({ ...newMilestone, description: e.target.value })
+                      }
+                      placeholder="Descreva a etapa..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-2 block">
+                      Fase
+                    </label>
+                    <Select
+                      value={newMilestone.phase}
+                      onValueChange={(value) =>
+                        setNewMilestone({ ...newMilestone, phase: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PHASES.map((phase) => (
+                          <SelectItem key={phase} value={phase}>
+                            {phase}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={addMilestone} className="w-full">
+                    Adicionar
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
 
           <div className="space-y-4">
             {milestones.length === 0 ? (

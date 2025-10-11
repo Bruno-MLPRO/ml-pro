@@ -60,7 +60,7 @@ export default function Profile() {
     email: "",
     phone: "",
     cpf: "",
-    tipo_pj: "",
+    tipo_pj: "Não tenho",
     cnpj: "",
     possui_contador: false,
   });
@@ -92,7 +92,7 @@ export default function Profile() {
         email: data?.email || "",
         phone: data?.phone || "",
         cpf: data?.cpf || "",
-        tipo_pj: data?.tipo_pj || "",
+        tipo_pj: data?.tipo_pj || "Não tenho",
         cnpj: data?.cnpj || "",
         possui_contador: data?.possui_contador || false,
       });
@@ -179,8 +179,8 @@ export default function Profile() {
           email: editForm.email,
           phone: editForm.phone,
           cpf: editForm.cpf,
-          tipo_pj: editForm.tipo_pj === "Não tenho" ? null : editForm.tipo_pj,
-          cnpj: editForm.tipo_pj === "Não tenho" ? null : editForm.cnpj,
+          tipo_pj: editForm.tipo_pj === "Não tenho" || !editForm.tipo_pj ? null : editForm.tipo_pj,
+          cnpj: editForm.tipo_pj === "Não tenho" || !editForm.tipo_pj ? null : editForm.cnpj,
           possui_contador: editForm.possui_contador,
         })
         .eq('id', user?.id);
@@ -268,7 +268,7 @@ export default function Profile() {
                         email: profileData?.email || "",
                         phone: profileData?.phone || "",
                         cpf: profileData?.cpf || "",
-                        tipo_pj: profileData?.tipo_pj || "",
+                        tipo_pj: profileData?.tipo_pj || "Não tenho",
                         cnpj: profileData?.cnpj || "",
                         possui_contador: profileData?.possui_contador || false,
                       });

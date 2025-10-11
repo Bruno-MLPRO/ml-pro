@@ -12,6 +12,7 @@ import StudentProfile from "./pages/StudentProfile";
 import JourneyManagement from "./pages/JourneyManagement";
 import TeamManagement from "./pages/TeamManagement";
 import StudentsManagement from "./pages/StudentsManagement";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/gestor/equipe" element={<TeamManagement />} />
             <Route path="/aluno/jornada" element={<StudentJourney />} />
             <Route path="/aluno/:id" element={<StudentProfile />} />
+            <Route path="/perfil" element={<Profile />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

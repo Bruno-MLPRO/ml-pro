@@ -7,9 +7,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Pencil, Trash2, Save, X } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, Save, X, GripVertical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   Dialog,
   DialogContent,
@@ -42,6 +59,140 @@ interface JourneyTemplate {
 
 const PHASES = ['Onboarding', 'Estrutura Inicial', 'Profissionalização'];
 
+interface SortableMilestoneProps {
+  milestone: MilestoneTemplate;
+  isLast: boolean;
+  isEditing: boolean;
+  editForm: MilestoneTemplate;
+  onEdit: (milestone: MilestoneTemplate) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onDelete: (id: string) => void;
+  onEditFormChange: (form: MilestoneTemplate) => void;
+}
+
+const SortableMilestone = ({
+  milestone,
+  isLast,
+  isEditing,
+  editForm,
+  onEdit,
+  onSave,
+  onCancel,
+  onDelete,
+  onEditFormChange,
+}: SortableMilestoneProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: milestone.id! });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative flex gap-4 pb-8">
+      {/* Timeline dot and line */}
+      <div className="flex flex-col items-center">
+        <div className="w-6 h-6 rounded-full bg-primary flex-shrink-0 z-10" />
+        {!isLast && (
+          <div className="w-0.5 flex-1 bg-border mt-2 border-l-2 border-dashed border-primary/40" />
+        )}
+      </div>
+
+      {/* Horizontal connector */}
+      <div className="absolute left-6 top-3 w-8 h-0.5 bg-primary/40" />
+
+      {/* Card content */}
+      <Card className="flex-1 p-6 ml-6">
+        {isEditing ? (
+          <div className="space-y-4">
+            <Input
+              value={editForm.title}
+              onChange={(e) => onEditFormChange({ ...editForm, title: e.target.value })}
+              placeholder="Título"
+            />
+            <Textarea
+              value={editForm.description}
+              onChange={(e) => onEditFormChange({ ...editForm, description: e.target.value })}
+              placeholder="Descrição"
+            />
+            <Select
+              value={editForm.phase}
+              onValueChange={(value) => onEditFormChange({ ...editForm, phase: value })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PHASES.map((phase) => (
+                  <SelectItem key={phase} value={phase}>
+                    {phase}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2">
+              <Button onClick={onSave} className="gap-2">
+                <Save className="w-4 h-4" />
+                Salvar
+              </Button>
+              <Button onClick={onCancel} variant="outline" className="gap-2">
+                <X className="w-4 h-4" />
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  {milestone.title}
+                </h3>
+                <p className="text-foreground-secondary mb-3">
+                  {milestone.description}
+                </p>
+                <Badge variant="outline">{milestone.phase}</Badge>
+              </div>
+              <div className="flex gap-2 items-center">
+                <button
+                  className="cursor-grab active:cursor-grabbing p-2 hover:bg-accent rounded"
+                  {...attributes}
+                  {...listeners}
+                >
+                  <GripVertical className="w-4 h-4 text-muted-foreground" />
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onEdit(milestone)}
+                >
+                  <Pencil className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onDelete(milestone.id!)}
+                >
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
+
 const JourneyManagement = () => {
   const { user, userRole, loading: authLoading } = useAuth();
   const [journeyTemplates, setJourneyTemplates] = useState<JourneyTemplate[]>([]);
@@ -52,6 +203,13 @@ const JourneyManagement = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const [newMilestone, setNewMilestone] = useState<MilestoneTemplate>({
     title: '',
@@ -232,6 +390,50 @@ const JourneyManagement = () => {
     }
   };
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = milestones.findIndex((m) => m.id === active.id);
+    const newIndex = milestones.findIndex((m) => m.id === over.id);
+
+    const reorderedMilestones = arrayMove(milestones, oldIndex, newIndex);
+    setMilestones(reorderedMilestones);
+
+    // Update order_index for all affected milestones
+    try {
+      const updates = reorderedMilestones.map((milestone, index) => ({
+        id: milestone.id,
+        order_index: index + 1,
+      }));
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('milestone_templates')
+          .update({ order_index: update.order_index })
+          .eq('id', update.id);
+
+        if (error) throw error;
+      }
+
+      toast({
+        title: 'Ordem atualizada',
+        description: 'A ordem das etapas foi atualizada com sucesso.',
+      });
+    } catch (error) {
+      console.error('Error updating order:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível atualizar a ordem das etapas.',
+        variant: 'destructive',
+      });
+      loadMilestones(); // Reload to get correct order
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="flex min-h-screen">
@@ -358,7 +560,7 @@ const JourneyManagement = () => {
             </Dialog>
           </div>
 
-          <div className="space-y-4">
+          <div>
             {milestones.length === 0 ? (
               <Card className="p-8 text-center">
                 <p className="text-foreground-secondary">
@@ -366,81 +568,31 @@ const JourneyManagement = () => {
                 </p>
               </Card>
             ) : (
-              milestones.map((milestone) => (
-                <Card key={milestone.id} className="p-6">
-                  {editingId === milestone.id ? (
-                    <div className="space-y-4">
-                      <Input
-                        value={editForm.title}
-                        onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                        placeholder="Título"
-                      />
-                      <Textarea
-                        value={editForm.description}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, description: e.target.value })
-                        }
-                        placeholder="Descrição"
-                      />
-                      <Select
-                        value={editForm.phase}
-                        onValueChange={(value) => setEditForm({ ...editForm, phase: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PHASES.map((phase) => (
-                            <SelectItem key={phase} value={phase}>
-                              {phase}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="flex gap-2">
-                        <Button onClick={saveEdit} className="gap-2">
-                          <Save className="w-4 h-4" />
-                          Salvar
-                        </Button>
-                        <Button onClick={cancelEdit} variant="outline" className="gap-2">
-                          <X className="w-4 h-4" />
-                          Cancelar
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-foreground mb-2">
-                            {milestone.title}
-                          </h3>
-                          <p className="text-foreground-secondary mb-3">
-                            {milestone.description}
-                          </p>
-                          <Badge variant="outline">{milestone.phase}</Badge>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => startEdit(milestone)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => deleteMilestone(milestone.id!)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              ))
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={milestones.map((m) => m.id!)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {milestones.map((milestone, index) => (
+                    <SortableMilestone
+                      key={milestone.id}
+                      milestone={milestone}
+                      isLast={index === milestones.length - 1}
+                      isEditing={editingId === milestone.id}
+                      editForm={editForm}
+                      onEdit={startEdit}
+                      onSave={saveEdit}
+                      onCancel={cancelEdit}
+                      onDelete={deleteMilestone}
+                      onEditFormChange={setEditForm}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             )}
           </div>
         </div>

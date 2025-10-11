@@ -152,10 +152,14 @@ export type Database = {
         Row: {
           avatar_url: string | null
           caixa: number | null
+          cep: string | null
+          cidade: string | null
           cnpj: string | null
           cpf: string | null
           created_at: string | null
           email: string
+          endereco: string | null
+          estado: string | null
           estrutura_vendedor: string | null
           full_name: string
           hub_logistico: string | null
@@ -171,10 +175,14 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           caixa?: number | null
+          cep?: string | null
+          cidade?: string | null
           cnpj?: string | null
           cpf?: string | null
           created_at?: string | null
           email: string
+          endereco?: string | null
+          estado?: string | null
           estrutura_vendedor?: string | null
           full_name: string
           hub_logistico?: string | null
@@ -190,10 +198,14 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           caixa?: number | null
+          cep?: string | null
+          cidade?: string | null
           cnpj?: string | null
           cpf?: string | null
           created_at?: string | null
           email?: string
+          endereco?: string | null
+          estado?: string | null
           estrutura_vendedor?: string | null
           full_name?: string
           hub_logistico?: string | null

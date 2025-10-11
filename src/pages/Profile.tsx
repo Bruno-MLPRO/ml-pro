@@ -30,6 +30,10 @@ interface ProfileData {
   phone: string | null;
   cpf: string | null;
   cnpj: string | null;
+  endereco: string | null;
+  cidade: string | null;
+  estado: string | null;
+  cep: string | null;
   turma: string | null;
   estrutura_vendedor: string | null;
   tipo_pj: string | null;
@@ -63,6 +67,10 @@ export default function Profile() {
     tipo_pj: "Não tenho",
     cnpj: "",
     possui_contador: false,
+    endereco: "",
+    cidade: "",
+    estado: "",
+    cep: "",
   });
 
   useEffect(() => {
@@ -95,6 +103,10 @@ export default function Profile() {
         tipo_pj: data?.tipo_pj || "Não tenho",
         cnpj: data?.cnpj || "",
         possui_contador: data?.possui_contador || false,
+        endereco: data?.endereco || "",
+        cidade: data?.cidade || "",
+        estado: data?.estado || "",
+        cep: data?.cep || "",
       });
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -182,6 +194,10 @@ export default function Profile() {
           tipo_pj: editForm.tipo_pj === "Não tenho" || !editForm.tipo_pj ? null : editForm.tipo_pj,
           cnpj: editForm.tipo_pj === "Não tenho" || !editForm.tipo_pj ? null : editForm.cnpj,
           possui_contador: editForm.possui_contador,
+          endereco: editForm.endereco,
+          cidade: editForm.cidade,
+          estado: editForm.estado,
+          cep: editForm.cep,
         })
         .eq('id', user?.id);
 
@@ -271,6 +287,10 @@ export default function Profile() {
                         tipo_pj: profileData?.tipo_pj || "Não tenho",
                         cnpj: profileData?.cnpj || "",
                         possui_contador: profileData?.possui_contador || false,
+                        endereco: profileData?.endereco || "",
+                        cidade: profileData?.cidade || "",
+                        estado: profileData?.estado || "",
+                        cep: profileData?.cep || "",
                       });
                     }}
                         variant="outline"
@@ -425,6 +445,125 @@ export default function Profile() {
                       <p className="text-foreground font-medium mt-1">{profileData.mentoria_status}</p>
                     </div>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Address Card */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <UserIcon className="w-5 h-5 text-primary" />
+                      <CardTitle>Endereço</CardTitle>
+                    </div>
+                    <CardDescription>
+                      Informações de endereço para correspondências
+                    </CardDescription>
+                  </div>
+                  {!isEditingProfile ? (
+                    <Button onClick={() => setIsEditingProfile(true)} variant="outline">
+                      Editar
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => {
+                          setIsEditingProfile(false);
+                          setEditForm({
+                            full_name: profileData?.full_name || "",
+                            email: profileData?.email || "",
+                            phone: profileData?.phone || "",
+                            cpf: profileData?.cpf || "",
+                            tipo_pj: profileData?.tipo_pj || "Não tenho",
+                            cnpj: profileData?.cnpj || "",
+                            possui_contador: profileData?.possui_contador || false,
+                            endereco: profileData?.endereco || "",
+                            cidade: profileData?.cidade || "",
+                            estado: profileData?.estado || "",
+                            cep: profileData?.cep || "",
+                          });
+                        }} 
+                        variant="outline"
+                      >
+                        Cancelar
+                      </Button>
+                      <Button onClick={handleSaveProfile} disabled={isSavingProfile}>
+                        {isSavingProfile ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Salvando...
+                          </>
+                        ) : (
+                          'Salvar'
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <Label htmlFor="endereco">Endereço Completo</Label>
+                    {isEditingProfile ? (
+                      <Input
+                        id="endereco"
+                        value={editForm.endereco}
+                        onChange={(e) => setEditForm({ ...editForm, endereco: e.target.value })}
+                        placeholder="Rua, número, complemento"
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-foreground font-medium mt-1">{profileData?.endereco || "-"}</p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="cidade">Cidade</Label>
+                      {isEditingProfile ? (
+                        <Input
+                          id="cidade"
+                          value={editForm.cidade}
+                          onChange={(e) => setEditForm({ ...editForm, cidade: e.target.value })}
+                          placeholder="Cidade"
+                          className="mt-1"
+                        />
+                      ) : (
+                        <p className="text-foreground font-medium mt-1">{profileData?.cidade || "-"}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="estado">Estado</Label>
+                      {isEditingProfile ? (
+                        <Input
+                          id="estado"
+                          value={editForm.estado}
+                          onChange={(e) => setEditForm({ ...editForm, estado: e.target.value })}
+                          placeholder="UF"
+                          maxLength={2}
+                          className="mt-1"
+                        />
+                      ) : (
+                        <p className="text-foreground font-medium mt-1">{profileData?.estado || "-"}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="cep">CEP</Label>
+                      {isEditingProfile ? (
+                        <Input
+                          id="cep"
+                          value={editForm.cep}
+                          onChange={(e) => setEditForm({ ...editForm, cep: e.target.value })}
+                          placeholder="00000-000"
+                          className="mt-1"
+                        />
+                      ) : (
+                        <p className="text-foreground font-medium mt-1">{profileData?.cep || "-"}</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -83,6 +83,27 @@ export default function StudentsManagement() {
 
     if (user && userRole === 'manager') {
       fetchStudents();
+
+      // Set up realtime subscription for profile updates
+      const channel = supabase
+        .channel('profiles-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'profiles'
+          },
+          () => {
+            // Reload students when any profile changes
+            fetchStudents();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [user, userRole, authLoading, navigate]);
 

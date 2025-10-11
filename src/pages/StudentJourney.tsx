@@ -6,6 +6,8 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { CheckCircle2, Circle, AlertCircle, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
 interface Milestone {
@@ -29,6 +31,7 @@ const StudentJourney = () => {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!authLoading && (!user || userRole !== 'student')) {
@@ -80,26 +83,61 @@ const StudentJourney = () => {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, string> = {
-      not_started: 'secondary',
-      in_progress: 'default',
-      completed: 'outline',
-      blocked: 'destructive',
-    };
+  const updateMilestoneStatus = async (milestoneId: string, newStatus: 'not_started' | 'in_progress' | 'completed' | 'blocked') => {
+    try {
+      const { error } = await supabase
+        .from('milestones')
+        .update({ 
+          status: newStatus,
+          progress: newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0
+        })
+        .eq('id', milestoneId);
 
+      if (error) throw error;
+
+      // Update local state
+      setMilestones(prev => prev.map(m => 
+        m.id === milestoneId 
+          ? { ...m, status: newStatus, progress: newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0 }
+          : m
+      ));
+
+      toast({
+        title: "Status atualizado",
+        description: "O status do milestone foi atualizado com sucesso.",
+      });
+
+      // Recalculate journey progress
+      loadJourneyData();
+    } catch (error) {
+      console.error('Error updating milestone status:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o status.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-success/10 border-success text-success';
+      case 'in_progress':
+        return 'bg-warning/10 border-warning text-warning';
+      default:
+        return 'bg-secondary border-secondary-foreground/20 text-secondary-foreground';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       not_started: 'Não Iniciado',
       in_progress: 'Em Progresso',
       completed: 'Concluído',
       blocked: 'Bloqueado',
     };
-
-    return (
-      <Badge variant={variants[status] as any}>
-        {labels[status]}
-      </Badge>
-    );
+    return labels[status] || status;
   };
 
   if (authLoading || loading) {
@@ -175,7 +213,34 @@ const StudentJourney = () => {
                       </p>
                     )}
                     <div>
-                      {getStatusBadge(milestone.status)}
+                      <Select 
+                        value={milestone.status} 
+                        onValueChange={(value) => updateMilestoneStatus(milestone.id, value as 'not_started' | 'in_progress' | 'completed' | 'blocked')}
+                      >
+                        <SelectTrigger className={`w-[180px] ${getStatusColor(milestone.status)}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="not_started">
+                            <span className="flex items-center gap-2">
+                              <Circle className="w-4 h-4" />
+                              Não Iniciado
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="in_progress">
+                            <span className="flex items-center gap-2">
+                              <Loader2 className="w-4 h-4" />
+                              Em Progresso
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="completed">
+                            <span className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4" />
+                              Concluído
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </Card>
                 ))}

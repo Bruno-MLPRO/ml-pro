@@ -198,7 +198,7 @@ const StudentJourney = () => {
                 <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-background-elevated" />
                 {milestones.map((milestone, index) => (
                   <Card key={milestone.id} className="p-6 mb-4 relative ml-16">
-                    <div className="absolute -left-16 top-6">
+                    <div className="absolute -left-16 top-1/2 -translate-y-1/2">
                       {getStatusIcon(milestone.status)}
                     </div>
                     <div className="flex justify-between items-start mb-3">

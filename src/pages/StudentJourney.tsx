@@ -167,21 +167,15 @@ const StudentJourney = () => {
                       <h3 className="text-lg font-semibold text-foreground">
                         {milestone.title}
                       </h3>
-                      {getStatusBadge(milestone.status)}
+                      <Badge variant="outline">{milestone.phase}</Badge>
                     </div>
                     {milestone.description && (
                       <p className="text-foreground-secondary mb-3">
                         {milestone.description}
                       </p>
                     )}
-                    <div className="flex items-center gap-4">
-                      <Badge variant="outline">{milestone.phase}</Badge>
-                      <div className="flex-1">
-                        <Progress value={milestone.progress} className="h-2" />
-                      </div>
-                      <span className="text-sm font-semibold text-foreground-secondary">
-                        {milestone.progress}%
-                      </span>
+                    <div>
+                      {getStatusBadge(milestone.status)}
                     </div>
                   </Card>
                 ))}

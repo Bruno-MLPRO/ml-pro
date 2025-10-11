@@ -101,10 +101,18 @@ const SortableMilestone = ({
     <div ref={setNodeRef} style={style} className="relative flex gap-4 items-center">
       {/* Timeline dot and line */}
       <div className="flex flex-col items-center self-stretch">
-        <div className="flex-1 w-0.5 border-l-2 border-dashed border-primary/40" />
-        <div className="w-6 h-6 rounded-full bg-primary flex-shrink-0 z-10" />
-        {!isLast && (
-          <div className="flex-1 w-0.5 border-l-2 border-dashed border-primary/40" />
+        {!isLast ? (
+          <>
+            <div className="flex-1 w-0.5 border-l-2 border-dashed border-primary/40" />
+            <div className="w-6 h-6 rounded-full bg-primary flex-shrink-0 z-10" />
+            <div className="flex-1 w-0.5 border-l-2 border-dashed border-primary/40" />
+          </>
+        ) : (
+          <>
+            <div className="flex-1 w-0.5 border-l-2 border-dashed border-primary/40" />
+            <div className="w-6 h-6 rounded-full bg-primary flex-shrink-0 z-10" />
+            <div className="flex-1" />
+          </>
         )}
       </div>
 

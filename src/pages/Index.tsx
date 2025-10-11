@@ -1,8 +1,25 @@
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { user, userRole, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && user && userRole) {
+      if (userRole === 'manager') {
+        navigate('/gestor/dashboard');
+      } else if (userRole === 'student') {
+        navigate('/aluno/jornada');
+      }
+    }
+  }, [user, userRole, loading, navigate]);
+
+  if (loading) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
@@ -18,11 +35,11 @@ const Index = () => {
         </p>
         <div className="pt-8">
           <Button
-            onClick={() => navigate("/gestor/dashboard")}
+            onClick={() => navigate("/auth")}
             size="lg"
             className="bg-transparent border-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300"
           >
-            Acessar Dashboard
+            Fazer Login
           </Button>
         </div>
       </div>

@@ -1,22 +1,96 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
 import { StudentCard } from "@/components/StudentCard";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Loader2 } from "lucide-react";
 
-const mockStudents = [
-  { name: "Carlos Silva", turma: "Turma 4 - Starter", progress: 75, status: "active" as const },
-  { name: "Ana Costa", turma: "Turma 4 - Starter", progress: 45, status: "pending" as const },
-  { name: "João Oliveira", turma: "Turma 3 - Pro", progress: 90, status: "active" as const },
-  { name: "Maria Santos", turma: "Turma 4 - Starter", progress: 30, status: "blocked" as const },
-  { name: "Pedro Alves", turma: "Turma 3 - Pro", progress: 65, status: "active" as const },
-  { name: "Lucia Fernandes", turma: "Turma 4 - Starter", progress: 85, status: "active" as const },
-];
+interface Student {
+  id: string;
+  full_name: string;
+  overall_progress: number;
+  current_phase: string;
+  status: "active" | "pending" | "blocked";
+}
 
 const GestorDashboard = () => {
+  const { user, userRole, loading: authLoading } = useAuth();
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authLoading && (!user || userRole !== 'manager')) {
+      navigate('/auth');
+      return;
+    }
+
+    if (user && userRole === 'manager') {
+      loadStudents();
+    }
+  }, [user, userRole, authLoading, navigate]);
+
+  const loadStudents = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('student_journeys')
+        .select(`
+          id,
+          overall_progress,
+          current_phase,
+          student_id,
+          profiles!student_journeys_student_id_fkey (
+            id,
+            full_name
+          )
+        `);
+
+      if (error) throw error;
+
+      const formattedStudents: Student[] = (data || []).map((journey: any) => {
+        const progress = journey.overall_progress || 0;
+        let status: "active" | "pending" | "blocked" = "active";
+        
+        if (progress < 40) {
+          status = "blocked";
+        } else if (progress < 70) {
+          status = "pending";
+        }
+
+        return {
+          id: journey.profiles.id,
+          full_name: journey.profiles.full_name,
+          overall_progress: progress,
+          current_phase: journey.current_phase || "Não definida",
+          status,
+        };
+      });
+
+      setStudents(formattedStudents);
+    } catch (error) {
+      console.error('Error loading students:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (authLoading || loading) {
+    return (
+      <div className="flex min-h-screen w-full bg-background">
+        <Sidebar />
+        <main className="flex-1 p-8 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </main>
+      </div>
+    );
+  }
   return (
     <div className="flex min-h-screen w-full bg-background">
       {/* Sidebar */}
-      <Sidebar activeItem="home" />
+      <Sidebar />
 
       {/* Main Content */}
       <main className="flex-1 p-8">
@@ -43,15 +117,26 @@ const GestorDashboard = () => {
 
         {/* Students Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockStudents.map((student, index) => (
-            <StudentCard
-              key={index}
-              name={student.name}
-              turma={student.turma}
-              progress={student.progress}
-              status={student.status}
-            />
-          ))}
+          {students.length === 0 ? (
+            <div className="col-span-full text-center py-12">
+              <p className="text-foreground-secondary">Nenhum aluno cadastrado ainda</p>
+            </div>
+          ) : (
+            students.map((student) => (
+              <div 
+                key={student.id} 
+                onClick={() => navigate(`/aluno/${student.id}`)}
+                className="cursor-pointer"
+              >
+                <StudentCard 
+                  name={student.full_name}
+                  turma={student.current_phase}
+                  progress={student.overall_progress}
+                  status={student.status}
+                />
+              </div>
+            ))
+          )}
         </div>
       </main>
     </div>

@@ -48,6 +48,12 @@ export default function Profile() {
   });
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [editForm, setEditForm] = useState({
+    full_name: "",
+    email: "",
+  });
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -71,6 +77,10 @@ export default function Profile() {
 
       if (error) throw error;
       setProfileData(data);
+      setEditForm({
+        full_name: data?.full_name || "",
+        email: data?.email || "",
+      });
     } catch (error) {
       console.error('Error loading profile:', error);
       toast({
@@ -142,6 +152,49 @@ export default function Profile() {
     }
   };
 
+  const handleSaveProfile = async () => {
+    try {
+      setIsSavingProfile(true);
+
+      // Update profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: editForm.full_name,
+          email: editForm.email,
+        })
+        .eq('id', user?.id);
+
+      if (profileError) throw profileError;
+
+      // Update email in auth if it changed
+      if (editForm.email !== profileData?.email) {
+        const { error: emailError } = await supabase.auth.updateUser({
+          email: editForm.email,
+        });
+
+        if (emailError) throw emailError;
+      }
+
+      toast({
+        title: "Perfil atualizado com sucesso",
+        description: "Suas informações foram atualizadas",
+      });
+
+      setIsEditingProfile(false);
+      loadProfile();
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      toast({
+        title: "Erro ao atualizar perfil",
+        description: error.message || "Não foi possível atualizar o perfil",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="flex min-h-screen w-full bg-background">
@@ -171,23 +224,76 @@ export default function Profile() {
             {/* Personal Information Card */}
             <Card>
               <CardHeader>
-                <div className="flex items-center gap-2">
-                  <UserIcon className="w-5 h-5 text-primary" />
-                  <CardTitle>Informações Pessoais</CardTitle>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <UserIcon className="w-5 h-5 text-primary" />
+                      <CardTitle>Informações Pessoais</CardTitle>
+                    </div>
+                    <CardDescription>
+                      Seus dados cadastrados na plataforma
+                    </CardDescription>
+                  </div>
+                  {!isEditingProfile ? (
+                    <Button onClick={() => setIsEditingProfile(true)} variant="outline">
+                      Editar
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => {
+                          setIsEditingProfile(false);
+                          setEditForm({
+                            full_name: profileData?.full_name || "",
+                            email: profileData?.email || "",
+                          });
+                        }} 
+                        variant="outline"
+                      >
+                        Cancelar
+                      </Button>
+                      <Button onClick={handleSaveProfile} disabled={isSavingProfile}>
+                        {isSavingProfile ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Salvando...
+                          </>
+                        ) : (
+                          'Salvar'
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                <CardDescription>
-                  Seus dados cadastrados na plataforma
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-foreground-secondary">Nome Completo</Label>
-                    <p className="text-foreground font-medium mt-1">{profileData?.full_name}</p>
+                    <Label htmlFor="full_name">Nome Completo</Label>
+                    {isEditingProfile ? (
+                      <Input
+                        id="full_name"
+                        value={editForm.full_name}
+                        onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-foreground font-medium mt-1">{profileData?.full_name}</p>
+                    )}
                   </div>
                   <div>
-                    <Label className="text-foreground-secondary">Email</Label>
-                    <p className="text-foreground font-medium mt-1">{profileData?.email}</p>
+                    <Label htmlFor="email">Email</Label>
+                    {isEditingProfile ? (
+                      <Input
+                        id="email"
+                        type="email"
+                        value={editForm.email}
+                        onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-foreground font-medium mt-1">{profileData?.email}</p>
+                    )}
                   </div>
                   {profileData?.phone && (
                     <div>
@@ -217,12 +323,6 @@ export default function Profile() {
                           <p className="text-foreground font-medium mt-1">{profileData.tipo_pj}</p>
                         </div>
                       )}
-                      <div>
-                        <Label className="text-foreground-secondary">Possui Contador</Label>
-                        <p className="text-foreground font-medium mt-1">
-                          {profileData?.possui_contador ? 'Sim' : 'Não'}
-                        </p>
-                      </div>
                       {profileData?.caixa !== null && (
                         <div>
                           <Label className="text-foreground-secondary">Caixa (Capital de Giro)</Label>

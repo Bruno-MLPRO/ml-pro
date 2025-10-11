@@ -5,7 +5,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package } from 'lucide-react';
+import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -14,7 +14,7 @@ interface Notice {
   id: string;
   title: string;
   content: string;
-  priority: string;
+  is_important: boolean;
   created_at: string;
 }
 
@@ -70,23 +70,6 @@ const StudentDashboard = () => {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'destructive';
-      case 'medium': return 'default';
-      case 'low': return 'secondary';
-      default: return 'default';
-    }
-  };
-
-  const getPriorityLabel = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'Alta';
-      case 'medium': return 'Média';
-      case 'low': return 'Baixa';
-      default: return priority;
-    }
-  };
 
   if (authLoading || loading) {
     return (
@@ -127,15 +110,24 @@ const StudentDashboard = () => {
                 ) : (
                   <div className="space-y-3">
                     {notices.map((notice) => (
-                      <div key={notice.id} className="border-l-4 border-primary pl-4 py-2">
+                      <div 
+                        key={notice.id} 
+                        className={`rounded-lg p-4 ${
+                          notice.is_important 
+                            ? 'bg-primary/10 border-l-4 border-primary' 
+                            : 'border-l-4 border-border bg-background-elevated'
+                        }`}
+                      >
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-semibold text-foreground">{notice.title}</h4>
-                          <Badge variant={getPriorityColor(notice.priority)} className="shrink-0">
-                            {getPriorityLabel(notice.priority)}
-                          </Badge>
+                          <div className="flex items-center gap-2 flex-1">
+                            {notice.is_important && <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />}
+                            <h4 className={`font-semibold text-foreground ${notice.is_important ? 'text-primary' : ''}`}>
+                              {notice.title}
+                            </h4>
+                          </div>
                         </div>
-                        <p className="text-sm text-foreground-secondary mt-1">{notice.content}</p>
-                        <p className="text-xs text-foreground-secondary mt-1">
+                        <p className="text-sm text-foreground-secondary mt-2">{notice.content}</p>
+                        <p className="text-xs text-foreground-secondary mt-2">
                           {format(new Date(notice.created_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
                         </p>
                       </div>
@@ -167,13 +159,8 @@ const StudentDashboard = () => {
                         rel="noopener noreferrer"
                         className="block p-3 rounded-lg border border-border hover:bg-background-elevated transition-colors"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h4 className="font-medium text-foreground text-sm">{link.title}</h4>
-                            {link.description && (
-                              <p className="text-xs text-foreground-secondary mt-1">{link.description}</p>
-                            )}
-                          </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="font-medium text-foreground text-sm">{link.title}</h4>
                           <LinkIcon className="w-4 h-4 text-primary shrink-0" />
                         </div>
                       </a>

@@ -3,16 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
-import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, GripVertical } from "lucide-react";
+import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -21,7 +20,7 @@ interface Notice {
   id: string;
   title: string;
   content: string;
-  priority: string;
+  is_important: boolean;
   is_active: boolean;
   expires_at: string | null;
   created_at: string;
@@ -64,8 +63,8 @@ const GestorDashboard = () => {
   const [editingLink, setEditingLink] = useState<ImportantLink | null>(null);
   const [editingCall, setEditingCall] = useState<CallSchedule | null>(null);
 
-  const [noticeForm, setNoticeForm] = useState({ title: "", content: "", priority: "medium", is_active: true, expires_at: "" });
-  const [linkForm, setLinkForm] = useState({ title: "", description: "", url: "", category: "" });
+  const [noticeForm, setNoticeForm] = useState({ title: "", content: "", is_important: false, is_active: true, expires_at: "" });
+  const [linkForm, setLinkForm] = useState({ title: "", url: "", category: "" });
   const [callForm, setCallForm] = useState({ date: "", theme: "", description: "" });
 
   useEffect(() => {
@@ -111,7 +110,7 @@ const GestorDashboard = () => {
           .update({
             title: noticeForm.title,
             content: noticeForm.content,
-            priority: noticeForm.priority,
+            is_important: noticeForm.is_important,
             is_active: noticeForm.is_active,
             expires_at: noticeForm.expires_at || null
           })
@@ -124,7 +123,7 @@ const GestorDashboard = () => {
           .insert({
             title: noticeForm.title,
             content: noticeForm.content,
-            priority: noticeForm.priority,
+            is_important: noticeForm.is_important,
             is_active: noticeForm.is_active,
             expires_at: noticeForm.expires_at || null
           });
@@ -145,7 +144,7 @@ const GestorDashboard = () => {
     setNoticeForm({
       title: notice.title,
       content: notice.content,
-      priority: notice.priority,
+      is_important: notice.is_important,
       is_active: notice.is_active,
       expires_at: notice.expires_at || ""
     });
@@ -154,7 +153,7 @@ const GestorDashboard = () => {
 
   const resetNoticeForm = () => {
     setEditingNotice(null);
-    setNoticeForm({ title: "", content: "", priority: "medium", is_active: true, expires_at: "" });
+    setNoticeForm({ title: "", content: "", is_important: false, is_active: true, expires_at: "" });
   };
 
   // Link handlers
@@ -165,7 +164,6 @@ const GestorDashboard = () => {
           .from('important_links')
           .update({
             title: linkForm.title,
-            description: linkForm.description || null,
             url: linkForm.url,
             category: linkForm.category || null
           })
@@ -178,7 +176,6 @@ const GestorDashboard = () => {
           .from('important_links')
           .insert({
             title: linkForm.title,
-            description: linkForm.description || null,
             url: linkForm.url,
             category: linkForm.category || null,
             order_index: maxOrder + 1
@@ -199,7 +196,6 @@ const GestorDashboard = () => {
     setEditingLink(link);
     setLinkForm({
       title: link.title,
-      description: link.description || "",
       url: link.url,
       category: link.category || ""
     });
@@ -208,7 +204,7 @@ const GestorDashboard = () => {
 
   const resetLinkForm = () => {
     setEditingLink(null);
-    setLinkForm({ title: "", description: "", url: "", category: "" });
+    setLinkForm({ title: "", url: "", category: "" });
   };
 
   const moveLinkUp = async (index: number) => {
@@ -307,23 +303,6 @@ const GestorDashboard = () => {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'destructive';
-      case 'medium': return 'default';
-      case 'low': return 'secondary';
-      default: return 'default';
-    }
-  };
-
-  const getPriorityLabel = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'Alta';
-      case 'medium': return 'Média';
-      case 'low': return 'Baixa';
-      default: return priority;
-    }
-  };
 
   if (authLoading || loading) {
     return (
@@ -374,18 +353,13 @@ const GestorDashboard = () => {
                         <Textarea id="notice-content" rows={6} value={noticeForm.content} onChange={(e) => setNoticeForm({ ...noticeForm, content: e.target.value })} />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="notice-priority">Prioridade</Label>
-                          <Select value={noticeForm.priority} onValueChange={(value) => setNoticeForm({ ...noticeForm, priority: value })}>
-                            <SelectTrigger id="notice-priority">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="low">Baixa</SelectItem>
-                              <SelectItem value="medium">Média</SelectItem>
-                              <SelectItem value="high">Alta</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox 
+                            id="notice-important" 
+                            checked={noticeForm.is_important} 
+                            onCheckedChange={(checked) => setNoticeForm({ ...noticeForm, is_important: checked as boolean })} 
+                          />
+                          <Label htmlFor="notice-important" className="cursor-pointer">Marcar como importante</Label>
                         </div>
                         <div>
                           <Label htmlFor="notice-expires">Expira em (opcional)</Label>
@@ -408,11 +382,20 @@ const GestorDashboard = () => {
               ) : (
                 <div className="space-y-3">
                   {notices.map((notice) => (
-                    <div key={notice.id} className="p-3 bg-background-elevated rounded-lg border border-border">
+                    <div 
+                      key={notice.id} 
+                      className={`p-3 rounded-lg border ${
+                        notice.is_important 
+                          ? 'bg-primary/10 border-primary/30 shadow-sm' 
+                          : 'bg-background-elevated border-border'
+                      }`}
+                    >
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2 flex-1">
-                          <h4 className="font-semibold text-sm">{notice.title}</h4>
-                          <Badge variant={getPriorityColor(notice.priority)} className="text-xs">{getPriorityLabel(notice.priority)}</Badge>
+                          {notice.is_important && <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />}
+                          <h4 className={`font-semibold text-sm ${notice.is_important ? 'text-primary' : ''}`}>
+                            {notice.title}
+                          </h4>
                         </div>
                         <div className="flex gap-1">
                           <Button size="sm" variant="ghost" onClick={() => openEditNotice(notice)}><Pencil className="w-3 h-3" /></Button>
@@ -452,10 +435,6 @@ const GestorDashboard = () => {
                       <div>
                         <Label htmlFor="link-url">URL</Label>
                         <Input id="link-url" type="url" value={linkForm.url} onChange={(e) => setLinkForm({ ...linkForm, url: e.target.value })} />
-                      </div>
-                      <div>
-                        <Label htmlFor="link-description">Descrição (opcional)</Label>
-                        <Textarea id="link-description" rows={2} value={linkForm.description} onChange={(e) => setLinkForm({ ...linkForm, description: e.target.value })} />
                       </div>
                       <div>
                         <Label htmlFor="link-category">Categoria (opcional)</Label>

@@ -50,10 +50,30 @@ export const Sidebar = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="w-12 h-12 rounded-xl text-foreground-secondary hover:text-foreground hover:bg-background-elevated transition-all duration-200"
+              onClick={() => navigate('/gestor/alunos')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/gestor/alunos'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
               title="Alunos"
             >
               <Users className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/gestor/equipe')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/gestor/equipe'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Equipe"
+            >
+              <User className="w-5 h-5" strokeWidth={1.5} />
             </Button>
           </>
         ) : (

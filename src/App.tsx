@@ -10,6 +10,7 @@ import GestorDashboard from "./pages/GestorDashboard";
 import StudentJourney from "./pages/StudentJourney";
 import StudentProfile from "./pages/StudentProfile";
 import JourneyManagement from "./pages/JourneyManagement";
+import TeamManagement from "./pages/TeamManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/gestor/dashboard" element={<GestorDashboard />} />
             <Route path="/gestor/jornada" element={<JourneyManagement />} />
+            <Route path="/gestor/equipe" element={<TeamManagement />} />
             <Route path="/aluno/jornada" element={<StudentJourney />} />
             <Route path="/aluno/:id" element={<StudentProfile />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

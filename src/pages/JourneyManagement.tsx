@@ -98,20 +98,21 @@ const SortableMilestone = ({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="relative flex gap-4">
+    <div ref={setNodeRef} style={style} className="relative flex gap-4 items-center">
       {/* Timeline dot and line */}
-      <div className="flex flex-col items-center pt-3">
+      <div className="flex flex-col items-center self-stretch">
+        <div className="flex-1 w-0.5 border-l-2 border-dashed border-primary/40" />
         <div className="w-6 h-6 rounded-full bg-primary flex-shrink-0 z-10" />
         {!isLast && (
-          <div className="w-0.5 flex-1 border-l-2 border-dashed border-primary/40 mt-2 mb-2" style={{ minHeight: '60px' }} />
+          <div className="flex-1 w-0.5 border-l-2 border-dashed border-primary/40" />
         )}
       </div>
 
       {/* Horizontal connector */}
-      <div className="absolute left-6 top-6 w-8 h-0.5 bg-primary/40" />
+      <div className="absolute left-6 top-1/2 w-8 h-0.5 bg-primary/40 -translate-y-1/2" />
 
       {/* Card content */}
-      <Card className="flex-1 p-6 ml-6 mb-4">
+      <Card className="flex-1 p-6 ml-6 my-4">
         {isEditing ? (
           <div className="space-y-4">
             <Input

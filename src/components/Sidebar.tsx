@@ -1,4 +1,4 @@
-import { Home, Users, User, Settings, LogOut, ListChecks } from "lucide-react";
+import { Home, Users, User, Settings, LogOut, ListChecks, GraduationCap, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -60,7 +60,7 @@ export const Sidebar = () => {
               )}
               title="Alunos"
             >
-              <Users className="w-5 h-5" strokeWidth={1.5} />
+              <GraduationCap className="w-5 h-5" strokeWidth={1.5} />
             </Button>
             <Button
               variant="ghost"
@@ -74,7 +74,7 @@ export const Sidebar = () => {
               )}
               title="Equipe"
             >
-              <User className="w-5 h-5" strokeWidth={1.5} />
+              <UsersRound className="w-5 h-5" strokeWidth={1.5} />
             </Button>
           </>
         ) : (

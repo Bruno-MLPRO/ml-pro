@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate, useLocation } from "react-router-dom";
+import logo from "@/assets/logo.jpeg";
 
 export const Sidebar = () => {
   const { signOut, userRole } = useAuth();
@@ -11,8 +12,8 @@ export const Sidebar = () => {
   return (
     <aside className="w-20 min-h-screen bg-background border-r border-border flex flex-col items-center py-6 gap-6">
       {/* Logo */}
-      <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-4">
-        <span className="text-primary-foreground font-display font-bold text-xl">ML</span>
+      <div className="w-12 h-12 rounded-xl overflow-hidden mb-4">
+        <img src={logo} alt="ML PRO Logo" className="w-full h-full object-cover" />
       </div>
 
       {/* Menu Items */}

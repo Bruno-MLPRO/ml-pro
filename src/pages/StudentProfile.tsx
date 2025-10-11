@@ -156,7 +156,7 @@ const StudentProfile = () => {
     return (
       <div className="flex min-h-screen">
         <Sidebar />
-        <main className="flex-1 p-8 ml-64 flex items-center justify-center">
+        <main className="flex-1 p-8 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </main>
       </div>
@@ -167,7 +167,7 @@ const StudentProfile = () => {
     return (
       <div className="flex min-h-screen">
         <Sidebar />
-        <main className="flex-1 p-8 ml-64">
+        <main className="flex-1 p-8">
           <Card className="p-8 text-center">
             <p className="text-foreground-secondary">Perfil não encontrado</p>
           </Card>
@@ -198,7 +198,7 @@ const StudentProfile = () => {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 p-8 ml-64">
+      <main className="flex-1 p-8">
         <div className="max-w-5xl mx-auto">
           <Card className="p-8 mb-8">
             <div className="flex items-start gap-6">

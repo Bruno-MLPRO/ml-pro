@@ -144,7 +144,7 @@ const StudentJourney = () => {
     return (
       <div className="flex min-h-screen">
         <Sidebar />
-        <main className="flex-1 p-8 ml-64 flex items-center justify-center">
+        <main className="flex-1 p-8 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </main>
       </div>
@@ -154,7 +154,7 @@ const StudentJourney = () => {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 p-8 ml-64">
+      <main className="flex-1 p-8">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-4xl font-display font-semibold text-foreground mb-2">
             Minha Jornada

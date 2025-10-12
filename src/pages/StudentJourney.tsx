@@ -18,6 +18,7 @@ interface Milestone {
   status: 'not_started' | 'in_progress' | 'completed' | 'blocked';
   progress: number;
   order_index: number;
+  isExisting?: boolean;
 }
 
 interface Journey {
@@ -112,22 +113,42 @@ const StudentJourney = () => {
 
         if (milestonesError) throw milestonesError;
 
-        // Merge template data with student progress
-        const mergedMilestones = (milestoneTemplatesData || []).map((template: any) => {
-          const studentMilestone = studentMilestonesData?.find(
-            (sm: any) => sm.template_id === template.id
-          );
-          return {
-            id: studentMilestone?.id || template.id,
+        // If student has existing milestones
+        if (studentMilestonesData && studentMilestonesData.length > 0) {
+          // Try to match by template_id first, then by title and phase
+          const mergedMilestones = (milestoneTemplatesData || []).map((template: any) => {
+            const studentMilestone = studentMilestonesData.find(
+              (sm: any) => 
+                sm.template_id === template.id || 
+                (sm.title === template.title && sm.phase === template.phase)
+            );
+            
+            return {
+              id: studentMilestone?.id || template.id,
+              title: studentMilestone?.title || template.title,
+              description: studentMilestone?.description || template.description,
+              phase: studentMilestone?.phase || template.phase,
+              status: studentMilestone?.status || 'not_started',
+              progress: studentMilestone?.progress || 0,
+              order_index: studentMilestone?.order_index || template.order_index,
+              isExisting: !!studentMilestone,
+            };
+          });
+          setMilestones(mergedMilestones);
+        } else {
+          // No milestones yet, show templates with default status
+          const defaultMilestones = (milestoneTemplatesData || []).map((template: any) => ({
+            id: template.id,
             title: template.title,
             description: template.description,
             phase: template.phase,
-            status: studentMilestone?.status || 'not_started',
-            progress: studentMilestone?.progress || 0,
+            status: 'not_started' as const,
+            progress: 0,
             order_index: template.order_index,
-          };
-        });
-        setMilestones(mergedMilestones);
+            isExisting: false,
+          }));
+          setMilestones(defaultMilestones);
+        }
       } else {
         // No student journey yet, just show templates with default status
         const defaultMilestones = (milestoneTemplatesData || []).map((template: any) => ({
@@ -138,6 +159,7 @@ const StudentJourney = () => {
           status: 'not_started' as const,
           progress: 0,
           order_index: template.order_index,
+          isExisting: false,
         }));
         setMilestones(defaultMilestones);
       }
@@ -173,8 +195,68 @@ const StudentJourney = () => {
       let journeyId = studentJourneyData?.id;
       let actualMilestoneId = milestoneId;
 
-      // If no journey exists, create one
-      if (!journeyId) {
+      if (journeyId) {
+        // Journey exists, find the milestone
+        // Check if this ID is already a milestone ID
+        const { data: directMilestone, error: directError } = await supabase
+          .from('milestones')
+          .select('id')
+          .eq('id', milestoneId)
+          .eq('journey_id', journeyId)
+          .maybeSingle();
+
+        if (directError) throw directError;
+
+        if (directMilestone) {
+          // It's already a milestone ID
+          actualMilestoneId = directMilestone.id;
+        } else {
+          // It might be a template ID, try to find by template_id
+          const { data: milestoneByTemplate, error: templateError } = await supabase
+            .from('milestones')
+            .select('id')
+            .eq('journey_id', journeyId)
+            .eq('template_id', milestoneId)
+            .maybeSingle();
+
+          if (templateError) throw templateError;
+
+          if (milestoneByTemplate) {
+            actualMilestoneId = milestoneByTemplate.id;
+          } else {
+            // Still not found - create the milestone if needed
+            // Get template info
+            const { data: template, error: templateInfoError } = await supabase
+              .from('milestone_templates')
+              .select('*')
+              .eq('id', milestoneId)
+              .maybeSingle();
+
+            if (templateInfoError) throw templateInfoError;
+
+            if (template) {
+              const { data: newMilestone, error: createError } = await supabase
+                .from('milestones')
+                .insert([{
+                  journey_id: journeyId,
+                  template_id: template.id,
+                  title: template.title,
+                  description: template.description,
+                  phase: template.phase,
+                  order_index: template.order_index,
+                  status: 'not_started' as const,
+                  progress: 0
+                }])
+                .select()
+                .single();
+
+              if (createError) throw createError;
+              actualMilestoneId = newMilestone.id;
+            }
+          }
+        }
+      } else {
+        // No journey exists, create one
         const { data: newJourney, error: createJourneyError } = await supabase
           .from('student_journeys')
           .insert([{
@@ -219,21 +301,6 @@ const StudentJourney = () => {
         const createdMilestone = createdMilestones?.find((m: any) => m.template_id === milestoneId);
         if (createdMilestone) {
           actualMilestoneId = createdMilestone.id;
-        }
-      } else {
-        // Journey exists, check if milestone exists
-        const { data: existingMilestone, error: milestoneError } = await supabase
-          .from('milestones')
-          .select('id')
-          .eq('journey_id', journeyId)
-          .eq('template_id', milestoneId)
-          .maybeSingle();
-
-        if (milestoneError) throw milestoneError;
-
-        // If the milestone ID is actually a template ID, use the real milestone ID
-        if (existingMilestone) {
-          actualMilestoneId = existingMilestone.id;
         }
       }
 

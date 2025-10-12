@@ -67,6 +67,8 @@ interface JourneyTemplate {
 
 interface StudentWithJourney extends Student {
   journey_progress?: Record<string, number>;
+  in_progress_milestones?: Array<{ title: string }>;
+  milestones_status?: 'not_started' | 'in_progress' | 'completed';
 }
 
 const DEFAULT_PASSWORD = "12345678";
@@ -215,39 +217,28 @@ export default function StudentsManagement() {
       .select("id, student_id, current_phase")
       .in("student_id", studentIds);
 
-    console.log('Journeys Data:', journeysData);
-
     // Fetch all milestones for these students
     const journeyIds = journeysData?.map(j => j.id) || [];
-    
-    console.log('Journey IDs:', journeyIds);
 
     if (journeyIds.length === 0) {
-      console.log('No journey IDs found, setting students without progress');
       setStudents(profilesData || []);
       return;
     }
 
     const { data: milestonesData } = await supabase
       .from("milestones")
-      .select("journey_id, template_id, status")
+      .select("journey_id, template_id, status, title")
       .in("journey_id", journeyIds);
-
-    console.log('Milestones Data:', milestonesData);
 
     // Get all milestone templates to organize by journey template
     const { data: templatesData } = await supabase
       .from("milestone_templates")
       .select("id, journey_template_id");
 
-    console.log('Templates Data:', templatesData);
-
     // Get all journey templates for calculation
     const { data: allJourneyTemplates } = await supabase
       .from("journey_templates")
       .select("*");
-
-    console.log('All Journey Templates:', allJourneyTemplates);
 
     // Calculate progress per journey template for each student
     const studentsWithProgress = profilesData?.map(profile => {
@@ -256,7 +247,13 @@ export default function StudentsManagement() {
         m => m.journey_id === journey?.id
       ) || [];
 
-      console.log(`Student ${profile.full_name} milestones:`, studentMilestones);
+      // Get in-progress milestones
+      const inProgressMilestones = studentMilestones.filter(m => m.status === 'in_progress');
+      
+      // Determine overall status
+      const allCompleted = studentMilestones.length > 0 && studentMilestones.every(m => m.status === 'completed');
+      const noneStarted = studentMilestones.every(m => m.status === 'not_started');
+      const milestonesStatus = allCompleted ? 'completed' : noneStarted ? 'not_started' : 'in_progress';
 
       // Group milestones by journey template
       const progressByTemplate: Record<string, number> = {};
@@ -286,19 +283,17 @@ export default function StudentsManagement() {
           ? Math.round((completedMilestones / totalMilestones) * 100)
           : 0;
 
-        console.log(`Template ${template.name}: ${completedMilestones}/${totalMilestones} = ${progress}%`);
-
         progressByTemplate[template.id] = progress;
       });
 
       return {
         ...profile,
         current_phase: journey?.current_phase || "Onboarding",
-        journey_progress: progressByTemplate
+        journey_progress: progressByTemplate,
+        in_progress_milestones: inProgressMilestones.map(m => ({ title: m.title })),
+        milestones_status: milestonesStatus as 'not_started' | 'in_progress' | 'completed'
       };
     }) || [];
-
-    console.log('Students with progress:', studentsWithProgress);
 
     setStudents(studentsWithProgress);
   };
@@ -762,14 +757,31 @@ export default function StudentsManagement() {
                     <CardContent className="space-y-3">
                       <div className="flex items-center gap-3 flex-wrap">
                         <div className="flex-1 min-w-[120px]">
-                          <p className="text-xs text-muted-foreground mb-1">Fase Atual:</p>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getPhaseColor(
-                              student.current_phase || "Onboarding"
-                            )}`}
-                          >
-                            {student.current_phase || "Onboarding"}
-                          </span>
+                          <p className="text-xs text-muted-foreground mb-1">Etapa em andamento:</p>
+                          {student.milestones_status === 'completed' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                              Concluído
+                            </span>
+                          ) : student.milestones_status === 'not_started' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                              Não iniciado
+                            </span>
+                          ) : student.in_progress_milestones && student.in_progress_milestones.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {student.in_progress_milestones.map((milestone, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                >
+                                  {milestone.title}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                              Não iniciado
+                            </span>
+                          )}
                         </div>
                         
                         <div className="flex-1 min-w-[100px]">

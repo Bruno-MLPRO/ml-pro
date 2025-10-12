@@ -411,11 +411,23 @@ export default function StudentsManagement() {
       return;
     }
 
+    // Fetch updated student data
+    const { data: updatedStudent } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", selectedStudent.id)
+      .single();
+
+    if (updatedStudent) {
+      setSelectedStudent(updatedStudent);
+    }
+
     toast({
       title: "Aluno atualizado com sucesso",
     });
 
     setIsEditDialogOpen(false);
+    setIsViewDetailsDialogOpen(true); // Reopen details dialog
     resetForm();
     fetchStudents();
   };

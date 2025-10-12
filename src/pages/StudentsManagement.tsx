@@ -230,11 +230,45 @@ export default function StudentsManagement() {
   };
 
   const handleDeleteStudent = async (studentId: string) => {
-    toast({
-      title: "Função não disponível",
-      description: "A exclusão de alunos requer uma função administrativa especial",
-      variant: "destructive",
-    });
+    if (!confirm("Tem certeza que deseja excluir este aluno? Esta ação não pode ser desfeita.")) {
+      return;
+    }
+
+    try {
+      // Delete from user_roles first
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", studentId);
+
+      if (roleError) throw roleError;
+
+      // Delete from profiles
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", studentId);
+
+      if (profileError) throw profileError;
+
+      // Note: We cannot delete from auth.users directly via the client
+      // The cascade delete from profiles should handle most cleanup
+      // For complete deletion, use Supabase admin API
+
+      toast({
+        title: "Aluno excluído com sucesso",
+        description: "O aluno foi removido do sistema",
+      });
+
+      fetchStudents();
+    } catch (error: any) {
+      console.error('Error deleting student:', error);
+      toast({
+        title: "Erro ao excluir aluno",
+        description: error.message || "Não foi possível excluir o aluno",
+        variant: "destructive",
+      });
+    }
   };
 
   const openEditDialog = (student: Student) => {

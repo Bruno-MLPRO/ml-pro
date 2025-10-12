@@ -42,8 +42,8 @@ interface Manager {
   full_name: string;
   email: string;
   phone: string | null;
-  active_students_pro: number;
-  active_students_starter: number;
+  active_students: number;
+  inactive_students: number;
 }
 
 interface Student {
@@ -144,19 +144,31 @@ export default function TeamManagement() {
       // Get student counts for each manager
       const managersWithStats = await Promise.all(
         profiles.map(async (profile) => {
-          const { count: totalStudents } = await supabase
+          // Get all students assigned to this manager
+          const { data: journeys } = await supabase
             .from('student_journeys')
-            .select('*', { count: 'exact', head: true })
+            .select(`
+              student_id,
+              profiles!student_journeys_student_id_fkey(mentoria_status)
+            `)
             .eq('manager_id', profile.id);
 
-          // TODO: Implement PRO/STARTER classification when plan field is added
+          // Count active and inactive students
+          const activeStudents = journeys?.filter(
+            (j: any) => j.profiles?.mentoria_status === 'Ativo'
+          ).length || 0;
+          
+          const inactiveStudents = journeys?.filter(
+            (j: any) => j.profiles?.mentoria_status !== 'Ativo'
+          ).length || 0;
+
           return {
             id: profile.id,
             full_name: profile.full_name,
             email: profile.email,
             phone: profile.phone,
-            active_students_pro: Math.floor((totalStudents || 0) * 0.6), // Mock data
-            active_students_starter: Math.ceil((totalStudents || 0) * 0.4), // Mock data
+            active_students: activeStudents,
+            inactive_students: inactiveStudents,
           };
         })
       );
@@ -353,8 +365,8 @@ export default function TeamManagement() {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead className="text-center">Alunos PRO</TableHead>
-                  <TableHead className="text-center">Alunos STARTER</TableHead>
+                  <TableHead className="text-center">Alunos ativos</TableHead>
+                  <TableHead className="text-center">Alunos inativos</TableHead>
                   <TableHead className="text-center">Total</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -371,10 +383,10 @@ export default function TeamManagement() {
                     <TableRow key={manager.id}>
                       <TableCell className="font-medium">{manager.full_name}</TableCell>
                       <TableCell className="text-foreground-secondary">{manager.email}</TableCell>
-                      <TableCell className="text-center">{manager.active_students_pro}</TableCell>
-                      <TableCell className="text-center">{manager.active_students_starter}</TableCell>
+                      <TableCell className="text-center">{manager.active_students}</TableCell>
+                      <TableCell className="text-center">{manager.inactive_students}</TableCell>
                       <TableCell className="text-center font-medium">
-                        {manager.active_students_pro + manager.active_students_starter}
+                        {manager.active_students + manager.inactive_students}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">

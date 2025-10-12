@@ -384,12 +384,6 @@ export default function StudentsManagement() {
   const handleUpdateStudent = async () => {
     if (!selectedStudent) return;
 
-    console.log('Updating student with data:', {
-      possui_contador: formData.possui_contador,
-      tipo_pj: formData.tipo_pj,
-      estrutura_vendedor: formData.estrutura_vendedor
-    });
-
     const { error } = await supabase
       .from("profiles")
       .update({
@@ -409,7 +403,6 @@ export default function StudentsManagement() {
       .eq("id", selectedStudent.id);
 
     if (error) {
-      console.error('Update error:', error);
       toast({
         title: "Erro ao atualizar aluno",
         description: error.message,
@@ -417,8 +410,6 @@ export default function StudentsManagement() {
       });
       return;
     }
-
-    console.log('Update successful');
 
     toast({
       title: "Aluno atualizado com sucesso",
@@ -436,8 +427,6 @@ export default function StudentsManagement() {
       .select("*")
       .eq("id", selectedStudent.id)
       .single();
-    
-    console.log('Updated student from DB:', updatedStudent);
     
     if (updatedStudent) {
       // Reabre o dialog com os dados atualizados
@@ -492,11 +481,6 @@ export default function StudentsManagement() {
   };
 
   const openEditDialog = (student: Student) => {
-    console.log('Opening edit dialog with student:', {
-      possui_contador: student.possui_contador,
-      tipo_pj: student.tipo_pj
-    });
-    
     setSelectedStudent(student);
     setFormData({
       full_name: student.full_name,
@@ -513,11 +497,6 @@ export default function StudentsManagement() {
       sistemas_externos: student.sistemas_externos || "",
       mentoria_status: student.mentoria_status || "Ativo",
     });
-    
-    console.log('Form data set to:', {
-      possui_contador: student.possui_contador ?? false
-    });
-    
     setIsEditDialogOpen(true);
   };
 

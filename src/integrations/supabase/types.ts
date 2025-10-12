@@ -17,6 +17,7 @@ export type Database = {
       apps_extensions: {
         Row: {
           color: string | null
+          coupon: string | null
           created_at: string | null
           description: string | null
           id: string
@@ -27,6 +28,7 @@ export type Database = {
         }
         Insert: {
           color?: string | null
+          coupon?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -37,6 +39,7 @@ export type Database = {
         }
         Update: {
           color?: string | null
+          coupon?: string | null
           created_at?: string | null
           description?: string | null
           id?: string

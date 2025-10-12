@@ -31,8 +31,8 @@ export default function Settings() {
 
   // Apps state
   const [isCreateAppOpen, setIsCreateAppOpen] = useState(false);
-  const [editingApp, setEditingApp] = useState<{ id: string; name: string; url: string; description: string; price: number; color: string } | null>(null);
-  const [appFormData, setAppFormData] = useState({ name: "", url: "", description: "", price: "", color: "#3B82F6" });
+  const [editingApp, setEditingApp] = useState<{ id: string; name: string; url: string; description: string; price: number; color: string; coupon: string } | null>(null);
+  const [appFormData, setAppFormData] = useState({ name: "", url: "", description: "", price: "", color: "#3B82F6", coupon: "" });
 
   // Fetch plans with bonus
   const { data: plans = [], isLoading: isLoadingPlans } = useQuery({
@@ -253,7 +253,7 @@ export default function Settings() {
 
   // Create app
   const createAppMutation = useMutation({
-    mutationFn: async (appData: { name: string; url: string; description: string; price: number; color: string }) => {
+    mutationFn: async (appData: { name: string; url: string; description: string; price: number; color: string; coupon: string }) => {
       const { error } = await supabase.from("apps_extensions").insert([appData]);
       if (error) throw error;
     },
@@ -261,7 +261,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["apps_extensions"] });
       toast({ title: "Aplicativo criado com sucesso!" });
       setIsCreateAppOpen(false);
-      setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6" });
+      setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6", coupon: "" });
     },
     onError: (error: any) => {
       toast({ 
@@ -274,7 +274,7 @@ export default function Settings() {
 
   // Update app
   const updateAppMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { name: string; url: string; description: string; price: number; color: string } }) => {
+    mutationFn: async ({ id, data }: { id: string; data: { name: string; url: string; description: string; price: number; color: string; coupon: string } }) => {
       const { error } = await supabase
         .from("apps_extensions")
         .update(data)
@@ -285,7 +285,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["apps_extensions"] });
       toast({ title: "Aplicativo atualizado com sucesso!" });
       setEditingApp(null);
-      setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6" });
+      setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6", coupon: "" });
     },
     onError: (error: any) => {
       toast({ 
@@ -382,7 +382,8 @@ export default function Settings() {
           url: appFormData.url, 
           description: appFormData.description, 
           price: isNaN(price) ? 0 : price, 
-          color: appFormData.color 
+          color: appFormData.color,
+          coupon: appFormData.coupon 
         } 
       });
     } else {
@@ -391,7 +392,8 @@ export default function Settings() {
         url: appFormData.url, 
         description: appFormData.description, 
         price: isNaN(price) ? 0 : price, 
-        color: appFormData.color 
+        color: appFormData.color,
+        coupon: appFormData.coupon 
       });
     }
   };
@@ -422,7 +424,8 @@ export default function Settings() {
       url: app.url || "",
       description: app.description || "",
       price: app.price?.toString() || "",
-      color: app.color || "#3B82F6"
+      color: app.color || "#3B82F6",
+      coupon: app.coupon || ""
     });
   };
 
@@ -441,7 +444,7 @@ export default function Settings() {
   const closeAppDialog = () => {
     setEditingApp(null);
     setIsCreateAppOpen(false);
-    setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6" });
+    setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6", coupon: "" });
   };
 
   if (userRole !== "manager") {
@@ -940,6 +943,15 @@ export default function Settings() {
                             />
                           </div>
                         </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="app-coupon">Cupom</Label>
+                          <Input
+                            id="app-coupon"
+                            placeholder="Ex: PROMO2024"
+                            value={appFormData.coupon}
+                            onChange={(e) => setAppFormData({ ...appFormData, coupon: e.target.value })}
+                          />
+                        </div>
                       </div>
                       <DialogFooter>
                         <Button type="button" variant="outline" onClick={closeAppDialog}>
@@ -1076,6 +1088,15 @@ export default function Settings() {
                                           className="flex-1"
                                         />
                                       </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor="edit-app-coupon">Cupom</Label>
+                                      <Input
+                                        id="edit-app-coupon"
+                                        placeholder="Ex: PROMO2024"
+                                        value={appFormData.coupon}
+                                        onChange={(e) => setAppFormData({ ...appFormData, coupon: e.target.value })}
+                                      />
                                     </div>
                                   </div>
                                   <DialogFooter>

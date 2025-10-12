@@ -84,7 +84,9 @@ export default function StudentsManagement() {
   const [statusFilter, setStatusFilter] = useState("Ativo");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isViewJourneyDialogOpen, setIsViewJourneyDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudentMilestones, setSelectedStudentMilestones] = useState<any[]>([]);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -467,6 +469,83 @@ export default function StudentsManagement() {
     setIsEditDialogOpen(true);
   };
 
+  const openViewJourneyDialog = async (student: Student) => {
+    setSelectedStudent(student);
+    
+    // Fetch student's journey
+    const { data: journeyData } = await supabase
+      .from("student_journeys")
+      .select("id")
+      .eq("student_id", student.id)
+      .single();
+
+    if (!journeyData) {
+      toast({
+        title: "Erro",
+        description: "Jornada do aluno não encontrada",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Fetch milestones for selected journey template
+    const { data: milestones } = await supabase
+      .from("milestones")
+      .select("*, milestone_templates!milestones_template_id_fkey(journey_template_id)")
+      .eq("journey_id", journeyData.id)
+      .order("order_index");
+
+    // Filter milestones by selected journey template
+    const filteredMilestones = milestones?.filter(m => {
+      if (!m.template_id) {
+        // Legacy milestones without template - show for default journey
+        const defaultTemplate = journeyTemplates.find(t => t.is_default);
+        return selectedJourneyId === defaultTemplate?.id;
+      }
+      const template = m.milestone_templates as any;
+      return template?.journey_template_id === selectedJourneyId;
+    }) || [];
+
+    setSelectedStudentMilestones(filteredMilestones);
+    setIsViewJourneyDialogOpen(true);
+  };
+
+  const handleUpdateMilestoneStatus = async (milestoneId: string, newStatus: string) => {
+    const updateData: any = { status: newStatus };
+    
+    if (newStatus === 'completed') {
+      updateData.completed_at = new Date().toISOString();
+    } else {
+      updateData.completed_at = null;
+    }
+
+    const { error } = await supabase
+      .from("milestones")
+      .update(updateData)
+      .eq("id", milestoneId);
+
+    if (error) {
+      toast({
+        title: "Erro ao atualizar etapa",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Update local state
+    setSelectedStudentMilestones(prev =>
+      prev.map(m => m.id === milestoneId ? { ...m, ...updateData } : m)
+    );
+
+    // Refresh students to update progress
+    fetchStudents();
+
+    toast({
+      title: "Etapa atualizada com sucesso",
+    });
+  };
+
   const resetForm = () => {
     setFormData({
       full_name: "",
@@ -816,6 +895,17 @@ export default function StudentsManagement() {
                           />
                         </div>
                       </div>
+                      
+                      <div className="pt-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => openViewJourneyDialog(student)}
+                          className="w-full"
+                        >
+                          Visualizar Jornada
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 );
@@ -926,6 +1016,82 @@ export default function StudentsManagement() {
                 Cancelar
               </Button>
               <Button onClick={handleUpdateStudent}>Salvar Alterações</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isViewJourneyDialogOpen} onOpenChange={setIsViewJourneyDialogOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Jornada de {selectedStudent?.full_name}
+              </DialogTitle>
+              <DialogDescription>
+                {journeyTemplates.find(t => t.id === selectedJourneyId)?.name || 'Jornada'}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              {selectedStudentMilestones.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  Nenhuma etapa encontrada para esta jornada
+                </p>
+              ) : (
+                selectedStudentMilestones.map((milestone) => (
+                  <div
+                    key={milestone.id}
+                    className="flex items-start gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex-1">
+                      <h4 className="font-medium mb-1">{milestone.title}</h4>
+                      {milestone.description && (
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {milestone.description}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`status-${milestone.id}`} className="text-xs">
+                          Status:
+                        </Label>
+                        <Select
+                          value={milestone.status}
+                          onValueChange={(value) => handleUpdateMilestoneStatus(milestone.id, value)}
+                        >
+                          <SelectTrigger id={`status-${milestone.id}`} className="w-[180px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="not_started">Não iniciado</SelectItem>
+                            <SelectItem value="in_progress">Em progresso</SelectItem>
+                            <SelectItem value="completed">Concluído</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          milestone.status === 'completed'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : milestone.status === 'in_progress'
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                            : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                        }`}
+                      >
+                        {milestone.status === 'completed' ? 'Concluído' : 
+                         milestone.status === 'in_progress' ? 'Em progresso' : 
+                         'Não iniciado'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button onClick={() => setIsViewJourneyDialogOpen(false)}>
+                Fechar
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

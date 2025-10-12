@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      bonus: {
+        Row: {
+          cost: number
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          cost: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          cost?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       call_schedules: {
         Row: {
           created_at: string | null
@@ -234,6 +261,42 @@ export type Database = {
           title?: string
         }
         Relationships: []
+      }
+      plan_bonus: {
+        Row: {
+          bonus_id: string
+          created_at: string | null
+          id: string
+          plan_id: string
+        }
+        Insert: {
+          bonus_id: string
+          created_at?: string | null
+          id?: string
+          plan_id: string
+        }
+        Update: {
+          bonus_id?: string
+          created_at?: string | null
+          id?: string
+          plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_bonus_bonus_id_fkey"
+            columns: ["bonus_id"]
+            isOneToOne: false
+            referencedRelation: "bonus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_bonus_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       plans: {
         Row: {

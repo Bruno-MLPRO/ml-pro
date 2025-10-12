@@ -1041,6 +1041,15 @@ export default function StudentsManagement() {
                       
                       {/* Área fixa no fundo */}
                       <div className="flex-shrink-0 space-y-4 pt-2">
+                        {/* Alerta para ME sem contador */}
+                        {student.tipo_pj === "ME" && !student.possui_contador && (
+                          <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                            <span className="text-yellow-600 dark:text-yellow-400 text-xs leading-relaxed">
+                              ⚠️ Aluno ME sem contador cadastrado
+                            </span>
+                          </div>
+                        )}
+                        
                         <div>
                           <div className="flex justify-between items-center mb-2.5">
                             <p className="text-xs font-medium text-muted-foreground">Progresso da Jornada:</p>
@@ -1053,15 +1062,6 @@ export default function StudentsManagement() {
                             />
                           </div>
                         </div>
-                        
-                        {/* Alerta para ME sem contador */}
-                        {student.tipo_pj === "ME" && !student.possui_contador && (
-                          <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                            <span className="text-yellow-600 dark:text-yellow-400 text-xs leading-relaxed">
-                              ⚠️ Aluno ME sem contador cadastrado
-                            </span>
-                          </div>
-                        )}
                         
                         <Button 
                           variant="secondary" 

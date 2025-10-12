@@ -59,13 +59,25 @@ interface Plan {
   price: number;
 }
 
+interface JourneyTemplate {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
+interface StudentWithJourney extends Student {
+  journey_progress?: Record<string, number>;
+}
+
 const DEFAULT_PASSWORD = "12345678";
 
 export default function StudentsManagement() {
   const { user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [students, setStudents] = useState<Student[]>([]);
+  const [students, setStudents] = useState<StudentWithJourney[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [journeyTemplates, setJourneyTemplates] = useState<JourneyTemplate[]>([]);
+  const [selectedJourneyId, setSelectedJourneyId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Ativo");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -102,6 +114,7 @@ export default function StudentsManagement() {
     }
 
     if (user && userRole === 'manager') {
+      fetchJourneyTemplates();
       fetchStudents();
       fetchPlans();
 
@@ -127,6 +140,32 @@ export default function StudentsManagement() {
       };
     }
   }, [user, userRole, authLoading, navigate]);
+
+  const fetchJourneyTemplates = async () => {
+    const { data, error } = await supabase
+      .from("journey_templates")
+      .select("*")
+      .order("is_default", { ascending: false });
+
+    if (error) {
+      toast({
+        title: "Erro ao carregar jornadas",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setJourneyTemplates(data || []);
+    
+    // Set default journey as selected
+    const defaultJourney = data?.find(j => j.is_default);
+    if (defaultJourney) {
+      setSelectedJourneyId(defaultJourney.id);
+    } else if (data && data.length > 0) {
+      setSelectedJourneyId(data[0].id);
+    }
+  };
 
   const fetchPlans = async () => {
     const { data, error } = await supabase
@@ -173,20 +212,60 @@ export default function StudentsManagement() {
     // Fetch journey data for each student
     const { data: journeysData } = await supabase
       .from("student_journeys")
-      .select("student_id, current_phase, overall_progress")
+      .select("id, student_id, current_phase")
       .in("student_id", studentIds);
 
-    // Merge profiles with journey data
-    const studentsWithPhase = profilesData?.map(profile => {
+    // Fetch all milestones for these students
+    const journeyIds = journeysData?.map(j => j.id) || [];
+    if (journeyIds.length === 0) {
+      setStudents(profilesData || []);
+      return;
+    }
+
+    const { data: milestonesData } = await supabase
+      .from("milestones")
+      .select("journey_id, template_id, status")
+      .in("journey_id", journeyIds);
+
+    // Get all milestone templates to organize by journey template
+    const { data: templatesData } = await supabase
+      .from("milestone_templates")
+      .select("id, journey_template_id");
+
+    // Calculate progress per journey template for each student
+    const studentsWithProgress = profilesData?.map(profile => {
       const journey = journeysData?.find(j => j.student_id === profile.id);
+      const studentMilestones = milestonesData?.filter(
+        m => m.journey_id === journey?.id
+      ) || [];
+
+      // Group milestones by journey template
+      const progressByTemplate: Record<string, number> = {};
+      
+      journeyTemplates.forEach(template => {
+        const templateMilestones = studentMilestones.filter(m => {
+          const milestoneTemplate = templatesData?.find(t => t.id === m.template_id);
+          return milestoneTemplate?.journey_template_id === template.id;
+        });
+
+        const totalMilestones = templateMilestones.length;
+        const completedMilestones = templateMilestones.filter(
+          m => m.status === 'completed'
+        ).length;
+
+        progressByTemplate[template.id] = totalMilestones > 0
+          ? Math.round((completedMilestones / totalMilestones) * 100)
+          : 0;
+      });
+
       return {
         ...profile,
         current_phase: journey?.current_phase || "Onboarding",
-        overall_progress: journey?.overall_progress || 0
+        journey_progress: progressByTemplate
       };
     }) || [];
 
-    setStudents(studentsWithPhase);
+    setStudents(studentsWithProgress);
   };
 
   const handleCreateStudent = async () => {
@@ -593,7 +672,7 @@ export default function StudentsManagement() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-4 mb-4">
               <div className="flex items-center gap-2">
                 <Label htmlFor="status-filter" className="text-sm">Filtrar por:</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -608,88 +687,86 @@ export default function StudentsManagement() {
                 </Select>
               </div>
               
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={resetForm}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Novo Aluno
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Criar Novo Aluno</DialogTitle>
-                    <DialogDescription>Preencha os dados do aluno. Senha padrão: {DEFAULT_PASSWORD}</DialogDescription>
-                  </DialogHeader>
-                  <StudentForm />
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button onClick={handleCreateStudent}>Criar Aluno</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="journey-filter" className="text-sm">Jornada:</Label>
+                <Select value={selectedJourneyId} onValueChange={setSelectedJourneyId}>
+                  <SelectTrigger id="journey-filter" className="w-[200px]">
+                    <SelectValue placeholder="Selecione a jornada" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {journeyTemplates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredStudents.map((student) => (
-                <Card key={student.id} className="hover:shadow-lg transition-shadow relative">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => openEditDialog(student)}
-                    className="absolute top-4 right-4 h-8 w-8"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  
-                  <CardHeader className="pr-12">
-                    <CardTitle className="text-lg">{student.full_name}</CardTitle>
-                    <CardDescription>{student.turma || "Sem turma"}</CardDescription>
-                  </CardHeader>
-                  
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="flex-1 min-w-[120px]">
-                        <p className="text-xs text-muted-foreground mb-1">Fase Atual:</p>
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getPhaseColor(
-                            student.current_phase || "Onboarding"
-                          )}`}
-                        >
-                          {student.current_phase || "Onboarding"}
-                        </span>
+              {filteredStudents.map((student) => {
+                const journeyProgress = student.journey_progress?.[selectedJourneyId] || 0;
+                
+                return (
+                  <Card key={student.id} className="hover:shadow-lg transition-shadow relative">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => openEditDialog(student)}
+                      className="absolute top-4 right-4 h-8 w-8"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    
+                    <CardHeader className="pr-12">
+                      <CardTitle className="text-lg">{student.full_name}</CardTitle>
+                      <CardDescription>{student.turma || "Sem turma"}</CardDescription>
+                    </CardHeader>
+                    
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex-1 min-w-[120px]">
+                          <p className="text-xs text-muted-foreground mb-1">Fase Atual:</p>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getPhaseColor(
+                              student.current_phase || "Onboarding"
+                            )}`}
+                          >
+                            {student.current_phase || "Onboarding"}
+                          </span>
+                        </div>
+                        
+                        <div className="flex-1 min-w-[100px]">
+                          <p className="text-xs text-muted-foreground mb-1">Status:</p>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              student.mentoria_status === "Ativo"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                            }`}
+                          >
+                            {student.mentoria_status || "Ativo"}
+                          </span>
+                        </div>
                       </div>
                       
-                      <div className="flex-1 min-w-[100px]">
-                        <p className="text-xs text-muted-foreground mb-1">Status:</p>
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            student.mentoria_status === "Ativo"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                              : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
-                          }`}
-                        >
-                          {student.mentoria_status || "Ativo"}
-                        </span>
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <p className="text-xs text-muted-foreground">Progresso da Jornada:</p>
+                          <span className="text-xs font-medium">{journeyProgress}%</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <div 
+                            className="bg-primary rounded-full h-2 transition-all duration-300"
+                            style={{ width: `${journeyProgress}%` }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <p className="text-xs text-muted-foreground">Progresso da Jornada:</p>
-                        <span className="text-xs font-medium">{student.overall_progress || 0}%</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-primary rounded-full h-2 transition-all duration-300"
-                          style={{ width: `${student.overall_progress || 0}%` }}
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </TabsContent>
 

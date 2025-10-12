@@ -417,7 +417,21 @@ export default function StudentsManagement() {
 
     setIsEditDialogOpen(false);
     resetForm();
+    
+    // Recarrega os dados e reabre o dialog com dados atualizados
     await fetchStudents();
+    
+    // Busca os dados atualizados do aluno
+    const { data: updatedStudent } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", selectedStudent.id)
+      .single();
+    
+    if (updatedStudent) {
+      // Reabre o dialog com os dados atualizados
+      await openViewDetailsDialog(updatedStudent);
+    }
   };
 
   const handleDeleteStudent = async (studentId: string) => {

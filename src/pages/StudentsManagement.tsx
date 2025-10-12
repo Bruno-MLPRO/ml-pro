@@ -69,6 +69,7 @@ interface StudentWithJourney extends Student {
   journey_progress?: Record<string, number>;
   in_progress_milestones?: Record<string, Array<{ title: string }>>;
   milestones_status?: Record<string, 'not_started' | 'in_progress' | 'completed'>;
+  student_apps?: Array<{ id: string; name: string; color: string }>;
 }
 
 const DEFAULT_PASSWORD = "12345678";
@@ -225,6 +226,12 @@ export default function StudentsManagement() {
     // Fetch all milestones for these students
     const journeyIds = journeysData?.map(j => j.id) || [];
 
+    // Fetch all student apps with app details
+    const { data: studentAppsData } = await supabase
+      .from("student_apps")
+      .select("student_id, apps_extensions(id, name, color)")
+      .in("student_id", studentIds);
+
     if (journeyIds.length === 0) {
       setStudents(profilesData || []);
       return;
@@ -295,12 +302,18 @@ export default function StudentsManagement() {
         statusByTemplate[template.id] = status;
       });
 
+      // Get student apps
+      const studentApps = studentAppsData?.filter(sa => sa.student_id === profile.id)
+        .map(sa => sa.apps_extensions)
+        .filter(Boolean) || [];
+
       return {
         ...profile,
         current_phase: journey?.current_phase || "Onboarding",
         journey_progress: progressByTemplate,
         in_progress_milestones: inProgressByTemplate,
-        milestones_status: statusByTemplate
+        milestones_status: statusByTemplate,
+        student_apps: studentApps
       };
     }) || [];
 
@@ -935,52 +948,68 @@ export default function StudentsManagement() {
                 return (
                   <Card key={student.id} className="hover:shadow-lg transition-shadow">
                     <CardHeader>
-                      <CardTitle className="text-lg">{student.full_name}</CardTitle>
-                      <CardDescription>{student.turma || "Sem turma"}</CardDescription>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg">{student.full_name}</CardTitle>
+                          <CardDescription>{student.turma || "Sem turma"}</CardDescription>
+                        </div>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                            student.mentoria_status === "Ativo"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                              : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                          }`}
+                        >
+                          {student.mentoria_status || "Ativo"}
+                        </span>
+                      </div>
+                      
+                      {/* Apps e Extensões */}
+                      {student.student_apps && student.student_apps.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {student.student_apps.map((app) => (
+                            <div
+                              key={app.id}
+                              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs"
+                            >
+                              <div
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: app.color || "#3B82F6" }}
+                              />
+                              <span>{app.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </CardHeader>
                     
                     <CardContent className="space-y-3">
-                      <div className="flex items-start gap-3 flex-wrap">
-                        <div className="flex-1 min-w-[120px]">
-                          <p className="text-xs text-muted-foreground mb-1">Etapa em andamento:</p>
-                          {milestonesStatus === 'completed' ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                              Concluído
-                            </span>
-                          ) : milestonesStatus === 'not_started' ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                              Não iniciado
-                            </span>
-                          ) : inProgressMilestones.length > 0 ? (
-                            <div className="flex flex-col gap-1">
-                              {inProgressMilestones.map((milestone, idx) => (
-                                <span
-                                  key={idx}
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                                >
-                                  {milestone.title}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                              Não iniciado
-                            </span>
-                          )}
-                        </div>
-                        
-                        <div className="flex-1 min-w-[100px]">
-                          <p className="text-xs text-muted-foreground mb-1">Status:</p>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              student.mentoria_status === "Ativo"
-                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                                : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
-                            }`}
-                          >
-                            {student.mentoria_status || "Ativo"}
+                      <div className="flex-1 min-w-[120px]">
+                        <p className="text-xs text-muted-foreground mb-1">Etapa em andamento:</p>
+                        {milestonesStatus === 'completed' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            Concluído
                           </span>
-                        </div>
+                        ) : milestonesStatus === 'not_started' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                            Não iniciado
+                          </span>
+                        ) : inProgressMilestones.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            {inProgressMilestones.map((milestone, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                              >
+                                {milestone.title}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                            Não iniciado
+                          </span>
+                        )}
                       </div>
                       
                       <div>

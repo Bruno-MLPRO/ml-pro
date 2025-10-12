@@ -215,9 +215,15 @@ export default function StudentsManagement() {
       .select("id, student_id, current_phase")
       .in("student_id", studentIds);
 
+    console.log('Journeys Data:', journeysData);
+
     // Fetch all milestones for these students
     const journeyIds = journeysData?.map(j => j.id) || [];
+    
+    console.log('Journey IDs:', journeyIds);
+
     if (journeyIds.length === 0) {
+      console.log('No journey IDs found, setting students without progress');
       setStudents(profilesData || []);
       return;
     }
@@ -227,10 +233,21 @@ export default function StudentsManagement() {
       .select("journey_id, template_id, status")
       .in("journey_id", journeyIds);
 
+    console.log('Milestones Data:', milestonesData);
+
     // Get all milestone templates to organize by journey template
     const { data: templatesData } = await supabase
       .from("milestone_templates")
       .select("id, journey_template_id");
+
+    console.log('Templates Data:', templatesData);
+
+    // Get all journey templates for calculation
+    const { data: allJourneyTemplates } = await supabase
+      .from("journey_templates")
+      .select("*");
+
+    console.log('All Journey Templates:', allJourneyTemplates);
 
     // Calculate progress per journey template for each student
     const studentsWithProgress = profilesData?.map(profile => {
@@ -239,10 +256,12 @@ export default function StudentsManagement() {
         m => m.journey_id === journey?.id
       ) || [];
 
+      console.log(`Student ${profile.full_name} milestones:`, studentMilestones);
+
       // Group milestones by journey template
       const progressByTemplate: Record<string, number> = {};
       
-      journeyTemplates.forEach(template => {
+      allJourneyTemplates?.forEach(template => {
         const templateMilestones = studentMilestones.filter(m => {
           const milestoneTemplate = templatesData?.find(t => t.id === m.template_id);
           return milestoneTemplate?.journey_template_id === template.id;
@@ -253,9 +272,13 @@ export default function StudentsManagement() {
           m => m.status === 'completed'
         ).length;
 
-        progressByTemplate[template.id] = totalMilestones > 0
+        const progress = totalMilestones > 0
           ? Math.round((completedMilestones / totalMilestones) * 100)
           : 0;
+
+        console.log(`Template ${template.name}: ${completedMilestones}/${totalMilestones} = ${progress}%`);
+
+        progressByTemplate[template.id] = progress;
       });
 
       return {
@@ -264,6 +287,8 @@ export default function StudentsManagement() {
         journey_progress: progressByTemplate
       };
     }) || [];
+
+    console.log('Students with progress:', studentsWithProgress);
 
     setStudents(studentsWithProgress);
   };

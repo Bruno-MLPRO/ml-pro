@@ -933,17 +933,8 @@ export default function StudentsManagement() {
                 const milestonesStatus = student.milestones_status?.[selectedJourneyId] || 'not_started';
                 
                 return (
-                  <Card key={student.id} className="hover:shadow-lg transition-shadow relative">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => openEditDialog(student)}
-                      className="absolute top-4 right-4 h-8 w-8"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    
-                    <CardHeader className="pr-12">
+                  <Card key={student.id} className="hover:shadow-lg transition-shadow">
+                    <CardHeader>
                       <CardTitle className="text-lg">{student.full_name}</CardTitle>
                       <CardDescription>{student.turma || "Sem turma"}</CardDescription>
                     </CardHeader>
@@ -1141,7 +1132,20 @@ export default function StudentsManagement() {
               {/* Seção 1: Informações do Aluno */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Informações do Aluno</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">Informações do Aluno</CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        openEditDialog(selectedStudent!);
+                        setIsViewDetailsDialogOpen(false);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Editar
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>

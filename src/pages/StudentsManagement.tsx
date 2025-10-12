@@ -50,6 +50,7 @@ interface Student {
   sistemas_externos: string;
   mentoria_status: string;
   current_phase?: string;
+  overall_progress?: number;
 }
 
 interface Plan {
@@ -66,6 +67,7 @@ export default function StudentsManagement() {
   const [students, setStudents] = useState<Student[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Ativo");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -171,7 +173,7 @@ export default function StudentsManagement() {
     // Fetch journey data for each student
     const { data: journeysData } = await supabase
       .from("student_journeys")
-      .select("student_id, current_phase")
+      .select("student_id, current_phase, overall_progress")
       .in("student_id", studentIds);
 
     // Merge profiles with journey data
@@ -179,7 +181,8 @@ export default function StudentsManagement() {
       const journey = journeysData?.find(j => j.student_id === profile.id);
       return {
         ...profile,
-        current_phase: journey?.current_phase || "Onboarding"
+        current_phase: journey?.current_phase || "Onboarding",
+        overall_progress: journey?.overall_progress || 0
       };
     }) || [];
 
@@ -370,11 +373,18 @@ export default function StudentsManagement() {
     setSelectedStudent(null);
   };
 
-  const filteredStudents = students.filter(
-    (student) =>
+  const filteredStudents = students.filter((student) => {
+    const matchesSearch =
       student.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      student.email?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesStatus = 
+      statusFilter === "Todos" ||
+      (statusFilter === "Ativo" && student.mentoria_status === "Ativo") ||
+      (statusFilter === "Inativo" && student.mentoria_status === "Inativo");
+    
+    return matchesSearch && matchesStatus;
+  });
 
   const StudentForm = () => (
     <div className="grid gap-4 py-4">
@@ -583,7 +593,21 @@ export default function StudentsManagement() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="status-filter" className="text-sm">Filtrar por:</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger id="status-filter" className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Ativo">Apenas ativos</SelectItem>
+                    <SelectItem value="Inativo">Apenas inativos</SelectItem>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
               <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={resetForm}>
@@ -608,44 +632,60 @@ export default function StudentsManagement() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {students.map((student) => (
-                <Card key={student.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
+              {filteredStudents.map((student) => (
+                <Card key={student.id} className="hover:shadow-lg transition-shadow relative">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => openEditDialog(student)}
+                    className="absolute top-4 right-4 h-8 w-8"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  
+                  <CardHeader className="pr-12">
                     <CardTitle className="text-lg">{student.full_name}</CardTitle>
                     <CardDescription>{student.turma || "Sem turma"}</CardDescription>
                   </CardHeader>
+                  
                   <CardContent className="space-y-3">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Fase Atual:</p>
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPhaseColor(
-                          student.current_phase || "Onboarding"
-                        )}`}
-                      >
-                        {student.current_phase || "Onboarding"}
-                      </span>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex-1 min-w-[120px]">
+                        <p className="text-xs text-muted-foreground mb-1">Fase Atual:</p>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getPhaseColor(
+                            student.current_phase || "Onboarding"
+                          )}`}
+                        >
+                          {student.current_phase || "Onboarding"}
+                        </span>
+                      </div>
+                      
+                      <div className="flex-1 min-w-[100px]">
+                        <p className="text-xs text-muted-foreground mb-1">Status:</p>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            student.mentoria_status === "Ativo"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                              : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                          }`}
+                        >
+                          {student.mentoria_status || "Ativo"}
+                        </span>
+                      </div>
                     </div>
+                    
                     <div>
-                      <p className="text-sm text-muted-foreground mb-1">Status:</p>
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          student.mentoria_status === "Ativo"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                            : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
-                        }`}
-                      >
-                        {student.mentoria_status || "Ativo"}
-                      </span>
-                    </div>
-                    <div className="flex gap-2 pt-2">
-                      <Button variant="outline" size="sm" onClick={() => openEditDialog(student)} className="flex-1">
-                        <Pencil className="h-3 w-3 mr-1" />
-                        Editar
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleDeleteStudent(student.id)} className="flex-1">
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Excluir
-                      </Button>
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="text-xs text-muted-foreground">Progresso da Jornada:</p>
+                        <span className="text-xs font-medium">{student.overall_progress || 0}%</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-primary rounded-full h-2 transition-all duration-300"
+                          style={{ width: `${student.overall_progress || 0}%` }}
+                        />
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

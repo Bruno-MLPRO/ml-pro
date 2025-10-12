@@ -33,6 +33,8 @@ import { Search, Plus, Pencil, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Sidebar } from "@/components/Sidebar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface Student {
   id: string;
@@ -47,6 +49,7 @@ interface Student {
   hub_logistico: string;
   sistemas_externos: string;
   mentoria_status: string;
+  current_phase?: string;
 }
 
 interface Plan {
@@ -151,7 +154,7 @@ export default function StudentsManagement() {
 
     const studentIds = rolesData.map((r) => r.user_id);
 
-    const { data, error } = await supabase
+    const { data: profilesData, error } = await supabase
       .from("profiles")
       .select("*")
       .in("id", studentIds);
@@ -165,7 +168,22 @@ export default function StudentsManagement() {
       return;
     }
 
-    setStudents(data || []);
+    // Fetch journey data for each student
+    const { data: journeysData } = await supabase
+      .from("student_journeys")
+      .select("student_id, current_phase")
+      .in("student_id", studentIds);
+
+    // Merge profiles with journey data
+    const studentsWithPhase = profilesData?.map(profile => {
+      const journey = journeysData?.find(j => j.student_id === profile.id);
+      return {
+        ...profile,
+        current_phase: journey?.current_phase || "Onboarding"
+      };
+    }) || [];
+
+    setStudents(studentsWithPhase);
   };
 
   const handleCreateStudent = async () => {
@@ -536,8 +554,21 @@ export default function StudentsManagement() {
     </div>
   );
 
+  const getPhaseColor = (phase: string) => {
+    switch (phase) {
+      case "Onboarding":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      case "Estrutura Inicial":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+      case "Profissionalização":
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200";
+    }
+  };
+
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen w-full bg-background">
       <Sidebar />
       <div className="flex-1 p-8">
         <div className="mb-8">
@@ -545,83 +576,173 @@ export default function StudentsManagement() {
           <p className="text-muted-foreground">Gerencie os alunos da plataforma</p>
         </div>
 
-        <div className="flex justify-between items-center mb-6">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-            <Input
-              placeholder="Buscar aluno..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+            <TabsTrigger value="list">Lista</TabsTrigger>
+          </TabsList>
 
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={resetForm}>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Aluno
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Criar Novo Aluno</DialogTitle>
-                <DialogDescription>Preencha os dados do aluno. Senha padrão: {DEFAULT_PASSWORD}</DialogDescription>
-              </DialogHeader>
-              <StudentForm />
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleCreateStudent}>Criar Aluno</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+          <TabsContent value="overview" className="space-y-6">
+            <div className="flex justify-end mb-4">
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={resetForm}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Novo Aluno
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Criar Novo Aluno</DialogTitle>
+                    <DialogDescription>Preencha os dados do aluno. Senha padrão: {DEFAULT_PASSWORD}</DialogDescription>
+                  </DialogHeader>
+                  <StudentForm />
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleCreateStudent}>Criar Aluno</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
 
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>Turma</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredStudents.map((student) => (
-                <TableRow key={student.id}>
-                  <TableCell className="font-medium">{student.full_name}</TableCell>
-                  <TableCell>{student.email}</TableCell>
-                  <TableCell>{student.phone || "-"}</TableCell>
-                  <TableCell>{student.turma || "-"}</TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        student.mentoria_status === "Ativo"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {student.mentoria_status || "Ativo"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEditDialog(student)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteStudent(student.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {students.map((student) => (
+                <Card key={student.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader>
+                    <CardTitle className="text-lg">{student.full_name}</CardTitle>
+                    <CardDescription>{student.turma || "Sem turma"}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Fase Atual:</p>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPhaseColor(
+                          student.current_phase || "Onboarding"
+                        )}`}
+                      >
+                        {student.current_phase || "Onboarding"}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Status:</p>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          student.mentoria_status === "Ativo"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                            : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                        }`}
+                      >
+                        {student.mentoria_status || "Ativo"}
+                      </span>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button variant="outline" size="sm" onClick={() => openEditDialog(student)} className="flex-1">
+                        <Pencil className="h-3 w-3 mr-1" />
+                        Editar
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleDeleteStudent(student.id)} className="flex-1">
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Excluir
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
-            </TableBody>
-          </Table>
-        </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="list" className="space-y-6">
+            <div className="flex justify-between items-center mb-6">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Buscar aluno..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={resetForm}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Novo Aluno
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Criar Novo Aluno</DialogTitle>
+                    <DialogDescription>Preencha os dados do aluno. Senha padrão: {DEFAULT_PASSWORD}</DialogDescription>
+                  </DialogHeader>
+                  <StudentForm />
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleCreateStudent}>Criar Aluno</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Telefone</TableHead>
+                    <TableHead>Turma</TableHead>
+                    <TableHead>Fase</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStudents.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">{student.full_name}</TableCell>
+                      <TableCell>{student.email}</TableCell>
+                      <TableCell>{student.phone || "-"}</TableCell>
+                      <TableCell>{student.turma || "-"}</TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPhaseColor(
+                            student.current_phase || "Onboarding"
+                          )}`}
+                        >
+                          {student.current_phase || "Onboarding"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            student.mentoria_status === "Ativo"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                              : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                          }`}
+                        >
+                          {student.mentoria_status || "Ativo"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(student)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteStudent(student.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
 
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

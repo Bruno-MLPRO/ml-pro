@@ -262,10 +262,20 @@ export default function StudentsManagement() {
       const progressByTemplate: Record<string, number> = {};
       
       allJourneyTemplates?.forEach(template => {
-        const templateMilestones = studentMilestones.filter(m => {
+        // For milestones with template_id, match by template
+        const milestonesWithTemplate = studentMilestones.filter(m => {
+          if (!m.template_id) return false;
           const milestoneTemplate = templatesData?.find(t => t.id === m.template_id);
           return milestoneTemplate?.journey_template_id === template.id;
         });
+
+        // For milestones without template_id (legacy), assign to default journey if it's the default template
+        let templateMilestones = milestonesWithTemplate;
+        
+        if (template.is_default) {
+          const milestonesWithoutTemplate = studentMilestones.filter(m => !m.template_id);
+          templateMilestones = [...milestonesWithTemplate, ...milestonesWithoutTemplate];
+        }
 
         const totalMilestones = templateMilestones.length;
         const completedMilestones = templateMilestones.filter(

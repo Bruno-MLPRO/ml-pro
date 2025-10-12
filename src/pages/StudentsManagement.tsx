@@ -73,6 +73,7 @@ export default function StudentsManagement() {
     email: "",
     phone: "",
     turma: "",
+    estado: "",
     estrutura_vendedor: "CPF",
     tipo_pj: "",
     cnpj: "",
@@ -82,6 +83,12 @@ export default function StudentsManagement() {
     sistemas_externos: "",
     mentoria_status: "Ativo",
   });
+
+  const estadosBrasil = [
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
+    "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
+    "RS", "RO", "RR", "SC", "SP", "SE", "TO"
+  ];
 
   useEffect(() => {
     if (!authLoading && (!user || userRole !== 'manager')) {
@@ -189,6 +196,7 @@ export default function StudentsManagement() {
         .update({
           phone: formData.phone,
           turma: formData.turma,
+          estado: formData.estado,
           estrutura_vendedor: formData.estrutura_vendedor,
           tipo_pj: formData.estrutura_vendedor === "PJ" ? formData.tipo_pj : null,
           cnpj: formData.estrutura_vendedor === "PJ" ? formData.cnpj : null,
@@ -229,6 +237,7 @@ export default function StudentsManagement() {
         full_name: formData.full_name,
         phone: formData.phone,
         turma: formData.turma,
+        estado: formData.estado,
         estrutura_vendedor: formData.estrutura_vendedor,
         tipo_pj: formData.estrutura_vendedor === "PJ" ? formData.tipo_pj : null,
         cnpj: formData.estrutura_vendedor === "PJ" ? formData.cnpj : null,
@@ -311,6 +320,7 @@ export default function StudentsManagement() {
       email: student.email,
       phone: student.phone || "",
       turma: student.turma || "",
+      estado: (student as any).estado || "",
       estrutura_vendedor: student.estrutura_vendedor || "CPF",
       tipo_pj: student.tipo_pj || "",
       cnpj: (student as any).cnpj || "",
@@ -329,6 +339,7 @@ export default function StudentsManagement() {
       email: "",
       phone: "",
       turma: "",
+      estado: "",
       estrutura_vendedor: "CPF",
       tipo_pj: "",
       cnpj: "",
@@ -396,6 +407,22 @@ export default function StudentsManagement() {
                 </SelectItem>
               ))
             )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="estado">Localização (Estado)</Label>
+        <Select value={formData.estado} onValueChange={(value) => setFormData({ ...formData, estado: value })}>
+          <SelectTrigger className="bg-background">
+            <SelectValue placeholder="Selecione o estado" />
+          </SelectTrigger>
+          <SelectContent className="bg-popover z-50">
+            {estadosBrasil.map((estado) => (
+              <SelectItem key={estado} value={estado}>
+                {estado}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

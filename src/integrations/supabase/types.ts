@@ -16,32 +16,32 @@ export type Database = {
     Tables: {
       apps_extensions: {
         Row: {
+          color: string | null
           created_at: string | null
           description: string | null
           id: string
           name: string
           price: number | null
-          tag: string | null
           updated_at: string | null
           url: string | null
         }
         Insert: {
+          color?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
           name: string
           price?: number | null
-          tag?: string | null
           updated_at?: string | null
           url?: string | null
         }
         Update: {
+          color?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
           name?: string
           price?: number | null
-          tag?: string | null
           updated_at?: string | null
           url?: string | null
         }

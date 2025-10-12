@@ -31,8 +31,8 @@ export default function Settings() {
 
   // Apps state
   const [isCreateAppOpen, setIsCreateAppOpen] = useState(false);
-  const [editingApp, setEditingApp] = useState<{ id: string; name: string; url: string; description: string; price: number; tag: string } | null>(null);
-  const [appFormData, setAppFormData] = useState({ name: "", url: "", description: "", price: "", tag: "" });
+  const [editingApp, setEditingApp] = useState<{ id: string; name: string; url: string; description: string; price: number; color: string } | null>(null);
+  const [appFormData, setAppFormData] = useState({ name: "", url: "", description: "", price: "", color: "#3B82F6" });
 
   // Fetch plans with bonus
   const { data: plans = [], isLoading: isLoadingPlans } = useQuery({
@@ -253,7 +253,7 @@ export default function Settings() {
 
   // Create app
   const createAppMutation = useMutation({
-    mutationFn: async (appData: { name: string; url: string; description: string; price: number; tag: string }) => {
+    mutationFn: async (appData: { name: string; url: string; description: string; price: number; color: string }) => {
       const { error } = await supabase.from("apps_extensions").insert([appData]);
       if (error) throw error;
     },
@@ -261,7 +261,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["apps_extensions"] });
       toast({ title: "Aplicativo criado com sucesso!" });
       setIsCreateAppOpen(false);
-      setAppFormData({ name: "", url: "", description: "", price: "", tag: "" });
+      setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6" });
     },
     onError: (error: any) => {
       toast({ 
@@ -274,7 +274,7 @@ export default function Settings() {
 
   // Update app
   const updateAppMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { name: string; url: string; description: string; price: number; tag: string } }) => {
+    mutationFn: async ({ id, data }: { id: string; data: { name: string; url: string; description: string; price: number; color: string } }) => {
       const { error } = await supabase
         .from("apps_extensions")
         .update(data)
@@ -285,7 +285,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["apps_extensions"] });
       toast({ title: "Aplicativo atualizado com sucesso!" });
       setEditingApp(null);
-      setAppFormData({ name: "", url: "", description: "", price: "", tag: "" });
+      setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6" });
     },
     onError: (error: any) => {
       toast({ 
@@ -382,7 +382,7 @@ export default function Settings() {
           url: appFormData.url, 
           description: appFormData.description, 
           price: isNaN(price) ? 0 : price, 
-          tag: appFormData.tag 
+          color: appFormData.color 
         } 
       });
     } else {
@@ -391,7 +391,7 @@ export default function Settings() {
         url: appFormData.url, 
         description: appFormData.description, 
         price: isNaN(price) ? 0 : price, 
-        tag: appFormData.tag 
+        color: appFormData.color 
       });
     }
   };
@@ -422,7 +422,7 @@ export default function Settings() {
       url: app.url || "",
       description: app.description || "",
       price: app.price?.toString() || "",
-      tag: app.tag || ""
+      color: app.color || "#3B82F6"
     });
   };
 
@@ -441,7 +441,7 @@ export default function Settings() {
   const closeAppDialog = () => {
     setEditingApp(null);
     setIsCreateAppOpen(false);
-    setAppFormData({ name: "", url: "", description: "", price: "", tag: "" });
+    setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6" });
   };
 
   if (userRole !== "manager") {
@@ -922,13 +922,23 @@ export default function Settings() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="app-tag">TAG</Label>
-                          <Input
-                            id="app-tag"
-                            placeholder="Ex: ERP, Logística, Análise"
-                            value={appFormData.tag}
-                            onChange={(e) => setAppFormData({ ...appFormData, tag: e.target.value })}
-                          />
+                          <Label htmlFor="app-color">Cor</Label>
+                          <div className="flex gap-2 items-center">
+                            <Input
+                              id="app-color"
+                              type="color"
+                              value={appFormData.color}
+                              onChange={(e) => setAppFormData({ ...appFormData, color: e.target.value })}
+                              className="w-20 h-10 cursor-pointer"
+                            />
+                            <Input
+                              type="text"
+                              value={appFormData.color}
+                              onChange={(e) => setAppFormData({ ...appFormData, color: e.target.value })}
+                              placeholder="#3B82F6"
+                              className="flex-1"
+                            />
+                          </div>
                         </div>
                       </div>
                       <DialogFooter>
@@ -965,12 +975,11 @@ export default function Settings() {
                         >
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full border border-border" 
+                                style={{ backgroundColor: app.color || '#3B82F6' }}
+                              />
                               <h3 className="font-semibold text-foreground">{app.name}</h3>
-                              {app.tag && (
-                                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                                  {app.tag}
-                                </span>
-                              )}
                             </div>
                             {app.url && (
                               <a 
@@ -1050,12 +1059,23 @@ export default function Settings() {
                                       />
                                     </div>
                                     <div className="space-y-2">
-                                      <Label htmlFor="edit-app-tag">TAG</Label>
-                                      <Input
-                                        id="edit-app-tag"
-                                        value={appFormData.tag}
-                                        onChange={(e) => setAppFormData({ ...appFormData, tag: e.target.value })}
-                                      />
+                                      <Label htmlFor="edit-app-color">Cor</Label>
+                                      <div className="flex gap-2 items-center">
+                                        <Input
+                                          id="edit-app-color"
+                                          type="color"
+                                          value={appFormData.color}
+                                          onChange={(e) => setAppFormData({ ...appFormData, color: e.target.value })}
+                                          className="w-20 h-10 cursor-pointer"
+                                        />
+                                        <Input
+                                          type="text"
+                                          value={appFormData.color}
+                                          onChange={(e) => setAppFormData({ ...appFormData, color: e.target.value })}
+                                          placeholder="#3B82F6"
+                                          className="flex-1"
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                   <DialogFooter>

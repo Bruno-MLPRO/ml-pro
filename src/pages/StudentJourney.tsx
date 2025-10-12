@@ -171,6 +171,7 @@ const StudentJourney = () => {
       if (journeyCheckError) throw journeyCheckError;
 
       let journeyId = studentJourneyData?.id;
+      let actualMilestoneId = milestoneId;
 
       // If no journey exists, create one
       if (!journeyId) {
@@ -207,51 +208,55 @@ const StudentJourney = () => {
           progress: 0
         }));
 
-        const { error: createMilestonesError } = await supabase
+        const { data: createdMilestones, error: createMilestonesError } = await supabase
           .from('milestones')
-          .insert(milestonesToCreate);
+          .insert(milestonesToCreate)
+          .select();
 
         if (createMilestonesError) throw createMilestonesError;
+
+        // Find the actual milestone ID for the template we're updating
+        const createdMilestone = createdMilestones?.find((m: any) => m.template_id === milestoneId);
+        if (createdMilestone) {
+          actualMilestoneId = createdMilestone.id;
+        }
+      } else {
+        // Journey exists, check if milestone exists
+        const { data: existingMilestone, error: milestoneError } = await supabase
+          .from('milestones')
+          .select('id')
+          .eq('journey_id', journeyId)
+          .eq('template_id', milestoneId)
+          .maybeSingle();
+
+        if (milestoneError) throw milestoneError;
+
+        // If the milestone ID is actually a template ID, use the real milestone ID
+        if (existingMilestone) {
+          actualMilestoneId = existingMilestone.id;
+        }
       }
-
-      // Now get the actual milestone ID (it might be a template ID if we just created the journey)
-      const { data: actualMilestone, error: milestoneError } = await supabase
-        .from('milestones')
-        .select('id')
-        .eq('journey_id', journeyId)
-        .eq('template_id', milestoneId)
-        .maybeSingle();
-
-      if (milestoneError) throw milestoneError;
-
-      const actualMilestoneId = actualMilestone?.id || milestoneId;
 
       // Update the milestone status
       const { error } = await supabase
         .from('milestones')
         .update({ 
           status: newStatus,
-          progress: newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0
+          progress: newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0,
+          completed_at: newStatus === 'completed' ? new Date().toISOString() : null
         })
         .eq('id', actualMilestoneId);
 
       if (error) throw error;
-
-      // Update local state
-      setMilestones(prev => prev.map(m => 
-        m.id === milestoneId 
-          ? { ...m, status: newStatus, progress: newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0 }
-          : m
-      ));
 
       toast({
         title: "Status atualizado",
         description: "O status do milestone foi atualizado com sucesso.",
       });
 
-      // Recalculate journey progress
+      // Reload journey data to get fresh state
       if (selectedJourneyId) {
-        loadJourneyData(selectedJourneyId);
+        await loadJourneyData(selectedJourneyId);
       }
     } catch (error) {
       console.error('Error updating milestone status:', error);

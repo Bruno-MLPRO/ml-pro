@@ -939,25 +939,25 @@ export default function StudentsManagement() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredStudents.map((student) => {
                 const journeyProgress = student.journey_progress?.[selectedJourneyId] || 0;
                 const inProgressMilestones = student.in_progress_milestones?.[selectedJourneyId] || [];
                 const milestonesStatus = student.milestones_status?.[selectedJourneyId] || 'not_started';
                 
                 return (
-                  <Card key={student.id} className="hover:shadow-lg transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <CardTitle className="text-lg">{student.full_name}</CardTitle>
-                          <CardDescription>{student.turma || "Sem turma"}</CardDescription>
+                  <Card key={student.id} className="hover:shadow-xl transition-all duration-200 border-border/50">
+                    <CardHeader className="space-y-3 pb-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <CardTitle className="text-xl font-bold mb-1 truncate">{student.full_name}</CardTitle>
+                          <CardDescription className="text-sm">{student.turma || "Sem turma"}</CardDescription>
                         </div>
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${
                             student.mentoria_status === "Ativo"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                              : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                              ? "bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400"
+                              : "bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400"
                           }`}
                         >
                           {student.mentoria_status || "Ativo"}
@@ -966,11 +966,15 @@ export default function StudentsManagement() {
                       
                       {/* Apps e Extensões */}
                       {student.student_apps && student.student_apps.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-3">
+                        <div className="flex flex-wrap gap-2">
                           {student.student_apps.map((app) => (
                             <div
                               key={app.id}
-                              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs"
+                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium"
+                              style={{ 
+                                backgroundColor: `${app.color}15`,
+                                color: app.color
+                              }}
                             >
                               <div
                                 className="w-2 h-2 rounded-full"
@@ -983,58 +987,61 @@ export default function StudentsManagement() {
                       )}
                     </CardHeader>
                     
-                    <CardContent className="space-y-3">
-                      <div className="flex-1 min-w-[120px]">
-                        <p className="text-xs text-muted-foreground mb-1">Etapa em andamento:</p>
+                    <CardContent className="space-y-4 pt-0">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Etapa em andamento:</p>
                         {milestonesStatus === 'completed' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400">
                             Concluído
                           </span>
                         ) : milestonesStatus === 'not_started' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400">
                             Não iniciado
                           </span>
                         ) : inProgressMilestones.length > 0 ? (
-                          <div className="flex flex-col gap-1">
-                            {inProgressMilestones.map((milestone, idx) => (
+                          <div className="flex flex-col gap-2">
+                            {inProgressMilestones.slice(0, 2).map((milestone, idx) => (
                               <span
                                 key={idx}
-                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 truncate"
                               >
                                 {milestone.title}
                               </span>
                             ))}
+                            {inProgressMilestones.length > 2 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{inProgressMilestones.length - 2} mais
+                              </span>
+                            )}
                           </div>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400">
                             Não iniciado
                           </span>
                         )}
                       </div>
                       
                       <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <p className="text-xs text-muted-foreground">Progresso da Jornada:</p>
-                          <span className="text-xs font-medium">{journeyProgress}%</span>
+                        <div className="flex justify-between items-center mb-2.5">
+                          <p className="text-xs font-medium text-muted-foreground">Progresso da Jornada:</p>
+                          <span className="text-sm font-bold">{journeyProgress}%</span>
                         </div>
-                        <div className="w-full bg-muted rounded-full h-2">
+                        <div className="w-full bg-muted/50 rounded-full h-2.5 overflow-hidden">
                           <div 
-                            className="bg-primary rounded-full h-2 transition-all duration-300"
+                            className="bg-gradient-to-r from-primary to-primary/80 rounded-full h-2.5 transition-all duration-500 ease-out"
                             style={{ width: `${journeyProgress}%` }}
                           />
                         </div>
                       </div>
                       
-                      <div className="pt-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => openViewDetailsDialog(student)}
-                          className="w-full"
-                        >
-                          Visualizar Detalhes
-                        </Button>
-                      </div>
+                      <Button 
+                        variant="secondary" 
+                        size="default"
+                        onClick={() => openViewDetailsDialog(student)}
+                        className="w-full mt-2 font-semibold"
+                      >
+                        Visualizar Detalhes
+                      </Button>
                     </CardContent>
                   </Card>
                 );

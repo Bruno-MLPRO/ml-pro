@@ -1008,11 +1008,18 @@ export default function Settings() {
                                 {app.description}
                               </p>
                             )}
-                            {app.price && (
-                              <p className="text-sm font-medium text-foreground mt-2">
-                                R$ {Number(app.price).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês
-                              </p>
-                            )}
+                            <div className="flex items-center gap-3 mt-2">
+                              {app.price && (
+                                <p className="text-sm font-medium text-foreground">
+                                  R$ {Number(app.price).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês
+                                </p>
+                              )}
+                              {app.coupon && (
+                                <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-medium">
+                                  Cupom: {app.coupon}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <div className="flex gap-2">
                             <Dialog open={editingApp?.id === app.id} onOpenChange={(open) => !open && closeAppDialog()}>

@@ -71,6 +71,31 @@ const StudentDashboard = () => {
   };
 
 
+  const formatDescription = (description: string) => {
+    // Split by lines and check if it's a list format
+    const lines = description.split('\n').map(line => line.trim()).filter(line => line);
+    const hasListItems = lines.some(line => line.startsWith('-'));
+    
+    if (hasListItems) {
+      return (
+        <ul className="text-xs text-foreground-secondary space-y-1 mt-2">
+          {lines.map((line, index) => {
+            if (line.startsWith('-')) {
+              return (
+                <li key={index} className="ml-0">
+                  {line.substring(1).trim()}
+                </li>
+              );
+            }
+            return <p key={index} className="mt-1">{line}</p>;
+          })}
+        </ul>
+      );
+    }
+    
+    return <p className="text-xs text-foreground-secondary">{description}</p>;
+  };
+
   if (authLoading || loading) {
     return (
       <div className="flex min-h-screen">
@@ -191,9 +216,7 @@ const StudentDashboard = () => {
                         {format(new Date(schedule.date), "dd/MM/yyyy", { locale: ptBR })}
                       </div>
                       <h4 className="font-semibold text-foreground mb-1">{schedule.theme}</h4>
-                      {schedule.description && (
-                        <p className="text-xs text-foreground-secondary">{schedule.description}</p>
-                      )}
+                      {schedule.description && formatDescription(schedule.description)}
                     </div>
                   ))}
                 </div>

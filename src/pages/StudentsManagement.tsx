@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, ExternalLink, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Sidebar } from "@/components/Sidebar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -84,9 +84,12 @@ export default function StudentsManagement() {
   const [statusFilter, setStatusFilter] = useState("Ativo");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isViewJourneyDialogOpen, setIsViewJourneyDialogOpen] = useState(false);
+  const [isViewDetailsDialogOpen, setIsViewDetailsDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [selectedStudentMilestones, setSelectedStudentMilestones] = useState<any[]>([]);
+  const [dialogJourneyId, setDialogJourneyId] = useState<string>("");
+  const [studentApps, setStudentApps] = useState<any[]>([]);
+  const [availableApps, setAvailableApps] = useState<any[]>([]);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -469,8 +472,126 @@ export default function StudentsManagement() {
     setIsEditDialogOpen(true);
   };
 
-  const openViewJourneyDialog = async (student: Student) => {
+  const fetchStudentApps = async (studentId: string) => {
+    const { data, error } = await supabase
+      .from("student_apps")
+      .select("*, apps_extensions(*)")
+      .eq("student_id", studentId);
+
+    if (error) {
+      toast({
+        title: "Erro ao carregar apps",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setStudentApps(data || []);
+  };
+
+  const fetchAvailableApps = async () => {
+    const { data, error } = await supabase
+      .from("apps_extensions")
+      .select("*")
+      .order("name");
+
+    if (error) {
+      toast({
+        title: "Erro ao carregar apps disponíveis",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAvailableApps(data || []);
+  };
+
+  const handleAddAppToStudent = async (appId: string) => {
+    if (!selectedStudent) return;
+
+    const { error } = await supabase
+      .from("student_apps")
+      .insert({
+        student_id: selectedStudent.id,
+        app_id: appId,
+      });
+
+    if (error) {
+      toast({
+        title: "Erro ao adicionar app",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "App adicionado com sucesso",
+    });
+
+    fetchStudentApps(selectedStudent.id);
+  };
+
+  const handleRemoveAppFromStudent = async (studentAppId: string) => {
+    const { error } = await supabase
+      .from("student_apps")
+      .delete()
+      .eq("id", studentAppId);
+
+    if (error) {
+      toast({
+        title: "Erro ao remover app",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "App removido com sucesso",
+    });
+
+    if (selectedStudent) {
+      fetchStudentApps(selectedStudent.id);
+    }
+  };
+
+  const fetchMilestonesForJourney = async (studentId: string, journeyTemplateId: string) => {
+    // Fetch student's journey
+    const { data: journeyData } = await supabase
+      .from("student_journeys")
+      .select("id")
+      .eq("student_id", studentId)
+      .single();
+
+    if (!journeyData) return;
+
+    // Fetch milestones for selected journey template
+    const { data: milestones } = await supabase
+      .from("milestones")
+      .select("*, milestone_templates!milestones_template_id_fkey(journey_template_id)")
+      .eq("journey_id", journeyData.id)
+      .order("order_index");
+
+    // Filter milestones by selected journey template
+    const filteredMilestones = milestones?.filter(m => {
+      if (!m.template_id) {
+        // Legacy milestones without template - show for default journey
+        const defaultTemplate = journeyTemplates.find(t => t.is_default);
+        return journeyTemplateId === defaultTemplate?.id;
+      }
+      const template = m.milestone_templates as any;
+      return template?.journey_template_id === journeyTemplateId;
+    }) || [];
+
+    setSelectedStudentMilestones(filteredMilestones);
+  };
+
+  const openViewDetailsDialog = async (student: Student) => {
     setSelectedStudent(student);
+    setDialogJourneyId(selectedJourneyId);
     
     // Fetch student's journey
     const { data: journeyData } = await supabase
@@ -488,26 +609,14 @@ export default function StudentsManagement() {
       return;
     }
 
-    // Fetch milestones for selected journey template
-    const { data: milestones } = await supabase
-      .from("milestones")
-      .select("*, milestone_templates!milestones_template_id_fkey(journey_template_id)")
-      .eq("journey_id", journeyData.id)
-      .order("order_index");
+    // Fetch apps, available apps, and milestones
+    await Promise.all([
+      fetchStudentApps(student.id),
+      fetchAvailableApps(),
+      fetchMilestonesForJourney(student.id, selectedJourneyId)
+    ]);
 
-    // Filter milestones by selected journey template
-    const filteredMilestones = milestones?.filter(m => {
-      if (!m.template_id) {
-        // Legacy milestones without template - show for default journey
-        const defaultTemplate = journeyTemplates.find(t => t.is_default);
-        return selectedJourneyId === defaultTemplate?.id;
-      }
-      const template = m.milestone_templates as any;
-      return template?.journey_template_id === selectedJourneyId;
-    }) || [];
-
-    setSelectedStudentMilestones(filteredMilestones);
-    setIsViewJourneyDialogOpen(true);
+    setIsViewDetailsDialogOpen(true);
   };
 
   const handleUpdateMilestoneStatus = async (milestoneId: string, newStatus: string) => {
@@ -900,10 +1009,10 @@ export default function StudentsManagement() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          onClick={() => openViewJourneyDialog(student)}
+                          onClick={() => openViewDetailsDialog(student)}
                           className="w-full"
                         >
-                          Visualizar Jornada
+                          Visualizar Detalhes
                         </Button>
                       </div>
                     </CardContent>
@@ -1020,76 +1129,272 @@ export default function StudentsManagement() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isViewJourneyDialogOpen} onOpenChange={setIsViewJourneyDialogOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <Dialog open={isViewDetailsDialogOpen} onOpenChange={setIsViewDetailsDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
-                Jornada de {selectedStudent?.full_name}
+                Detalhes de {selectedStudent?.full_name}
               </DialogTitle>
-              <DialogDescription>
-                {journeyTemplates.find(t => t.id === selectedJourneyId)?.name || 'Jornada'}
-              </DialogDescription>
             </DialogHeader>
             
-            <div className="space-y-4 py-4">
-              {selectedStudentMilestones.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  Nenhuma etapa encontrada para esta jornada
-                </p>
-              ) : (
-                selectedStudentMilestones.map((milestone) => (
-                  <div
-                    key={milestone.id}
-                    className="flex items-start gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <h4 className="font-medium mb-1">{milestone.title}</h4>
-                      {milestone.description && (
-                        <p className="text-sm text-muted-foreground mb-2">
-                          {milestone.description}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor={`status-${milestone.id}`} className="text-xs">
-                          Status:
-                        </Label>
-                        <Select
-                          value={milestone.status}
-                          onValueChange={(value) => handleUpdateMilestoneStatus(milestone.id, value)}
-                        >
-                          <SelectTrigger id={`status-${milestone.id}`} className="w-[180px] h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="not_started">Não iniciado</SelectItem>
-                            <SelectItem value="in_progress">Em progresso</SelectItem>
-                            <SelectItem value="completed">Concluído</SelectItem>
-                          </SelectContent>
-                        </Select>
+            <div className="space-y-6 py-4">
+              {/* Seção 1: Informações do Aluno */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Informações do Aluno</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Nome completo</Label>
+                    <p className="text-sm font-medium">{selectedStudent?.full_name}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Email</Label>
+                    <p className="text-sm font-medium">{selectedStudent?.email}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Telefone</Label>
+                    <p className="text-sm font-medium">{selectedStudent?.phone || "-"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Turma ML PRO</Label>
+                    <p className="text-sm font-medium">{selectedStudent?.turma || "-"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Estado</Label>
+                    <p className="text-sm font-medium">{(selectedStudent as any)?.estado || "-"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Estrutura do vendedor</Label>
+                    <p className="text-sm font-medium">{selectedStudent?.estrutura_vendedor || "-"}</p>
+                  </div>
+                  {selectedStudent?.estrutura_vendedor === "PJ" && (
+                    <>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Tipo de PJ</Label>
+                        <p className="text-sm font-medium">{selectedStudent?.tipo_pj || "-"}</p>
                       </div>
-                    </div>
-                    <div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">CNPJ</Label>
+                        <p className="text-sm font-medium">{(selectedStudent as any)?.cnpj || "-"}</p>
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Possui contador</Label>
+                    <p className="text-sm font-medium">{selectedStudent?.possui_contador ? "Sim" : "Não"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Caixa (Capital de Giro)</Label>
+                    <p className="text-sm font-medium">
+                      {selectedStudent?.caixa 
+                        ? `R$ ${Number(selectedStudent.caixa).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : "-"
+                      }
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Hub Logístico</Label>
+                    <p className="text-sm font-medium">{selectedStudent?.hub_logistico || "-"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Sistemas Externos</Label>
+                    <p className="text-sm font-medium">{selectedStudent?.sistemas_externos || "-"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Status da Mentoria</Label>
+                    <p className="text-sm font-medium">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          milestone.status === 'completed'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                            : milestone.status === 'in_progress'
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                          selectedStudent?.mentoria_status === "Ativo"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                            : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
                         }`}
                       >
-                        {milestone.status === 'completed' ? 'Concluído' : 
-                         milestone.status === 'in_progress' ? 'Em progresso' : 
-                         'Não iniciado'}
+                        {selectedStudent?.mentoria_status || "Ativo"}
                       </span>
-                    </div>
+                    </p>
                   </div>
-                ))
-              )}
+                </CardContent>
+              </Card>
+
+              {/* Seção 2: Apps e Extensões */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Apps e Extensões</h3>
+                  <Select onValueChange={handleAddAppToStudent}>
+                    <SelectTrigger className="w-[200px] bg-background">
+                      <SelectValue placeholder="+ Adicionar App" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      {availableApps
+                        .filter(app => !studentApps.some(sa => sa.app_id === app.id))
+                        .map(app => (
+                          <SelectItem key={app.id} value={app.id}>
+                            {app.name}
+                          </SelectItem>
+                        ))
+                      }
+                      {availableApps.filter(app => !studentApps.some(sa => sa.app_id === app.id)).length === 0 && (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          Todos os apps já foram adicionados
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {studentApps.length === 0 ? (
+                    <p className="text-sm text-muted-foreground col-span-2 text-center py-4">
+                      Nenhum app ou extensão cadastrado
+                    </p>
+                  ) : (
+                    studentApps.map((studentApp) => {
+                      const app = studentApp.apps_extensions;
+                      return (
+                        <div
+                          key={studentApp.id}
+                          className="flex items-start gap-3 p-3 border rounded-lg bg-card"
+                        >
+                          <div
+                            className="w-3 h-3 rounded-full mt-1 flex-shrink-0"
+                            style={{ backgroundColor: app.color || "#3B82F6" }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="font-medium text-sm">{app.name}</h4>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 flex-shrink-0"
+                                onClick={() => handleRemoveAppFromStudent(studentApp.id)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            {app.description && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {app.description}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              {app.url && (
+                                <a
+                                  href={app.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                                >
+                                  Link <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                              {app.price && (
+                                <span className="text-xs text-muted-foreground">
+                                  R$ {Number(app.price).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês
+                                </span>
+                              )}
+                              {app.coupon && (
+                                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
+                                  {app.coupon}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Seção 3: Jornada */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Jornada</h3>
+                  <Select 
+                    value={dialogJourneyId} 
+                    onValueChange={(value) => {
+                      setDialogJourneyId(value);
+                      if (selectedStudent) {
+                        fetchMilestonesForJourney(selectedStudent.id, value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-[200px] bg-background">
+                      <SelectValue placeholder="Selecione a jornada" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      {journeyTemplates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-3">
+                  {selectedStudentMilestones.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      Nenhuma etapa encontrada para esta jornada
+                    </p>
+                  ) : (
+                    selectedStudentMilestones.map((milestone) => (
+                      <div
+                        key={milestone.id}
+                        className="flex items-start gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex-1">
+                          <h4 className="font-medium mb-1">{milestone.title}</h4>
+                          {milestone.description && (
+                            <p className="text-sm text-muted-foreground mb-2">
+                              {milestone.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`status-${milestone.id}`} className="text-xs">
+                              Status:
+                            </Label>
+                            <Select
+                              value={milestone.status}
+                              onValueChange={(value) => handleUpdateMilestoneStatus(milestone.id, value)}
+                            >
+                              <SelectTrigger id={`status-${milestone.id}`} className="w-[180px] h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="not_started">Não iniciado</SelectItem>
+                                <SelectItem value="in_progress">Em progresso</SelectItem>
+                                <SelectItem value="completed">Concluído</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              milestone.status === 'completed'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                : milestone.status === 'in_progress'
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                            }`}
+                          >
+                            {milestone.status === 'completed' ? 'Concluído' : 
+                             milestone.status === 'in_progress' ? 'Em progresso' : 
+                             'Não iniciado'}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
 
             <DialogFooter>
-              <Button onClick={() => setIsViewJourneyDialogOpen(false)}>
+              <Button onClick={() => setIsViewDetailsDialogOpen(false)}>
                 Fechar
               </Button>
             </DialogFooter>

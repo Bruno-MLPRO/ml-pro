@@ -49,12 +49,19 @@ interface Student {
   mentoria_status: string;
 }
 
+interface Plan {
+  id: string;
+  name: string;
+  price: number;
+}
+
 const DEFAULT_PASSWORD = "12345678";
 
 export default function StudentsManagement() {
   const { user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -68,6 +75,7 @@ export default function StudentsManagement() {
     turma: "",
     estrutura_vendedor: "CPF",
     tipo_pj: "",
+    cnpj: "",
     possui_contador: false,
     caixa: "",
     hub_logistico: "Pretendo usar",
@@ -83,6 +91,7 @@ export default function StudentsManagement() {
 
     if (user && userRole === 'manager') {
       fetchStudents();
+      fetchPlans();
 
       // Set up realtime subscription for profile updates
       const channel = supabase
@@ -106,6 +115,24 @@ export default function StudentsManagement() {
       };
     }
   }, [user, userRole, authLoading, navigate]);
+
+  const fetchPlans = async () => {
+    const { data, error } = await supabase
+      .from("plans")
+      .select("*")
+      .order("name");
+
+    if (error) {
+      toast({
+        title: "Erro ao carregar turmas",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPlans(data || []);
+  };
 
   const fetchStudents = async () => {
     const { data: rolesData } = await supabase
@@ -164,6 +191,7 @@ export default function StudentsManagement() {
           turma: formData.turma,
           estrutura_vendedor: formData.estrutura_vendedor,
           tipo_pj: formData.estrutura_vendedor === "PJ" ? formData.tipo_pj : null,
+          cnpj: formData.estrutura_vendedor === "PJ" ? formData.cnpj : null,
           possui_contador: formData.possui_contador,
           caixa: formData.caixa ? parseFloat(formData.caixa) : null,
           hub_logistico: formData.hub_logistico,
@@ -203,6 +231,7 @@ export default function StudentsManagement() {
         turma: formData.turma,
         estrutura_vendedor: formData.estrutura_vendedor,
         tipo_pj: formData.estrutura_vendedor === "PJ" ? formData.tipo_pj : null,
+        cnpj: formData.estrutura_vendedor === "PJ" ? formData.cnpj : null,
         possui_contador: formData.possui_contador,
         caixa: formData.caixa ? parseFloat(formData.caixa) : null,
         hub_logistico: formData.hub_logistico,
@@ -284,6 +313,7 @@ export default function StudentsManagement() {
       turma: student.turma || "",
       estrutura_vendedor: student.estrutura_vendedor || "CPF",
       tipo_pj: student.tipo_pj || "",
+      cnpj: (student as any).cnpj || "",
       possui_contador: student.possui_contador || false,
       caixa: student.caixa?.toString() || "",
       hub_logistico: student.hub_logistico || "Pretendo usar",
@@ -301,6 +331,7 @@ export default function StudentsManagement() {
       turma: "",
       estrutura_vendedor: "CPF",
       tipo_pj: "",
+      cnpj: "",
       possui_contador: false,
       caixa: "",
       hub_logistico: "Pretendo usar",
@@ -349,12 +380,24 @@ export default function StudentsManagement() {
 
       <div className="grid gap-2">
         <Label htmlFor="turma">Turma ML PRO</Label>
-        <Input
-          id="turma"
-          placeholder="Ex: Turma 4 - Starter"
-          value={formData.turma}
-          onChange={(e) => setFormData({ ...formData, turma: e.target.value })}
-        />
+        <Select value={formData.turma} onValueChange={(value) => setFormData({ ...formData, turma: value })}>
+          <SelectTrigger className="bg-background">
+            <SelectValue placeholder="Selecione a turma" />
+          </SelectTrigger>
+          <SelectContent className="bg-popover z-50">
+            {plans.length === 0 ? (
+              <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                Nenhuma turma cadastrada
+              </div>
+            ) : (
+              plans.map((plan) => (
+                <SelectItem key={plan.id} value={plan.name}>
+                  {plan.name}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid gap-2">
@@ -376,18 +419,32 @@ export default function StudentsManagement() {
       </div>
 
       {formData.estrutura_vendedor === "PJ" && (
-        <div className="grid gap-2">
-          <Label htmlFor="tipo_pj">Tipo de PJ</Label>
-          <Select value={formData.tipo_pj} onValueChange={(value) => setFormData({ ...formData, tipo_pj: value })}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="MEI">MEI</SelectItem>
-              <SelectItem value="ME">ME</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <>
+          <div className="grid gap-2">
+            <Label htmlFor="tipo_pj">Tipo de PJ</Label>
+            <Select value={formData.tipo_pj} onValueChange={(value) => setFormData({ ...formData, tipo_pj: value })}>
+              <SelectTrigger className="bg-background">
+                <SelectValue placeholder="Selecione o tipo" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="MEI">MEI</SelectItem>
+                <SelectItem value="ME">ME</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {formData.tipo_pj && (
+            <div className="grid gap-2">
+              <Label htmlFor="cnpj">Número do CNPJ</Label>
+              <Input
+                id="cnpj"
+                value={formData.cnpj}
+                onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
+                placeholder="00.000.000/0000-00"
+              />
+            </div>
+          )}
+        </>
       )}
 
       <div className="flex items-center space-x-2">

@@ -76,6 +76,34 @@ export const Sidebar = () => {
             >
               <UsersRound className="w-5 h-5" strokeWidth={1.5} />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/perfil')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/perfil'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Perfil"
+            >
+              <User className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/configuracoes')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/configuracoes'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Configurações"
+            >
+              <Settings className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
           </>
         ) : (
           <>
@@ -107,36 +135,22 @@ export const Sidebar = () => {
             >
               <ListChecks className="w-5 h-5" strokeWidth={1.5} />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/perfil')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/perfil'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Perfil"
+            >
+              <User className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
           </>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate('/perfil')}
-          className={cn(
-            "w-12 h-12 rounded-xl transition-all duration-200",
-            location.pathname === '/perfil'
-              ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-              : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
-          )}
-          title="Perfil"
-        >
-          <User className="w-5 h-5" strokeWidth={1.5} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate('/configuracoes')}
-          className={cn(
-            "w-12 h-12 rounded-xl transition-all duration-200",
-            location.pathname === '/configuracoes'
-              ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-              : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
-          )}
-          title="Configurações"
-        >
-          <Settings className="w-5 h-5" strokeWidth={1.5} />
-        </Button>
       </nav>
 
       {/* Logout */}

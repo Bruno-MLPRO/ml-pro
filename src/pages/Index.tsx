@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
+import logo from "@/assets/logo.jpeg";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -42,8 +43,8 @@ const Index = () => {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="text-center space-y-6 px-4">
-        <div className="w-20 h-20 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-8">
-          <span className="text-primary-foreground font-display font-bold text-3xl">ML</span>
+        <div className="w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center mx-auto mb-8">
+          <img src={logo} alt="ML PRO Logo" className="w-full h-full object-cover" />
         </div>
         <h1 className="text-5xl font-display font-bold text-foreground mb-4">
           ML PRO

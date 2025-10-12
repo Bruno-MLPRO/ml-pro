@@ -305,6 +305,7 @@ export default function StudentsManagement() {
       // Get student apps
       const studentApps = studentAppsData?.filter(sa => sa.student_id === profile.id)
         .map(sa => sa.apps_extensions)
+        .flat()
         .filter(Boolean) || [];
 
       return {
@@ -946,8 +947,8 @@ export default function StudentsManagement() {
                 const milestonesStatus = student.milestones_status?.[selectedJourneyId] || 'not_started';
                 
                 return (
-                  <Card key={student.id} className="hover:shadow-xl transition-all duration-200 border-border/50">
-                    <CardHeader className="space-y-3 pb-4">
+                  <Card key={student.id} className="hover:shadow-xl transition-all duration-200 border-border/50 flex flex-col h-full">
+                    <CardHeader className="space-y-3 pb-4 flex-shrink-0">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <CardTitle className="text-xl font-bold mb-1 truncate">{student.full_name}</CardTitle>
@@ -967,7 +968,7 @@ export default function StudentsManagement() {
                       {/* Apps e Extensões */}
                       {student.student_apps && student.student_apps.length > 0 && (
                         <div className="flex flex-wrap gap-2">
-                          {student.student_apps.map((app) => (
+                          {student.student_apps.map((app: any) => (
                             <div
                               key={app.id}
                               className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium"
@@ -987,61 +988,67 @@ export default function StudentsManagement() {
                       )}
                     </CardHeader>
                     
-                    <CardContent className="space-y-4 pt-0">
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-2">Etapa em andamento:</p>
-                        {milestonesStatus === 'completed' ? (
-                          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400">
-                            Concluído
-                          </span>
-                        ) : milestonesStatus === 'not_started' ? (
-                          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400">
-                            Não iniciado
-                          </span>
-                        ) : inProgressMilestones.length > 0 ? (
-                          <div className="flex flex-col gap-2">
-                            {inProgressMilestones.slice(0, 2).map((milestone, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 truncate"
-                              >
-                                {milestone.title}
-                              </span>
-                            ))}
-                            {inProgressMilestones.length > 2 && (
-                              <span className="text-xs text-muted-foreground">
-                                +{inProgressMilestones.length - 2} mais
-                              </span>
-                            )}
+                    <CardContent className="space-y-4 pt-0 flex flex-col flex-1">
+                      {/* Área expansível */}
+                      <div className="flex-1 space-y-4">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-2">Etapa em andamento:</p>
+                          {milestonesStatus === 'completed' ? (
+                            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400">
+                              Concluído
+                            </span>
+                          ) : milestonesStatus === 'not_started' ? (
+                            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400">
+                              Não iniciado
+                            </span>
+                          ) : inProgressMilestones.length > 0 ? (
+                            <div className="flex flex-col gap-2">
+                              {inProgressMilestones.slice(0, 2).map((milestone, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 truncate"
+                                >
+                                  {milestone.title}
+                                </span>
+                              ))}
+                              {inProgressMilestones.length > 2 && (
+                                <span className="text-xs text-muted-foreground">
+                                  +{inProgressMilestones.length - 2} mais
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400">
+                              Não iniciado
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Área fixa no fundo */}
+                      <div className="flex-shrink-0 space-y-4 pt-2">
+                        <div>
+                          <div className="flex justify-between items-center mb-2.5">
+                            <p className="text-xs font-medium text-muted-foreground">Progresso da Jornada:</p>
+                            <span className="text-sm font-bold">{journeyProgress}%</span>
                           </div>
-                        ) : (
-                          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400">
-                            Não iniciado
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div>
-                        <div className="flex justify-between items-center mb-2.5">
-                          <p className="text-xs font-medium text-muted-foreground">Progresso da Jornada:</p>
-                          <span className="text-sm font-bold">{journeyProgress}%</span>
+                          <div className="w-full bg-muted/50 rounded-full h-2.5 overflow-hidden">
+                            <div 
+                              className="bg-gradient-to-r from-primary to-primary/80 rounded-full h-2.5 transition-all duration-500 ease-out"
+                              style={{ width: `${journeyProgress}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="w-full bg-muted/50 rounded-full h-2.5 overflow-hidden">
-                          <div 
-                            className="bg-gradient-to-r from-primary to-primary/80 rounded-full h-2.5 transition-all duration-500 ease-out"
-                            style={{ width: `${journeyProgress}%` }}
-                          />
-                        </div>
+                        
+                        <Button 
+                          variant="secondary" 
+                          size="default"
+                          onClick={() => openViewDetailsDialog(student)}
+                          className="w-full font-semibold"
+                        >
+                          Visualizar Detalhes
+                        </Button>
                       </div>
-                      
-                      <Button 
-                        variant="secondary" 
-                        size="default"
-                        onClick={() => openViewDetailsDialog(student)}
-                        className="w-full mt-2 font-semibold"
-                      >
-                        Visualizar Detalhes
-                      </Button>
                     </CardContent>
                   </Card>
                 );

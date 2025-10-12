@@ -235,7 +235,15 @@ export default function StudentsManagement() {
     }
 
     try {
-      // Delete from user_roles first
+      // Delete from student_journeys first (removes manager assignment)
+      const { error: journeyError } = await supabase
+        .from("student_journeys")
+        .delete()
+        .eq("student_id", studentId);
+
+      if (journeyError) throw journeyError;
+
+      // Delete from user_roles
       const { error: roleError } = await supabase
         .from("user_roles")
         .delete()
@@ -250,10 +258,6 @@ export default function StudentsManagement() {
         .eq("id", studentId);
 
       if (profileError) throw profileError;
-
-      // Note: We cannot delete from auth.users directly via the client
-      // The cascade delete from profiles should handle most cleanup
-      // For complete deletion, use Supabase admin API
 
       toast({
         title: "Aluno excluído com sucesso",

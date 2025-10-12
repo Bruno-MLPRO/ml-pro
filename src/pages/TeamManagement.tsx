@@ -98,12 +98,15 @@ export default function TeamManagement() {
 
       if (error) throw error;
 
-      const studentsData = journeys?.map((journey: any) => ({
-        id: journey.profiles.id,
-        full_name: journey.profiles.full_name,
-        email: journey.profiles.email,
-        journey_id: journey.id,
-      })) || [];
+      // Filter out students without valid profiles (deleted students)
+      const studentsData = journeys
+        ?.filter((journey: any) => journey.profiles !== null)
+        .map((journey: any) => ({
+          id: journey.profiles.id,
+          full_name: journey.profiles.full_name,
+          email: journey.profiles.email,
+          journey_id: journey.id,
+        })) || [];
 
       setStudents(studentsData);
     } catch (error) {

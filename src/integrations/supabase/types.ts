@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      apps_extensions: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          price: number | null
+          tag: string | null
+          updated_at: string | null
+          url: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          price?: number | null
+          tag?: string | null
+          updated_at?: string | null
+          url?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          price?: number | null
+          tag?: string | null
+          updated_at?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
       bonus: {
         Row: {
           cost: number
@@ -393,6 +426,35 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      student_apps: {
+        Row: {
+          app_id: string
+          created_at: string | null
+          id: string
+          student_id: string
+        }
+        Insert: {
+          app_id: string
+          created_at?: string | null
+          id?: string
+          student_id: string
+        }
+        Update: {
+          app_id?: string
+          created_at?: string | null
+          id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_apps_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: false
+            referencedRelation: "apps_extensions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       student_journeys: {
         Row: {

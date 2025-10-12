@@ -29,6 +29,11 @@ export default function Settings() {
   const [editingBonus, setEditingBonus] = useState<{ id: string; name: string; cost: number; description: string } | null>(null);
   const [bonusFormData, setBonusFormData] = useState({ name: "", cost: "", description: "" });
 
+  // Apps state
+  const [isCreateAppOpen, setIsCreateAppOpen] = useState(false);
+  const [editingApp, setEditingApp] = useState<{ id: string; name: string; url: string; description: string; price: number; tag: string } | null>(null);
+  const [appFormData, setAppFormData] = useState({ name: "", url: "", description: "", price: "", tag: "" });
+
   // Fetch plans with bonus
   const { data: plans = [], isLoading: isLoadingPlans } = useQuery({
     queryKey: ["plans"],
@@ -56,6 +61,21 @@ export default function Settings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bonus")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: userRole === "manager",
+  });
+
+  // Fetch apps/extensions
+  const { data: appsList = [], isLoading: isLoadingApps } = useQuery({
+    queryKey: ["apps_extensions"],
+    queryFn: async () => {
+      const { data, error} = await supabase
+        .from("apps_extensions")
         .select("*")
         .order("created_at", { ascending: false });
       
@@ -231,6 +251,70 @@ export default function Settings() {
     },
   });
 
+  // Create app
+  const createAppMutation = useMutation({
+    mutationFn: async (appData: { name: string; url: string; description: string; price: number; tag: string }) => {
+      const { error } = await supabase.from("apps_extensions").insert([appData]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apps_extensions"] });
+      toast({ title: "Aplicativo criado com sucesso!" });
+      setIsCreateAppOpen(false);
+      setAppFormData({ name: "", url: "", description: "", price: "", tag: "" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Erro ao criar aplicativo", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Update app
+  const updateAppMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { name: string; url: string; description: string; price: number; tag: string } }) => {
+      const { error } = await supabase
+        .from("apps_extensions")
+        .update(data)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apps_extensions"] });
+      toast({ title: "Aplicativo atualizado com sucesso!" });
+      setEditingApp(null);
+      setAppFormData({ name: "", url: "", description: "", price: "", tag: "" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Erro ao atualizar aplicativo", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Delete app
+  const deleteAppMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("apps_extensions").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apps_extensions"] });
+      toast({ title: "Aplicativo excluído com sucesso!" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Erro ao excluir aplicativo", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
   const handlePlanSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const price = parseFloat(planFormData.price);
@@ -277,6 +361,41 @@ export default function Settings() {
     }
   };
 
+  const handleAppSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const price = parseFloat(appFormData.price);
+    
+    if (!appFormData.name) {
+      toast({ 
+        title: "Erro de validação", 
+        description: "Preencha o nome do aplicativo",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (editingApp) {
+      updateAppMutation.mutate({ 
+        id: editingApp.id, 
+        data: { 
+          name: appFormData.name, 
+          url: appFormData.url, 
+          description: appFormData.description, 
+          price: isNaN(price) ? 0 : price, 
+          tag: appFormData.tag 
+        } 
+      });
+    } else {
+      createAppMutation.mutate({ 
+        name: appFormData.name, 
+        url: appFormData.url, 
+        description: appFormData.description, 
+        price: isNaN(price) ? 0 : price, 
+        tag: appFormData.tag 
+      });
+    }
+  };
+
   const openEditPlanDialog = (plan: any) => {
     setEditingPlan(plan);
     const bonusIds = plan.plan_bonus?.map((pb: any) => pb.bonus_id) || [];
@@ -296,6 +415,17 @@ export default function Settings() {
     });
   };
 
+  const openEditAppDialog = (app: any) => {
+    setEditingApp(app);
+    setAppFormData({ 
+      name: app.name, 
+      url: app.url || "",
+      description: app.description || "",
+      price: app.price?.toString() || "",
+      tag: app.tag || ""
+    });
+  };
+
   const closePlanDialog = () => {
     setEditingPlan(null);
     setIsCreatePlanOpen(false);
@@ -306,6 +436,12 @@ export default function Settings() {
     setEditingBonus(null);
     setIsCreateBonusOpen(false);
     setBonusFormData({ name: "", cost: "", description: "" });
+  };
+
+  const closeAppDialog = () => {
+    setEditingApp(null);
+    setIsCreateAppOpen(false);
+    setAppFormData({ name: "", url: "", description: "", price: "", tag: "" });
   };
 
   if (userRole !== "manager") {
@@ -327,6 +463,7 @@ export default function Settings() {
             <TabsList>
               <TabsTrigger value="plans">Planos</TabsTrigger>
               <TabsTrigger value="bonus">Bônus</TabsTrigger>
+              <TabsTrigger value="apps">Aplicativos e Extensões</TabsTrigger>
             </TabsList>
 
             <TabsContent value="plans" className="space-y-4">
@@ -712,6 +849,231 @@ export default function Settings() {
                               onClick={() => {
                                 if (confirm("Tem certeza que deseja excluir este bônus?")) {
                                   deleteBonusMutation.mutate(bonus.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="apps" className="space-y-4">
+              <div className="flex justify-end">
+                <Dialog open={isCreateAppOpen} onOpenChange={setIsCreateAppOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Criar Aplicativo/Extensão
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <form onSubmit={handleAppSubmit}>
+                      <DialogHeader>
+                        <DialogTitle>Criar Aplicativo/Extensão</DialogTitle>
+                        <DialogDescription>
+                          Preencha as informações do aplicativo ou extensão
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="app-name">Nome</Label>
+                          <Input
+                            id="app-name"
+                            placeholder="Ex: Tiny ERP"
+                            value={appFormData.name}
+                            onChange={(e) => setAppFormData({ ...appFormData, name: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="app-url">URL</Label>
+                          <Input
+                            id="app-url"
+                            type="url"
+                            placeholder="https://exemplo.com"
+                            value={appFormData.url}
+                            onChange={(e) => setAppFormData({ ...appFormData, url: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="app-description">Descrição</Label>
+                          <Textarea
+                            id="app-description"
+                            placeholder="Descreva o aplicativo..."
+                            value={appFormData.description}
+                            onChange={(e) => setAppFormData({ ...appFormData, description: e.target.value })}
+                            rows={3}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="app-price">Preço (Mensalidade básica R$)</Label>
+                          <Input
+                            id="app-price"
+                            type="number"
+                            step="0.01"
+                            placeholder="Ex: 99.90"
+                            value={appFormData.price}
+                            onChange={(e) => setAppFormData({ ...appFormData, price: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="app-tag">TAG</Label>
+                          <Input
+                            id="app-tag"
+                            placeholder="Ex: ERP, Logística, Análise"
+                            value={appFormData.tag}
+                            onChange={(e) => setAppFormData({ ...appFormData, tag: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button type="button" variant="outline" onClick={closeAppDialog}>
+                          Cancelar
+                        </Button>
+                        <Button type="submit">Criar</Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Aplicativos e Extensões Cadastrados</CardTitle>
+                  <CardDescription>
+                    Lista de todos os aplicativos e extensões disponíveis
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingApps ? (
+                    <p className="text-center text-foreground-secondary py-8">Carregando...</p>
+                  ) : appsList.length === 0 ? (
+                    <p className="text-center text-foreground-secondary py-8">
+                      Nenhum aplicativo cadastrado ainda
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {appsList.map((app) => (
+                        <div
+                          key={app.id}
+                          className="flex items-start justify-between p-4 border border-border rounded-lg hover:bg-background-elevated transition-colors"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-foreground">{app.name}</h3>
+                              {app.tag && (
+                                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                                  {app.tag}
+                                </span>
+                              )}
+                            </div>
+                            {app.url && (
+                              <a 
+                                href={app.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-sm text-primary hover:underline mt-1 inline-block"
+                              >
+                                {app.url}
+                              </a>
+                            )}
+                            {app.description && (
+                              <p className="text-sm text-foreground-secondary mt-1">
+                                {app.description}
+                              </p>
+                            )}
+                            {app.price && (
+                              <p className="text-sm font-medium text-foreground mt-2">
+                                R$ {Number(app.price).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <Dialog open={editingApp?.id === app.id} onOpenChange={(open) => !open && closeAppDialog()}>
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditAppDialog(app)}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-2xl">
+                                <form onSubmit={handleAppSubmit}>
+                                  <DialogHeader>
+                                    <DialogTitle>Editar Aplicativo/Extensão</DialogTitle>
+                                    <DialogDescription>
+                                      Atualize as informações do aplicativo
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="space-y-4 py-4">
+                                    <div className="space-y-2">
+                                      <Label htmlFor="edit-app-name">Nome</Label>
+                                      <Input
+                                        id="edit-app-name"
+                                        value={appFormData.name}
+                                        onChange={(e) => setAppFormData({ ...appFormData, name: e.target.value })}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor="edit-app-url">URL</Label>
+                                      <Input
+                                        id="edit-app-url"
+                                        type="url"
+                                        value={appFormData.url}
+                                        onChange={(e) => setAppFormData({ ...appFormData, url: e.target.value })}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor="edit-app-description">Descrição</Label>
+                                      <Textarea
+                                        id="edit-app-description"
+                                        value={appFormData.description}
+                                        onChange={(e) => setAppFormData({ ...appFormData, description: e.target.value })}
+                                        rows={3}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor="edit-app-price">Preço (Mensalidade básica R$)</Label>
+                                      <Input
+                                        id="edit-app-price"
+                                        type="number"
+                                        step="0.01"
+                                        value={appFormData.price}
+                                        onChange={(e) => setAppFormData({ ...appFormData, price: e.target.value })}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor="edit-app-tag">TAG</Label>
+                                      <Input
+                                        id="edit-app-tag"
+                                        value={appFormData.tag}
+                                        onChange={(e) => setAppFormData({ ...appFormData, tag: e.target.value })}
+                                      />
+                                    </div>
+                                  </div>
+                                  <DialogFooter>
+                                    <Button type="button" variant="outline" onClick={closeAppDialog}>
+                                      Cancelar
+                                    </Button>
+                                    <Button type="submit">Salvar</Button>
+                                  </DialogFooter>
+                                </form>
+                              </DialogContent>
+                            </Dialog>
+                            
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                if (confirm("Tem certeza que deseja excluir este aplicativo?")) {
+                                  deleteAppMutation.mutate(app.id);
                                 }
                               }}
                             >

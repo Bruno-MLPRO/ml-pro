@@ -78,11 +78,11 @@ const StudentDashboard = () => {
     
     if (hasListItems) {
       return (
-        <ul className="text-xs text-foreground-secondary space-y-1 mt-2">
+        <ul className="text-xs text-foreground-secondary space-y-1 mt-2 list-disc list-inside">
           {lines.map((line, index) => {
             if (line.startsWith('-')) {
               return (
-                <li key={index} className="ml-0">
+                <li key={index} className="ml-3">
                   {line.substring(1).trim()}
                 </li>
               );

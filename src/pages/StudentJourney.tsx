@@ -54,16 +54,20 @@ const StudentJourney = () => {
 
   const loadJourneys = async () => {
     try {
-      const { data: journeysData, error: journeysError } = await supabase
-        .from('student_journeys')
+      // Get all journey templates
+      const { data: templatesData, error: templatesError } = await supabase
+        .from('journey_templates')
         .select('*')
-        .eq('student_id', user!.id);
+        .order('is_default', { ascending: false });
 
-      if (journeysError) throw journeysError;
+      if (templatesError) throw templatesError;
       
-      setJourneys(journeysData || []);
-      if (journeysData && journeysData.length > 0) {
-        setSelectedJourneyId(journeysData[0].id);
+      setJourneys(templatesData || []);
+      
+      // Select the default journey or the first one
+      if (templatesData && templatesData.length > 0) {
+        const defaultJourney = templatesData.find(j => j.is_default);
+        setSelectedJourneyId(defaultJourney?.id || templatesData[0].id);
       }
     } catch (error) {
       console.error('Error loading journeys:', error);
@@ -72,25 +76,71 @@ const StudentJourney = () => {
     }
   };
 
-  const loadJourneyData = async (journeyId: string) => {
+  const loadJourneyData = async (journeyTemplateId: string) => {
     try {
-      const { data: journeyData, error: journeyError } = await supabase
+      // Get student's journey
+      const { data: studentJourneyData, error: journeyError } = await supabase
         .from('student_journeys')
         .select('*')
-        .eq('id', journeyId)
-        .single();
+        .eq('student_id', user!.id)
+        .maybeSingle();
 
       if (journeyError) throw journeyError;
-      setJourney(journeyData);
+      
+      // Set journey data with defaults if no journey exists
+      setJourney({
+        overall_progress: studentJourneyData?.overall_progress || 0,
+        current_phase: studentJourneyData?.current_phase || 'Onboarding'
+      });
 
-      const { data: milestonesData, error: milestonesError } = await supabase
-        .from('milestones')
+      // Get milestone templates from the selected journey template
+      const { data: milestoneTemplatesData, error: templatesError } = await supabase
+        .from('milestone_templates')
         .select('*')
-        .eq('journey_id', journeyId)
+        .eq('journey_template_id', journeyTemplateId)
         .order('order_index');
 
-      if (milestonesError) throw milestonesError;
-      setMilestones(milestonesData || []);
+      if (templatesError) throw templatesError;
+
+      // If student has a journey, get their milestone progress
+      if (studentJourneyData) {
+        const { data: studentMilestonesData, error: milestonesError } = await supabase
+          .from('milestones')
+          .select('*')
+          .eq('journey_id', studentJourneyData.id)
+          .order('order_index');
+
+        if (milestonesError) throw milestonesError;
+
+        // Merge template data with student progress
+        const mergedMilestones = (milestoneTemplatesData || []).map((template: any) => {
+          const studentMilestone = studentMilestonesData?.find(
+            (sm: any) => sm.template_id === template.id
+          );
+          return {
+            id: studentMilestone?.id || template.id,
+            title: template.title,
+            description: template.description,
+            phase: template.phase,
+            status: studentMilestone?.status || 'not_started',
+            progress: studentMilestone?.progress || 0,
+            order_index: template.order_index,
+          };
+        });
+        setMilestones(mergedMilestones);
+      } else {
+        // No student journey yet, just show templates with default status
+        const defaultMilestones = (milestoneTemplatesData || []).map((template: any) => ({
+          id: template.id,
+          title: template.title,
+          description: template.description,
+          phase: template.phase,
+          status: 'not_started' as const,
+          progress: 0,
+          order_index: template.order_index,
+        }));
+        setMilestones(defaultMilestones);
+      }
     } catch (error) {
       console.error('Error loading journey:', error);
     }
@@ -111,13 +161,79 @@ const StudentJourney = () => {
 
   const updateMilestoneStatus = async (milestoneId: string, newStatus: 'not_started' | 'in_progress' | 'completed' | 'blocked') => {
     try {
+      // First, check if student has a journey
+      const { data: studentJourneyData, error: journeyCheckError } = await supabase
+        .from('student_journeys')
+        .select('id')
+        .eq('student_id', user!.id)
+        .maybeSingle();
+
+      if (journeyCheckError) throw journeyCheckError;
+
+      let journeyId = studentJourneyData?.id;
+
+      // If no journey exists, create one
+      if (!journeyId) {
+        const { data: newJourney, error: createJourneyError } = await supabase
+          .from('student_journeys')
+          .insert([{
+            student_id: user!.id,
+            current_phase: 'Onboarding',
+            overall_progress: 0
+          }])
+          .select()
+          .single();
+
+        if (createJourneyError) throw createJourneyError;
+        journeyId = newJourney.id;
+
+        // Create all milestones from the selected template
+        const { data: milestoneTemplatesData, error: templatesError } = await supabase
+          .from('milestone_templates')
+          .select('*')
+          .eq('journey_template_id', selectedJourneyId)
+          .order('order_index');
+
+        if (templatesError) throw templatesError;
+
+        const milestonesToCreate = (milestoneTemplatesData || []).map((template: any) => ({
+          journey_id: journeyId,
+          template_id: template.id,
+          title: template.title,
+          description: template.description,
+          phase: template.phase,
+          order_index: template.order_index,
+          status: 'not_started' as const,
+          progress: 0
+        }));
+
+        const { error: createMilestonesError } = await supabase
+          .from('milestones')
+          .insert(milestonesToCreate);
+
+        if (createMilestonesError) throw createMilestonesError;
+      }
+
+      // Now get the actual milestone ID (it might be a template ID if we just created the journey)
+      const { data: actualMilestone, error: milestoneError } = await supabase
+        .from('milestones')
+        .select('id')
+        .eq('journey_id', journeyId)
+        .eq('template_id', milestoneId)
+        .maybeSingle();
+
+      if (milestoneError) throw milestoneError;
+
+      const actualMilestoneId = actualMilestone?.id || milestoneId;
+
+      // Update the milestone status
       const { error } = await supabase
         .from('milestones')
         .update({ 
           status: newStatus,
           progress: newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0
         })
-        .eq('id', milestoneId);
+        .eq('id', actualMilestoneId);
 
       if (error) throw error;
 
@@ -200,7 +316,7 @@ const StudentJourney = () => {
               <SelectContent>
                 {journeys.map((j) => (
                   <SelectItem key={j.id} value={j.id}>
-                    Jornada - {j.current_phase || 'Em andamento'}
+                    Jornada - {j.name}
                   </SelectItem>
                 ))}
               </SelectContent>

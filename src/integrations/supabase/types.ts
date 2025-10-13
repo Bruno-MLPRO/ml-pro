@@ -297,6 +297,8 @@ export type Database = {
           period_end: string | null
           period_start: string | null
           positive_ratings_rate: number | null
+          protection_end_date: string | null
+          real_reputation_level: string | null
           reputation_color: string | null
           reputation_level: string | null
           reputation_score: number | null
@@ -330,6 +332,8 @@ export type Database = {
           period_end?: string | null
           period_start?: string | null
           positive_ratings_rate?: number | null
+          protection_end_date?: string | null
+          real_reputation_level?: string | null
           reputation_color?: string | null
           reputation_level?: string | null
           reputation_score?: number | null
@@ -363,6 +367,8 @@ export type Database = {
           period_end?: string | null
           period_start?: string | null
           positive_ratings_rate?: number | null
+          protection_end_date?: string | null
+          real_reputation_level?: string | null
           reputation_color?: string | null
           reputation_level?: string | null
           reputation_score?: number | null

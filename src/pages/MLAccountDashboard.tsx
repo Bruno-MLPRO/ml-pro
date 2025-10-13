@@ -34,6 +34,8 @@ interface MLMetrics {
   reputation_transactions_total: number;
   positive_ratings_rate: number;
   has_decola: boolean;
+  real_reputation_level: string | null;
+  protection_end_date: string | null;
   has_full: boolean;
   is_mercado_lider: boolean;
   mercado_lider_level: string | null;
@@ -395,6 +397,28 @@ export default function MLAccountDashboard() {
                       </Badge>
                     )}
                   </div>
+
+                  {/* Reputação Real (quando Decola está ativo) */}
+                  {metrics.has_decola && metrics.real_reputation_level && (
+                    <Card className="bg-muted/50">
+                      <CardContent className="pt-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5" />
+                          <div>
+                            <h4 className="font-medium text-sm mb-1">Programa Decola Ativo</h4>
+                            <p className="text-sm text-muted-foreground">
+                              Sua reputação está sendo protegida. Reputação real: <span className="font-semibold capitalize">{metrics.real_reputation_level}</span>
+                            </p>
+                            {metrics.protection_end_date && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Proteção válida até: {new Date(metrics.protection_end_date).toLocaleDateString('pt-BR')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* Reputação */}
                   <div>

@@ -411,7 +411,11 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
       cancellations_rate: metrics.cancellations?.rate || 0,
       cancellations_value: metrics.cancellations?.value || 0,
       
+      // Programa Decola
       has_decola: hasDecola,
+      real_reputation_level: sellerReputation.real_level || null,
+      protection_end_date: sellerReputation.protection_end_date || null,
+      
       has_full: hasFull,
       is_mercado_lider: isMercadoLider,
       mercado_lider_level: mercadoLiderLevel,

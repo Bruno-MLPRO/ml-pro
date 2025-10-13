@@ -641,6 +641,11 @@ const StudentDashboard = () => {
                           <p className="text-xs text-foreground-secondary">
                             Conectada em {format(new Date(account.connected_at), "dd/MM/yyyy")}
                           </p>
+                          <p className="text-xs text-foreground-secondary">
+                            Sincronizada em {account.last_sync_at 
+                              ? format(new Date(account.last_sync_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+                              : 'Nunca sincronizada'}
+                          </p>
                         </div>
                         {account.is_primary && (
                           <Badge variant="default">Principal</Badge>

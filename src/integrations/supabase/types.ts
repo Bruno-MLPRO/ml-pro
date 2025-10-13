@@ -158,6 +158,369 @@ export type Database = {
         }
         Relationships: []
       }
+      mercado_livre_accounts: {
+        Row: {
+          access_token: string
+          connected_at: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          is_primary: boolean | null
+          last_sync_at: string | null
+          ml_nickname: string
+          ml_user_id: string
+          refresh_token: string
+          student_id: string
+          token_expires_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          access_token: string
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          last_sync_at?: string | null
+          ml_nickname: string
+          ml_user_id: string
+          refresh_token: string
+          student_id: string
+          token_expires_at: string
+          updated_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          last_sync_at?: string | null
+          ml_nickname?: string
+          ml_user_id?: string
+          refresh_token?: string
+          student_id?: string
+          token_expires_at?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_accounts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mercado_livre_metrics: {
+        Row: {
+          active_listings: number | null
+          average_ticket: number | null
+          created_at: string | null
+          has_decola: boolean | null
+          has_full: boolean | null
+          id: string
+          is_mercado_lider: boolean | null
+          last_updated: string | null
+          mercado_lider_level: string | null
+          ml_account_id: string
+          paused_listings: number | null
+          period_end: string | null
+          period_start: string | null
+          reputation_level: string | null
+          reputation_score: number | null
+          reputation_transactions_total: number | null
+          student_id: string
+          total_listings: number | null
+          total_revenue: number | null
+          total_sales: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          active_listings?: number | null
+          average_ticket?: number | null
+          created_at?: string | null
+          has_decola?: boolean | null
+          has_full?: boolean | null
+          id?: string
+          is_mercado_lider?: boolean | null
+          last_updated?: string | null
+          mercado_lider_level?: string | null
+          ml_account_id: string
+          paused_listings?: number | null
+          period_end?: string | null
+          period_start?: string | null
+          reputation_level?: string | null
+          reputation_score?: number | null
+          reputation_transactions_total?: number | null
+          student_id: string
+          total_listings?: number | null
+          total_revenue?: number | null
+          total_sales?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          active_listings?: number | null
+          average_ticket?: number | null
+          created_at?: string | null
+          has_decola?: boolean | null
+          has_full?: boolean | null
+          id?: string
+          is_mercado_lider?: boolean | null
+          last_updated?: string | null
+          mercado_lider_level?: string | null
+          ml_account_id?: string
+          paused_listings?: number | null
+          period_end?: string | null
+          period_start?: string | null
+          reputation_level?: string | null
+          reputation_score?: number | null
+          reputation_transactions_total?: number | null
+          student_id?: string
+          total_listings?: number | null
+          total_revenue?: number | null
+          total_sales?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_metrics_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: true
+            referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_metrics_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mercado_livre_orders: {
+        Row: {
+          buyer_nickname: string | null
+          created_at: string | null
+          date_closed: string | null
+          date_created: string | null
+          id: string
+          ml_account_id: string
+          ml_order_id: string
+          paid_amount: number | null
+          shipping_mode: string | null
+          status: string | null
+          student_id: string
+          total_amount: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          buyer_nickname?: string | null
+          created_at?: string | null
+          date_closed?: string | null
+          date_created?: string | null
+          id?: string
+          ml_account_id: string
+          ml_order_id: string
+          paid_amount?: number | null
+          shipping_mode?: string | null
+          status?: string | null
+          student_id: string
+          total_amount?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          buyer_nickname?: string | null
+          created_at?: string | null
+          date_closed?: string | null
+          date_created?: string | null
+          id?: string
+          ml_account_id?: string
+          ml_order_id?: string
+          paid_amount?: number | null
+          shipping_mode?: string | null
+          status?: string | null
+          student_id?: string
+          total_amount?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_orders_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_orders_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mercado_livre_products: {
+        Row: {
+          available_quantity: number | null
+          created_at: string | null
+          id: string
+          listing_type: string | null
+          ml_account_id: string
+          ml_item_id: string
+          permalink: string | null
+          price: number | null
+          shipping_mode: string | null
+          sold_quantity: number | null
+          status: string | null
+          student_id: string
+          synced_at: string | null
+          thumbnail: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          available_quantity?: number | null
+          created_at?: string | null
+          id?: string
+          listing_type?: string | null
+          ml_account_id: string
+          ml_item_id: string
+          permalink?: string | null
+          price?: number | null
+          shipping_mode?: string | null
+          sold_quantity?: number | null
+          status?: string | null
+          student_id: string
+          synced_at?: string | null
+          thumbnail?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          available_quantity?: number | null
+          created_at?: string | null
+          id?: string
+          listing_type?: string | null
+          ml_account_id?: string
+          ml_item_id?: string
+          permalink?: string | null
+          price?: number | null
+          shipping_mode?: string | null
+          sold_quantity?: number | null
+          status?: string | null
+          student_id?: string
+          synced_at?: string | null
+          thumbnail?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_products_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_products_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mercado_livre_webhook_logs: {
+        Row: {
+          application_id: string | null
+          created_at: string | null
+          error: string | null
+          id: string
+          payload: Json | null
+          processed: boolean | null
+          processed_at: string | null
+          resource: string | null
+          topic: string | null
+          user_id: string | null
+          webhook_id: string | null
+        }
+        Insert: {
+          application_id?: string | null
+          created_at?: string | null
+          error?: string | null
+          id?: string
+          payload?: Json | null
+          processed?: boolean | null
+          processed_at?: string | null
+          resource?: string | null
+          topic?: string | null
+          user_id?: string | null
+          webhook_id?: string | null
+        }
+        Update: {
+          application_id?: string | null
+          created_at?: string | null
+          error?: string | null
+          id?: string
+          payload?: Json | null
+          processed?: boolean | null
+          processed_at?: string | null
+          resource?: string | null
+          topic?: string | null
+          user_id?: string | null
+          webhook_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_webhook_logs_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mercado_livre_webhooks: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          ml_account_id: string
+          topic: string
+          webhook_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          ml_account_id: string
+          topic: string
+          webhook_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          ml_account_id?: string
+          topic?: string
+          webhook_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_webhooks_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       milestone_templates: {
         Row: {
           created_at: string | null

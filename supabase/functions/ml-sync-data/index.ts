@@ -340,13 +340,13 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
 
   const hasFull = fullStockItems && fullStockItems.length > 0;
 
-  // Verificar Decola: Produtos ativos com logistic_type específico
+  // Verificar Decola: Produtos ativos com listing_type gold_pro (Decola exclusivo)
   const { data: decolaProducts } = await supabase
     .from('mercado_livre_products')
     .select('id')
     .eq('ml_account_id', account.id)
     .eq('status', 'active')
-    .in('logistic_type', ['drop_off', 'xd_drop_off']);
+    .eq('listing_type', 'gold_pro');
 
   const hasDecola = decolaProducts && decolaProducts.length > 0;
 

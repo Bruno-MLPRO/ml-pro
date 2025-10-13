@@ -65,9 +65,6 @@ export function ReputationBadge({ color, levelId, positiveRate, totalTransaction
           <span className={`font-semibold ${config.text}`}>{config.label}</span>
           <Badge variant="outline" className={config.text}>{config.description}</Badge>
         </div>
-        <p className="text-sm text-muted-foreground mt-1">
-          {(positiveRate * 100).toFixed(1)}% positivo • {totalTransactions} avaliações
-        </p>
       </div>
     </div>
   );

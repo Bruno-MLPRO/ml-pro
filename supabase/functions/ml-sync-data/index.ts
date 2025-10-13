@@ -340,15 +340,31 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
 
   const hasFull = fullStockItems && fullStockItems.length > 0;
 
-  // Verificar Decola: Produtos ativos com listing_type gold_pro (Decola exclusivo)
-  const { data: decolaProducts } = await supabase
-    .from('mercado_livre_products')
-    .select('id')
-    .eq('ml_account_id', account.id)
-    .eq('status', 'active')
-    .eq('listing_type', 'gold_pro');
+  // Verificar Decola usando os campos corretos da API
+  // Decola é um programa de proteção para vendedores novos onde:
+  // - level_id mostra a reputação "protegida" (ex: "5_green")
+  // - real_level mostra a reputação real (ex: "red")
+  // - protection_end_date indica até quando a proteção é válida
+  const sellerReputation = userInfo.seller_reputation || {};
+  const hasRealLevel = sellerReputation.real_level !== undefined && sellerReputation.real_level !== null;
+  const hasProtectionEndDate = sellerReputation.protection_end_date !== undefined && sellerReputation.protection_end_date !== null;
 
-  const hasDecola = decolaProducts && decolaProducts.length > 0;
+  // Decola está ativo se existe real_level, protection_end_date e a proteção ainda não expirou
+  let hasDecola = false;
+  if (hasRealLevel && hasProtectionEndDate) {
+    const protectionEndDate = new Date(sellerReputation.protection_end_date);
+    const now = new Date();
+    hasDecola = protectionEndDate > now; // Proteção ainda ativa
+  }
+
+  console.log('Decola detection:', {
+    hasRealLevel,
+    hasProtectionEndDate,
+    protectionEndDate: sellerReputation.protection_end_date,
+    hasDecola,
+    levelId: sellerReputation.level_id,
+    realLevel: sellerReputation.real_level
+  });
 
   const isMercadoLider = userInfo.seller_reputation?.power_seller_status === 'gold' ||
                          userInfo.seller_reputation?.power_seller_status === 'platinum'

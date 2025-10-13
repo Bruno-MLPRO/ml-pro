@@ -209,6 +209,24 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
   const activeListings = products.filter(p => p.status === 'active').length
   const pausedListings = products.filter(p => p.status === 'paused').length
 
+  // Detectar FULL: produtos com shipping mode 'me2' (Fulfillment)
+  const hasFull = products.some(p => p.shipping?.mode === 'me2')
+  
+  // Detectar Decola: programa para sellers com menos de 10 vendas
+  // Indicado por tags específicas ou reputação verde-claro com poucas vendas
+  const hasDecola = userInfo.tags?.includes('decola') || 
+                    (totalSales < 10 && userInfo.seller_reputation?.level_id === 'green')
+  
+  // Detectar Mercado Lider
+  const isMercadoLider = userInfo.tags?.includes('mercado_lider') || 
+                         userInfo.tags?.includes('mercadolider') ||
+                         userInfo.seller_reputation?.power_seller_status === 'platinum'
+  
+  let mercadoLiderLevel = null
+  if (isMercadoLider) {
+    mercadoLiderLevel = userInfo.seller_reputation?.power_seller_status || 'Bronze'
+  }
+
   await supabase
     .from('mercado_livre_metrics')
     .upsert({
@@ -223,10 +241,10 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
       reputation_level: userInfo.seller_reputation?.level_id || null,
       reputation_score: userInfo.seller_reputation?.transactions?.ratings?.positive || 0,
       reputation_transactions_total: userInfo.seller_reputation?.transactions?.total || 0,
-      has_decola: false, // TODO: Detectar Decola
-      has_full: false, // TODO: Detectar FULL
-      is_mercado_lider: userInfo.seller_reputation?.power_seller_status === 'platinum',
-      mercado_lider_level: userInfo.seller_reputation?.power_seller_status || null,
+      has_decola: hasDecola,
+      has_full: hasFull,
+      is_mercado_lider: isMercadoLider,
+      mercado_lider_level: mercadoLiderLevel,
       period_start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       period_end: new Date().toISOString().split('T')[0],
       last_updated: new Date().toISOString()
@@ -234,7 +252,7 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
       onConflict: 'ml_account_id'
     })
 
-  console.log('Metrics updated')
+  console.log('Metrics updated:', { hasFull, hasDecola, isMercadoLider })
 }
 
 async function validateMilestones(studentId: string, supabase: any) {

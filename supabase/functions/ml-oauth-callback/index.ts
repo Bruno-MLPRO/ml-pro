@@ -211,6 +211,30 @@ async function initialSync(accountId: string, mlUserId: string, accessToken: str
         })
       
       console.log('Initial metrics created')
+      
+      // Chamar ml-sync-data para buscar produtos e pedidos reais
+      console.log('Triggering full data sync...')
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      
+      const syncResponse = await fetch(
+        `${supabaseUrl}/functions/v1/ml-sync-data`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({ ml_account_id: accountId }),
+        }
+      )
+
+      if (!syncResponse.ok) {
+        const errorText = await syncResponse.text()
+        console.error('Failed to trigger sync:', errorText)
+      } else {
+        console.log('Full sync triggered successfully')
+      }
     }
   } catch (error) {
     console.error('Error in initial sync:', error)

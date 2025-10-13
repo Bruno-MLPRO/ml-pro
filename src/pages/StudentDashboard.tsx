@@ -9,6 +9,7 @@ import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSig
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useToast } from '@/hooks/use-toast';
 
 interface Notice {
   id: string;
@@ -66,6 +67,7 @@ const StudentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [connectingML, setConnectingML] = useState(false);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!authLoading && (!user || userRole !== 'student')) {
@@ -220,6 +222,35 @@ const StudentDashboard = () => {
     }
   }
 
+  const handleSyncAccount = async (accountId: string) => {
+    try {
+      toast({
+        title: "Sincronizando...",
+        description: "Buscando dados do Mercado Livre. Isso pode levar alguns segundos.",
+      })
+
+      const { error } = await supabase.functions.invoke('ml-sync-data', {
+        body: { ml_account_id: accountId }
+      })
+
+      if (error) throw error
+
+      toast({
+        title: "Sincronização concluída",
+        description: "Os dados foram atualizados com sucesso.",
+      })
+
+      loadMLAccounts()
+    } catch (error) {
+      console.error('Error syncing account:', error)
+      toast({
+        title: "Erro ao sincronizar",
+        description: "Não foi possível sincronizar os dados. Tente novamente.",
+        variant: "destructive",
+      })
+    }
+  }
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -333,13 +364,22 @@ const StudentDashboard = () => {
                           <Badge variant="default">Principal</Badge>
                         )}
                       </div>
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => handleDisconnect(account.id)}
-                      >
-                        <Unplug className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleSyncAccount(account.id)}
+                        >
+                          Sincronizar
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleDisconnect(account.id)}
+                        >
+                          <Unplug className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>

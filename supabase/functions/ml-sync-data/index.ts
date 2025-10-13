@@ -108,14 +108,22 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
   console.log('Syncing products...')
   
   const products: any[] = []
+  let offset = 0
+  let hasMore = true
+  const limit = 50
   
-  // Buscar produtos ativos
-  const activeResponse = await fetch(
-    `https://api.mercadolibre.com/users/${account.ml_user_id}/items/search?status=active&limit=50`,
-    { headers: { 'Authorization': `Bearer ${accessToken}` } }
-  )
+  // Paginar produtos ativos
+  while (hasMore) {
+    const activeResponse = await fetch(
+      `https://api.mercadolibre.com/users/${account.ml_user_id}/items/search?status=active&limit=${limit}&offset=${offset}`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    )
 
-  if (activeResponse.ok) {
+    if (!activeResponse.ok) {
+      console.error('Failed to fetch items')
+      break
+    }
+
     const activeData = await activeResponse.json()
     
     for (const itemId of activeData.results || []) {
@@ -154,9 +162,17 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
         }
       }
     }
+    
+    hasMore = activeData.paging && activeData.paging.total > (offset + limit)
+    offset += limit
+    
+    console.log(`Synced batch: ${activeData.results?.length || 0} products, total so far: ${products.length}`)
+    
+    // Proteção: máximo 500 produtos
+    if (offset >= 500) break
   }
 
-  console.log(`Synced ${products.length} products`)
+  console.log(`Synced ${products.length} total products`)
   return products
 }
 
@@ -166,45 +182,60 @@ async function syncOrders(account: any, accessToken: string, supabase: any) {
   const orders: any[] = []
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   
-  const response = await fetch(
-    `https://api.mercadolibre.com/orders/search?seller=${account.ml_user_id}&order.date_created.from=${thirtyDaysAgo}&limit=50`,
-    { headers: { 'Authorization': `Bearer ${accessToken}` } }
-  )
-
-  if (!response.ok) {
-    console.error('Failed to fetch orders')
-    return orders
-  }
-
-  const data = await response.json()
+  let offset = 0
+  let hasMore = true
+  const limit = 50
   
-  for (const order of data.results || []) {
-    // Salvar pedido
-    const { error } = await supabase
-      .from('mercado_livre_orders')
-      .upsert({
-        ml_account_id: account.id,
-        student_id: account.student_id,
-        ml_order_id: order.id.toString(),
-        status: order.status,
-        date_created: order.date_created,
-        date_closed: order.date_closed,
-        total_amount: order.total_amount,
-        paid_amount: order.paid_amount,
-        buyer_nickname: order.buyer?.nickname,
-        shipping_mode: order.shipping?.shipping_mode
-      }, {
-        onConflict: 'ml_account_id,ml_order_id'
-      })
-    
-    if (error) {
-      console.error(`Error syncing order ${order.id}:`, error)
-    } else {
-      orders.push(order)
+  // Paginar pedidos
+  while (hasMore) {
+    const response = await fetch(
+      `https://api.mercadolibre.com/orders/search?seller=${account.ml_user_id}&order.date_created.from=${thirtyDaysAgo}&limit=${limit}&offset=${offset}`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    )
+
+    if (!response.ok) {
+      console.error('Failed to fetch orders')
+      break
     }
+
+    const data = await response.json()
+    
+    for (const order of data.results || []) {
+      // Salvar pedido
+      const { error } = await supabase
+        .from('mercado_livre_orders')
+        .upsert({
+          ml_account_id: account.id,
+          student_id: account.student_id,
+          ml_order_id: order.id.toString(),
+          status: order.status,
+          date_created: order.date_created,
+          date_closed: order.date_closed,
+          total_amount: order.total_amount,
+          paid_amount: order.paid_amount,
+          buyer_nickname: order.buyer?.nickname,
+          shipping_mode: order.shipping?.shipping_mode
+        }, {
+          onConflict: 'ml_account_id,ml_order_id'
+        })
+      
+      if (error) {
+        console.error(`Error syncing order ${order.id}:`, error)
+      } else {
+        orders.push(order)
+      }
+    }
+    
+    hasMore = data.paging && data.paging.total > (offset + limit)
+    offset += limit
+    
+    console.log(`Synced batch: ${data.results?.length || 0} orders, total so far: ${orders.length}`)
+    
+    // Proteção: máximo 1000 pedidos
+    if (offset >= 1000) break
   }
 
-  console.log(`Synced ${orders.length} orders`)
+  console.log(`Synced ${orders.length} total orders`)
   return orders
 }
 
@@ -249,7 +280,9 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
       paused_listings: pausedListings,
       total_listings: products.length,
       reputation_level: userInfo.seller_reputation?.level_id || null,
-      reputation_score: userInfo.seller_reputation?.transactions?.ratings?.positive || 0,
+      reputation_score: userInfo.seller_reputation?.transactions?.ratings?.positive 
+        ? userInfo.seller_reputation.transactions.ratings.positive * 5 
+        : 0,
       reputation_transactions_total: userInfo.seller_reputation?.transactions?.total || 0,
       has_decola: hasDecola,
       has_full: hasFull,

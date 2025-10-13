@@ -64,6 +64,7 @@ const StudentDashboard = () => {
   const [importantLinks, setImportantLinks] = useState<ImportantLink[]>([]);
   const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
   const [consolidatedMetrics, setConsolidatedMetrics] = useState<MLMetrics | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<7 | 15 | 30>(30);
   const [loading, setLoading] = useState(true);
   const [connectingML, setConnectingML] = useState(false);
   const navigate = useNavigate();
@@ -116,6 +117,13 @@ const StudentDashboard = () => {
     }
   }, [user, userRole, authLoading, navigate]);
 
+  // Recarregar quando o período mudar
+  useEffect(() => {
+    if (user && userRole === 'student' && mlAccounts.length > 0) {
+      loadMLAccounts()
+    }
+  }, [selectedPeriod]);
+
   const loadDashboardData = async () => {
     try {
       const [noticesData, callSchedulesData, linksData] = await Promise.all([
@@ -136,52 +144,60 @@ const StudentDashboard = () => {
 
   const loadMLAccounts = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('ml-get-accounts')
+      if (!user) return
       
-      if (error) {
-        console.error('Error loading ML accounts:', error)
+      // Buscar contas
+      const { data: accountsData, error: accountsError } = await supabase.functions.invoke('ml-get-accounts')
+      
+      if (accountsError) {
+        console.error('Error loading ML accounts:', accountsError)
         return
       }
 
-      if (data?.accounts) {
-        setMlAccounts(data.accounts)
+      if (accountsData?.accounts) {
+        setMlAccounts(accountsData.accounts)
         
-        // Calcular métricas consolidadas
-        if (data.accounts.length > 0) {
-          const consolidated = data.accounts.reduce((acc: MLMetrics, account: MLAccount) => {
-            if (!account.metrics) return acc
-            
-            return {
-              total_sales: acc.total_sales + account.metrics.total_sales,
-              total_revenue: acc.total_revenue + account.metrics.total_revenue,
-              average_ticket: 0, // Será calculado depois
-              active_listings: acc.active_listings + account.metrics.active_listings,
-              reputation_level: account.metrics.reputation_level || acc.reputation_level,
-              reputation_score: Math.max(acc.reputation_score, account.metrics.reputation_score),
-              has_decola: acc.has_decola || account.metrics.has_decola,
-              has_full: acc.has_full || account.metrics.has_full,
-              is_mercado_lider: acc.is_mercado_lider || account.metrics.is_mercado_lider,
-              mercado_lider_level: account.metrics.mercado_lider_level || acc.mercado_lider_level
-            }
-          }, {
-            total_sales: 0,
-            total_revenue: 0,
-            average_ticket: 0,
-            active_listings: 0,
-            reputation_level: null,
-            reputation_score: 0,
-            has_decola: false,
-            has_full: false,
-            is_mercado_lider: false,
-            mercado_lider_level: null
-          })
-          
-          consolidated.average_ticket = consolidated.total_sales > 0 
-            ? consolidated.total_revenue / consolidated.total_sales 
-            : 0
-          
-          setConsolidatedMetrics(consolidated)
+        // Buscar TODOS os pedidos para calcular métricas dinâmicas
+        const { data: orders, error: ordersError } = await supabase
+          .from('mercado_livre_orders')
+          .select('*')
+          .eq('student_id', user.id)
+          .eq('status', 'paid')
+          .order('date_created', { ascending: false })
+        
+        if (ordersError) {
+          console.error('Error loading orders:', ordersError)
+          return
         }
+        
+        // Filtrar pedidos pelo período selecionado
+        const periodStart = new Date()
+        periodStart.setDate(periodStart.getDate() - selectedPeriod)
+        
+        const filteredOrders = orders?.filter(order => 
+          new Date(order.date_created) >= periodStart
+        ) || []
+        
+        // Calcular métricas do período
+        const totalSales = filteredOrders.length
+        const totalRevenue = filteredOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0)
+        const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0
+        
+        // Pegar outras métricas da primeira conta (não dependem de período)
+        const firstAccountMetrics = accountsData.accounts[0]?.metrics
+        
+        setConsolidatedMetrics({
+          total_sales: totalSales,
+          total_revenue: totalRevenue,
+          average_ticket: averageTicket,
+          active_listings: firstAccountMetrics?.active_listings || 0,
+          reputation_level: firstAccountMetrics?.reputation_level || null,
+          reputation_score: firstAccountMetrics?.reputation_score || 0,
+          has_decola: firstAccountMetrics?.has_decola || false,
+          has_full: firstAccountMetrics?.has_full || false,
+          is_mercado_lider: firstAccountMetrics?.is_mercado_lider || false,
+          mercado_lider_level: firstAccountMetrics?.mercado_lider_level || null
+        })
       }
     } catch (error) {
       console.error('Error loading ML accounts:', error)
@@ -498,7 +514,7 @@ const StudentDashboard = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-primary" />
-                  <CardTitle>Desempenho - Últimos 30 Dias</CardTitle>
+                  <CardTitle>Desempenho</CardTitle>
                 </div>
                 {mlAccounts.length > 1 && (
                   <Badge variant="outline">
@@ -514,6 +530,32 @@ const StudentDashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Filtros de Período */}
+              {mlAccounts.length > 0 && (
+                <div className="flex gap-2 mb-6">
+                  <Button
+                    size="sm"
+                    variant={selectedPeriod === 7 ? "default" : "outline"}
+                    onClick={() => setSelectedPeriod(7)}
+                  >
+                    Últimos 7 dias
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={selectedPeriod === 15 ? "default" : "outline"}
+                    onClick={() => setSelectedPeriod(15)}
+                  >
+                    Últimos 15 dias
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={selectedPeriod === 30 ? "default" : "outline"}
+                    onClick={() => setSelectedPeriod(30)}
+                  >
+                    Últimos 30 dias
+                  </Button>
+                </div>
+              )}
               {mlAccounts.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-foreground-secondary">

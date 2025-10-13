@@ -439,26 +439,21 @@ const StudentDashboard = () => {
                           <Badge variant="default">Principal</Badge>
                         )}
                       </div>
-                      <div>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleSyncAccount(account.id)}
-                          >
-                            Sincronizar
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => handleDisconnect(account.id)}
-                          >
-                            <Unplug className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Use o menu lateral (ícone 🛍️) para acessar o dashboard completo
-                        </p>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleSyncAccount(account.id)}
+                        >
+                          Sincronizar
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleDisconnect(account.id)}
+                        >
+                          <Unplug className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}

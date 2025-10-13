@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ReputationBadge } from "@/components/ReputationBadge";
-import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink } from "lucide-react";
+import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface MLAccount {
@@ -231,9 +231,67 @@ export default function MLAccountDashboard() {
     sum + item.available_units + item.reserved_units + item.inbound_units, 0
   );
 
+  const lowQualityProducts = products.filter(p => p.has_low_quality_photos);
+  const noDescriptionProducts = products.filter(p => !p.has_description);
+  const noTaxDataProducts = products.filter(p => !p.has_tax_data);
+
   const lowQualityPercentage = metrics && metrics.total_listings > 0
-    ? (products.length / metrics.total_listings) * 100
+    ? (lowQualityProducts.length / metrics.total_listings) * 100
     : 0;
+
+  const renderProductList = (
+    productsList: MLProduct[], 
+    emptyMessage: string,
+    infoMessage: (product: MLProduct) => string
+  ) => {
+    if (productsList.length === 0) {
+      return (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
+            <p className="text-lg font-medium">Parabéns!</p>
+            <p className="text-muted-foreground">{emptyMessage}</p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {productsList.map((product) => (
+          <Card key={product.id}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                {product.thumbnail && (
+                  <img 
+                    src={product.thumbnail} 
+                    alt={product.title}
+                    className="w-16 h-16 object-cover rounded"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium truncate">{product.title}</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {infoMessage(product)}
+                  </p>
+                </div>
+                {product.permalink && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(product.permalink!, '_blank')}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Ver Anúncio
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  };
 
   if (loading && mlAccounts.length === 0) {
     return (
@@ -482,65 +540,85 @@ export default function MLAccountDashboard() {
                           <div className="text-2xl font-bold text-red-600 dark:text-red-400">
                             {lowQualityPercentage.toFixed(1)}%
                           </div>
-                          <p className="text-sm text-muted-foreground">{products.length} de {metrics.total_listings}</p>
+                          <p className="text-sm text-muted-foreground">{lowQualityProducts.length} de {metrics.total_listings}</p>
                         </CardContent>
                       </Card>
                     </div>
                   )}
 
-                  {/* Lista de Produtos com Fotos de Baixa Qualidade */}
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5 text-orange-500" />
-                      Produtos com Fotos de Baixa Qualidade
-                    </h3>
-                    
-                    {products.length > 0 ? (
-                      <div className="space-y-3">
-                        {products.map((product) => (
-                          <Card key={product.id}>
-                            <CardContent className="p-4">
-                              <div className="flex items-center gap-4">
-                                {product.thumbnail && (
-                                  <img 
-                                    src={product.thumbnail} 
-                                    alt={product.title}
-                                    className="w-16 h-16 object-cover rounded"
-                                  />
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <h4 className="font-medium truncate">{product.title}</h4>
-                                  <p className="text-sm text-muted-foreground">
-                                    {product.photo_count} fotos • Menor dimensão: {product.min_photo_dimension || 'N/A'}px
-                                  </p>
-                                </div>
-                                {product.permalink && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => window.open(product.permalink!, '_blank')}
-                                  >
-                                    <ExternalLink className="w-4 h-4 mr-2" />
-                                    Ver Anúncio
-                                  </Button>
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
+                  {/* Subnavegação de Anúncios */}
+                  <Tabs value={adsFilter} onValueChange={(v) => setAdsFilter(v as any)} className="w-full">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="low_quality_photos" className="flex items-center gap-2">
+                        <Image className="w-4 h-4" />
+                        <span className="hidden sm:inline">Fotos &lt; 1200x1200</span>
+                        <span className="sm:hidden">Fotos</span>
+                        <Badge variant={lowQualityProducts.length > 0 ? "destructive" : "secondary"} className="ml-1">
+                          {lowQualityProducts.length}
+                        </Badge>
+                      </TabsTrigger>
+                      
+                      <TabsTrigger value="no_description" className="flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        <span className="hidden sm:inline">Sem Descrição</span>
+                        <span className="sm:hidden">Descrição</span>
+                        <Badge variant={noDescriptionProducts.length > 0 ? "destructive" : "secondary"} className="ml-1">
+                          {noDescriptionProducts.length}
+                        </Badge>
+                      </TabsTrigger>
+                      
+                      <TabsTrigger value="no_tax_data" className="flex items-center gap-2">
+                        <Receipt className="w-4 h-4" />
+                        <span className="hidden sm:inline">Sem Dados Fiscais</span>
+                        <span className="sm:hidden">Fiscais</span>
+                        <Badge variant={noTaxDataProducts.length > 0 ? "destructive" : "secondary"} className="ml-1">
+                          {noTaxDataProducts.length}
+                        </Badge>
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="low_quality_photos" className="mt-4">
+                      <div>
+                        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                          <AlertTriangle className="w-5 h-5 text-orange-500" />
+                          Produtos com Fotos de Baixa Qualidade
+                        </h3>
+                        {renderProductList(
+                          lowQualityProducts,
+                          "Todos os seus anúncios possuem fotos de alta qualidade (≥ 1200x1200px)",
+                          (product) => `${product.photo_count} fotos • Menor dimensão: ${product.min_photo_dimension || 'N/A'}px`
+                        )}
                       </div>
-                    ) : (
-                      <Card>
-                        <CardContent className="p-8 text-center">
-                          <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                          <p className="text-lg font-medium">Parabéns!</p>
-                          <p className="text-muted-foreground">
-                            Todos os seus anúncios possuem fotos de alta qualidade (≥ 1200x1200px)
-                          </p>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
+                    </TabsContent>
+
+                    <TabsContent value="no_description" className="mt-4">
+                      <div>
+                        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                          <FileText className="w-5 h-5 text-orange-500" />
+                          Produtos sem Descrição
+                        </h3>
+                        {renderProductList(
+                          noDescriptionProducts,
+                          "Todos os seus anúncios possuem descrição completa",
+                          () => "Descrição não preenchida ou muito curta (< 50 caracteres)"
+                        )}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="no_tax_data" className="mt-4">
+                      <div>
+                        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                          <Receipt className="w-5 h-5 text-orange-500" />
+                          Produtos sem Dados Fiscais
+                        </h3>
+                        {renderProductList(
+                          noTaxDataProducts,
+                          "Todos os seus anúncios possuem dados fiscais completos (NCM + Origem)",
+                          () => "Faltam dados fiscais: NCM ou Origem não cadastrados"
+                        )}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </>
               )}
             </TabsContent>
@@ -606,34 +684,59 @@ export default function MLAccountDashboard() {
                       {fullStock.map((item) => (
                         <Card key={item.id}>
                           <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="font-medium">Item: {item.ml_item_id}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  Inventário: {item.inventory_id}
+                            <div className="flex items-start gap-4">
+                              {/* Foto do Produto */}
+                              {item.mercado_livre_products?.thumbnail && (
+                                <img 
+                                  src={item.mercado_livre_products.thumbnail} 
+                                  alt={item.mercado_livre_products.title || 'Produto'}
+                                  className="w-20 h-20 object-cover rounded"
+                                />
+                              )}
+                              
+                              {/* Informações do Produto */}
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium mb-1">
+                                  {item.mercado_livre_products?.title || `Item: ${item.ml_item_id}`}
+                                </h4>
+                                <p className="text-sm text-muted-foreground mb-2">
+                                  Item ID: {item.ml_item_id} • Inventário: {item.inventory_id}
                                   {item.stock_status && ` • Status: ${item.stock_status}`}
                                 </p>
-                              </div>
-                              <div className="flex gap-4 text-sm">
-                                <div className="text-center">
-                                  <p className="text-green-600 dark:text-green-400 font-bold">{item.available_units}</p>
-                                  <p className="text-muted-foreground">Disponível</p>
-                                </div>
-                                <div className="text-center">
-                                  <p className="text-blue-600 dark:text-blue-400 font-bold">{item.reserved_units}</p>
-                                  <p className="text-muted-foreground">Reservado</p>
-                                </div>
-                                <div className="text-center">
-                                  <p className="text-orange-600 dark:text-orange-400 font-bold">{item.inbound_units}</p>
-                                  <p className="text-muted-foreground">Trânsito</p>
-                                </div>
-                                {item.damaged_units > 0 && (
+                                
+                                <div className="flex gap-4 text-sm">
                                   <div className="text-center">
-                                    <p className="text-red-600 dark:text-red-400 font-bold">{item.damaged_units}</p>
-                                    <p className="text-muted-foreground">Danificado</p>
+                                    <p className="text-green-600 dark:text-green-400 font-bold">{item.available_units}</p>
+                                    <p className="text-muted-foreground text-xs">Disponível</p>
                                   </div>
-                                )}
+                                  <div className="text-center">
+                                    <p className="text-blue-600 dark:text-blue-400 font-bold">{item.reserved_units}</p>
+                                    <p className="text-muted-foreground text-xs">Reservado</p>
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-orange-600 dark:text-orange-400 font-bold">{item.inbound_units}</p>
+                                    <p className="text-muted-foreground text-xs">Trânsito</p>
+                                  </div>
+                                  {item.damaged_units > 0 && (
+                                    <div className="text-center">
+                                      <p className="text-red-600 dark:text-red-400 font-bold">{item.damaged_units}</p>
+                                      <p className="text-muted-foreground text-xs">Danificado</p>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
+                              
+                              {/* Botão Ver Anúncio */}
+                              {item.mercado_livre_products?.permalink && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(item.mercado_livre_products!.permalink, '_blank')}
+                                >
+                                  <ExternalLink className="w-4 h-4 mr-2" />
+                                  Ver Anúncio
+                                </Button>
+                              )}
                             </div>
                           </CardContent>
                         </Card>

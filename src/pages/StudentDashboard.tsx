@@ -382,82 +382,104 @@ const StudentDashboard = () => {
             Bem-vindo ao seu painel de controle
           </p>
 
-          {/* Contas Mercado Livre */}
+          {/* Dashboard de Vendas */}
           <Card className="mb-6">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <ShoppingBag className="w-5 h-5 text-primary" />
-                  <CardTitle>Contas Mercado Livre</CardTitle>
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  <CardTitle>Desempenho</CardTitle>
                 </div>
-                <Button 
-                  size="sm" 
-                  onClick={handleConnectML}
-                  disabled={connectingML}
-                  variant="outline"
-                >
-                  {connectingML ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Plus className="w-4 h-4 mr-2" />
-                  )}
-                  Conectar Conta
-                </Button>
+                {mlAccounts.length > 1 && (
+                  <Badge variant="outline">
+                    {mlAccounts.length} contas consolidadas
+                  </Badge>
+                )}
               </div>
+              <CardDescription>
+                {mlAccounts.length === 0 
+                  ? 'Conecte uma conta do Mercado Livre para visualizar suas métricas'
+                  : 'Métricas consolidadas de todas as suas contas do Mercado Livre'
+                }
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {mlAccounts.length === 0 ? (
-                <div className="text-center py-8">
-                  <ShoppingBag className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-foreground-secondary mb-4">
-                    Conecte sua conta do Mercado Livre para validação automática de milestones e acompanhamento de métricas
-                  </p>
-                  <Button onClick={handleConnectML} disabled={connectingML}>
-                    {connectingML ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Conectando...</>
-                    ) : (
-                      'Conectar Primeira Conta'
-                    )}
+              {/* Filtros de Período */}
+              {mlAccounts.length > 0 && (
+                <div className="flex gap-2 mb-6">
+                  <Button
+                    size="sm"
+                    variant={selectedPeriod === 7 ? "default" : "outline"}
+                    onClick={() => setSelectedPeriod(7)}
+                  >
+                    Últimos 7 dias
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={selectedPeriod === 15 ? "default" : "outline"}
+                    onClick={() => setSelectedPeriod(15)}
+                  >
+                    Últimos 15 dias
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={selectedPeriod === 30 ? "default" : "outline"}
+                    onClick={() => setSelectedPeriod(30)}
+                  >
+                    Últimos 30 dias
                   </Button>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {mlAccounts.map(account => (
-                    <div 
-                      key={account.id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-success" />
-                        <div>
-                          <p className="font-semibold">{account.ml_nickname}</p>
-                          <p className="text-xs text-foreground-secondary">
-                            Conectada em {format(new Date(account.connected_at), "dd/MM/yyyy")}
-                          </p>
-                        </div>
-                        {account.is_primary && (
-                          <Badge variant="default">Principal</Badge>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => handleSyncAccount(account.id)}
-                        >
-                          Sincronizar
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="ghost"
-                          onClick={() => handleDisconnect(account.id)}
-                        >
-                          <Unplug className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+              )}
+              {mlAccounts.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-foreground-secondary">
+                    Conecte uma conta do Mercado Livre para visualizar suas métricas
+                  </p>
                 </div>
+              ) : (
+                <>
+                  {/* Métricas Principais */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-6 rounded-lg border border-border bg-background-elevated">
+                      <div className="flex items-center gap-2 mb-2">
+                        <DollarSign className="w-5 h-5 text-success" />
+                        <span className="text-sm text-foreground-secondary">Faturamento</span>
+                      </div>
+                      <p className="text-3xl font-bold text-foreground">
+                        {formatCurrency(consolidatedMetrics?.total_revenue || 0)}
+                      </p>
+                      <p className="text-xs text-foreground-secondary mt-1">
+                        Últimos {selectedPeriod} dias
+                      </p>
+                    </div>
+                    
+                    <div className="p-6 rounded-lg border border-border bg-background-elevated">
+                      <div className="flex items-center gap-2 mb-2">
+                        <ShoppingCart className="w-5 h-5 text-primary" />
+                        <span className="text-sm text-foreground-secondary">Número de vendas</span>
+                      </div>
+                      <p className="text-3xl font-bold text-foreground">
+                        {consolidatedMetrics?.total_sales || 0}
+                      </p>
+                      <p className="text-xs text-foreground-secondary mt-1">
+                        Últimos {selectedPeriod} dias
+                      </p>
+                    </div>
+                    
+                    <div className="p-6 rounded-lg border border-border bg-background-elevated">
+                      <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp className="w-5 h-5 text-warning" />
+                        <span className="text-sm text-foreground-secondary">Ticket Médio</span>
+                      </div>
+                      <p className="text-3xl font-bold text-foreground">
+                        {formatCurrency(consolidatedMetrics?.average_ticket || 0)}
+                      </p>
+                      <p className="text-xs text-foreground-secondary mt-1">
+                        Últimos {selectedPeriod} dias
+                      </p>
+                    </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -567,104 +589,82 @@ const StudentDashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Dashboard de Vendas */}
+          {/* Contas Mercado Livre */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  <CardTitle>Desempenho</CardTitle>
+                  <ShoppingBag className="w-5 h-5 text-primary" />
+                  <CardTitle>Contas Mercado Livre</CardTitle>
                 </div>
-                {mlAccounts.length > 1 && (
-                  <Badge variant="outline">
-                    {mlAccounts.length} contas consolidadas
-                  </Badge>
-                )}
+                <Button 
+                  size="sm" 
+                  onClick={handleConnectML}
+                  disabled={connectingML}
+                  variant="outline"
+                >
+                  {connectingML ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4 mr-2" />
+                  )}
+                  Conectar Conta
+                </Button>
               </div>
-              <CardDescription>
-                {mlAccounts.length === 0 
-                  ? 'Conecte uma conta do Mercado Livre para visualizar suas métricas'
-                  : 'Métricas consolidadas de todas as suas contas do Mercado Livre'
-                }
-              </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Filtros de Período */}
-              {mlAccounts.length > 0 && (
-                <div className="flex gap-2 mb-6">
-                  <Button
-                    size="sm"
-                    variant={selectedPeriod === 7 ? "default" : "outline"}
-                    onClick={() => setSelectedPeriod(7)}
-                  >
-                    Últimos 7 dias
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={selectedPeriod === 15 ? "default" : "outline"}
-                    onClick={() => setSelectedPeriod(15)}
-                  >
-                    Últimos 15 dias
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={selectedPeriod === 30 ? "default" : "outline"}
-                    onClick={() => setSelectedPeriod(30)}
-                  >
-                    Últimos 30 dias
-                  </Button>
-                </div>
-              )}
               {mlAccounts.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-foreground-secondary">
-                    Conecte uma conta do Mercado Livre para visualizar suas métricas
+                  <ShoppingBag className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-foreground-secondary mb-4">
+                    Conecte sua conta do Mercado Livre para validação automática de milestones e acompanhamento de métricas
                   </p>
+                  <Button onClick={handleConnectML} disabled={connectingML}>
+                    {connectingML ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Conectando...</>
+                    ) : (
+                      'Conectar Primeira Conta'
+                    )}
+                  </Button>
                 </div>
               ) : (
-                <>
-                  {/* Métricas Principais */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-6 rounded-lg border border-border bg-background-elevated">
-                      <div className="flex items-center gap-2 mb-2">
-                        <DollarSign className="w-5 h-5 text-success" />
-                        <span className="text-sm text-foreground-secondary">Faturamento</span>
+                <div className="space-y-3">
+                  {mlAccounts.map(account => (
+                    <div 
+                      key={account.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-success" />
+                        <div>
+                          <p className="font-semibold">{account.ml_nickname}</p>
+                          <p className="text-xs text-foreground-secondary">
+                            Conectada em {format(new Date(account.connected_at), "dd/MM/yyyy")}
+                          </p>
+                        </div>
+                        {account.is_primary && (
+                          <Badge variant="default">Principal</Badge>
+                        )}
                       </div>
-                      <p className="text-3xl font-bold text-foreground">
-                        {formatCurrency(consolidatedMetrics?.total_revenue || 0)}
-                      </p>
-                      <p className="text-xs text-foreground-secondary mt-1">
-                        Últimos {selectedPeriod} dias
-                      </p>
-                    </div>
-                    
-                    <div className="p-6 rounded-lg border border-border bg-background-elevated">
-                      <div className="flex items-center gap-2 mb-2">
-                        <ShoppingCart className="w-5 h-5 text-primary" />
-                        <span className="text-sm text-foreground-secondary">Número de vendas</span>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleSyncAccount(account.id)}
+                        >
+                          Sincronizar
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleDisconnect(account.id)}
+                        >
+                          <Unplug className="w-4 h-4" />
+                        </Button>
                       </div>
-                      <p className="text-3xl font-bold text-foreground">
-                        {consolidatedMetrics?.total_sales || 0}
-                      </p>
-                      <p className="text-xs text-foreground-secondary mt-1">
-                        Últimos {selectedPeriod} dias
-                      </p>
                     </div>
-                    
-                    <div className="p-6 rounded-lg border border-border bg-background-elevated">
-                      <div className="flex items-center gap-2 mb-2">
-                        <TrendingUp className="w-5 h-5 text-warning" />
-                        <span className="text-sm text-foreground-secondary">Ticket Médio</span>
-                      </div>
-                      <p className="text-3xl font-bold text-foreground">
-                        {formatCurrency(consolidatedMetrics?.average_ticket || 0)}
-                      </p>
-                      <p className="text-xs text-foreground-secondary mt-1">
-                        Últimos {selectedPeriod} dias
-                      </p>
-                    </div>
-                  </div>
-                </>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

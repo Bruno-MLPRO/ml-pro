@@ -265,34 +265,60 @@ async function syncOrders(account: any, accessToken: string, supabase: any) {
   return orders
 }
 
+// Função auxiliar para converter level_id em cor
+function getReputationColor(levelId: string | null): string {
+  if (!levelId) return 'gray';
+  
+  // level_id format: "5_green", "4_light_green", "3_yellow", "2_orange", "1_red"
+  if (levelId.includes('green') && levelId.startsWith('5')) return 'dark_green';
+  if (levelId.includes('green')) return 'light_green';
+  if (levelId.includes('yellow')) return 'yellow';
+  if (levelId.includes('orange')) return 'orange';
+  if (levelId.includes('red')) return 'red';
+  return 'gray';
+}
+
 async function updateMetrics(account: any, userInfo: any, products: any[], orders: any[], supabase: any) {
-  console.log('Updating metrics...')
-
-  const paidOrders = orders.filter(o => o.status === 'paid')
-  const totalSales = paidOrders.length
-  const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.paid_amount || 0), 0)
-  const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0
-
-  const activeListings = products.filter(p => p.status === 'active').length
-  const pausedListings = products.filter(p => p.status === 'paused').length
-
-  // Detectar FULL: produtos com shipping mode 'me2' (Fulfillment)
-  const hasFull = products.some(p => p.shipping?.mode === 'me2')
+  console.log('Updating metrics...');
   
-  // Detectar Decola: programa para sellers com menos de 10 vendas
-  // Indicado por tags específicas ou reputação verde-claro com poucas vendas
-  const hasDecola = userInfo.tags?.includes('decola') || 
-                    (totalSales < 10 && userInfo.seller_reputation?.level_id === 'green')
+  // Calcular métricas dos últimos 30 dias
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const recentOrders = orders.filter((order: any) => 
+    new Date(order.date_created) >= thirtyDaysAgo &&
+    order.status === 'paid'
+  );
+
+  const totalSales = recentOrders.length;
+  const totalRevenue = recentOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
+  const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
+
+  // Contar anúncios ativos e pausados
+  const activeListings = products.filter((p: any) => p.status === 'active').length;
+  const pausedListings = products.filter((p: any) => p.status === 'paused').length;
+
+  // Verificar status Decola e FULL
+  const hasDecola = products.some((p: any) => 
+    p.shipping?.logistic_type === 'drop_off' || 
+    p.shipping?.logistic_type === 'xd_drop_off'
+  );
   
-  // Detectar Mercado Lider
-  const isMercadoLider = userInfo.tags?.includes('mercado_lider') || 
-                         userInfo.tags?.includes('mercadolider') ||
+  const hasFull = products.some((p: any) => 
+    p.shipping?.mode === 'me2'
+  );
+
+  const isMercadoLider = userInfo.seller_reputation?.power_seller_status === 'gold' ||
                          userInfo.seller_reputation?.power_seller_status === 'platinum'
   
   let mercadoLiderLevel = null
   if (isMercadoLider) {
     mercadoLiderLevel = userInfo.seller_reputation?.power_seller_status || 'Bronze'
   }
+
+  // Extrair cor da reputação
+  const reputationColor = getReputationColor(userInfo.seller_reputation?.level_id);
+  
+  // Extrair métricas de qualidade
+  const metrics = userInfo.seller_reputation?.metrics || {};
 
   const { error } = await supabase
     .from('mercado_livre_metrics')
@@ -305,11 +331,26 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
       active_listings: activeListings,
       paused_listings: pausedListings,
       total_listings: products.length,
+      
+      // Reputação por CORES (sistema do ML)
       reputation_level: userInfo.seller_reputation?.level_id || null,
-      reputation_score: userInfo.seller_reputation?.transactions?.ratings?.positive 
-        ? userInfo.seller_reputation.transactions.ratings.positive * 5 
-        : 0,
+      reputation_color: reputationColor,
+      reputation_score: null,
       reputation_transactions_total: userInfo.seller_reputation?.transactions?.total || 0,
+      
+      // Porcentagens de avaliações
+      positive_ratings_rate: userInfo.seller_reputation?.transactions?.ratings?.positive || 0,
+      neutral_ratings_rate: userInfo.seller_reputation?.transactions?.ratings?.neutral || 0,
+      negative_ratings_rate: userInfo.seller_reputation?.transactions?.ratings?.negative || 0,
+      
+      // Métricas de qualidade (últimos 60 dias)
+      claims_rate: metrics.claims?.rate || 0,
+      claims_value: metrics.claims?.value || 0,
+      delayed_handling_rate: metrics.delayed_handling_time?.rate || 0,
+      delayed_handling_value: metrics.delayed_handling_time?.value || 0,
+      cancellations_rate: metrics.cancellations?.rate || 0,
+      cancellations_value: metrics.cancellations?.value || 0,
+      
       has_decola: hasDecola,
       has_full: hasFull,
       is_mercado_lider: isMercadoLider,
@@ -324,7 +365,7 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
   if (error) {
     console.error('Error updating metrics:', error)
   } else {
-    console.log('Metrics updated:', { hasFull, hasDecola, isMercadoLider })
+    console.log('Metrics updated:', { hasFull, hasDecola, isMercadoLider, reputationColor })
   }
 }
 

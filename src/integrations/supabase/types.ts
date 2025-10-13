@@ -277,7 +277,13 @@ export type Database = {
         Row: {
           active_listings: number | null
           average_ticket: number | null
+          cancellations_rate: number | null
+          cancellations_value: number | null
+          claims_rate: number | null
+          claims_value: number | null
           created_at: string | null
+          delayed_handling_rate: number | null
+          delayed_handling_value: number | null
           has_decola: boolean | null
           has_full: boolean | null
           id: string
@@ -285,9 +291,13 @@ export type Database = {
           last_updated: string | null
           mercado_lider_level: string | null
           ml_account_id: string
+          negative_ratings_rate: number | null
+          neutral_ratings_rate: number | null
           paused_listings: number | null
           period_end: string | null
           period_start: string | null
+          positive_ratings_rate: number | null
+          reputation_color: string | null
           reputation_level: string | null
           reputation_score: number | null
           reputation_transactions_total: number | null
@@ -300,7 +310,13 @@ export type Database = {
         Insert: {
           active_listings?: number | null
           average_ticket?: number | null
+          cancellations_rate?: number | null
+          cancellations_value?: number | null
+          claims_rate?: number | null
+          claims_value?: number | null
           created_at?: string | null
+          delayed_handling_rate?: number | null
+          delayed_handling_value?: number | null
           has_decola?: boolean | null
           has_full?: boolean | null
           id?: string
@@ -308,9 +324,13 @@ export type Database = {
           last_updated?: string | null
           mercado_lider_level?: string | null
           ml_account_id: string
+          negative_ratings_rate?: number | null
+          neutral_ratings_rate?: number | null
           paused_listings?: number | null
           period_end?: string | null
           period_start?: string | null
+          positive_ratings_rate?: number | null
+          reputation_color?: string | null
           reputation_level?: string | null
           reputation_score?: number | null
           reputation_transactions_total?: number | null
@@ -323,7 +343,13 @@ export type Database = {
         Update: {
           active_listings?: number | null
           average_ticket?: number | null
+          cancellations_rate?: number | null
+          cancellations_value?: number | null
+          claims_rate?: number | null
+          claims_value?: number | null
           created_at?: string | null
+          delayed_handling_rate?: number | null
+          delayed_handling_value?: number | null
           has_decola?: boolean | null
           has_full?: boolean | null
           id?: string
@@ -331,9 +357,13 @@ export type Database = {
           last_updated?: string | null
           mercado_lider_level?: string | null
           ml_account_id?: string
+          negative_ratings_rate?: number | null
+          neutral_ratings_rate?: number | null
           paused_listings?: number | null
           period_end?: string | null
           period_start?: string | null
+          positive_ratings_rate?: number | null
+          reputation_color?: string | null
           reputation_level?: string | null
           reputation_score?: number | null
           reputation_transactions_total?: number | null

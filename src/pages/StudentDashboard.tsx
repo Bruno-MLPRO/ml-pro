@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { ReputationBadge } from '@/components/ReputationBadge';
 
 interface Notice {
   id: string;
@@ -50,7 +51,9 @@ interface MLMetrics {
   average_ticket: number;
   active_listings: number;
   reputation_level: string | null;
-  reputation_score: number;
+  reputation_color: string;
+  reputation_transactions_total: number;
+  positive_ratings_rate: number;
   has_decola: boolean;
   has_full: boolean;
   is_mercado_lider: boolean;
@@ -80,9 +83,11 @@ const StudentDashboard = () => {
       loadDashboardData();
       loadMLAccounts();
       
-      // Configurar realtime para atualizar métricas automaticamente
+      // Configurar realtime completo para todas as tabelas ML
       const channel = supabase
-        .channel('ml-metrics-changes')
+        .channel('student-dashboard-realtime')
+        
+        // Listener 1: Métricas ML
         .on(
           'postgres_changes',
           {
@@ -92,10 +97,12 @@ const StudentDashboard = () => {
             filter: `student_id=eq.${user.id}`
           },
           () => {
-            console.log('ML metrics updated')
-            loadMLAccounts()
+            console.log('ML metrics updated');
+            loadMLAccounts();
           }
         )
+        
+        // Listener 2: Contas ML
         .on(
           'postgres_changes',
           {
@@ -105,15 +112,65 @@ const StudentDashboard = () => {
             filter: `student_id=eq.${user.id}`
           },
           () => {
-            console.log('ML accounts updated')
-            loadMLAccounts()
+            console.log('ML accounts updated');
+            loadMLAccounts();
           }
         )
-        .subscribe()
+        
+        // Listener 3: Pedidos (novas vendas!)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'mercado_livre_orders',
+            filter: `student_id=eq.${user.id}`
+          },
+          () => {
+            console.log('New order received!');
+            toast({
+              title: "Nova venda! 🎉",
+              description: "Sua conta Mercado Livre recebeu um novo pedido.",
+            });
+            loadMLAccounts();
+          }
+        )
+        
+        // Listener 4: Produtos
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'mercado_livre_products',
+            filter: `student_id=eq.${user.id}`
+          },
+          () => {
+            console.log('Product updated');
+            loadMLAccounts();
+          }
+        )
+        
+        // Listener 5: Estoque FULL
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'mercado_livre_full_stock',
+            filter: `student_id=eq.${user.id}`
+          },
+          () => {
+            console.log('FULL stock updated');
+            loadMLAccounts();
+          }
+        )
+        
+        .subscribe();
 
       return () => {
-        supabase.removeChannel(channel)
-      }
+        supabase.removeChannel(channel);
+      };
     }
   }, [user, userRole, authLoading, navigate]);
 
@@ -192,7 +249,9 @@ const StudentDashboard = () => {
           average_ticket: averageTicket,
           active_listings: firstAccountMetrics?.active_listings || 0,
           reputation_level: firstAccountMetrics?.reputation_level || null,
-          reputation_score: firstAccountMetrics?.reputation_score || 0,
+          reputation_color: firstAccountMetrics?.reputation_color || 'gray',
+          reputation_transactions_total: firstAccountMetrics?.reputation_transactions_total || 0,
+          positive_ratings_rate: firstAccountMetrics?.positive_ratings_rate || 0,
           has_decola: firstAccountMetrics?.has_decola || false,
           has_full: firstAccountMetrics?.has_full || false,
           is_mercado_lider: firstAccountMetrics?.is_mercado_lider || false,
@@ -610,24 +669,19 @@ const StudentDashboard = () => {
                     </div>
                     
                     <div className="p-6 rounded-lg border border-border bg-background-elevated">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-3">
                         <Star className="w-5 h-5 text-warning" />
                         <span className="text-sm text-foreground-secondary">Reputação</span>
                       </div>
-                      <p className="text-3xl font-bold text-foreground">
-                        {consolidatedMetrics?.reputation_score?.toFixed(1) || '0.0'}/5.0
-                      </p>
-                      {consolidatedMetrics?.reputation_level && (
-                        <Badge 
-                          variant={
-                            consolidatedMetrics.reputation_level === 'green' ? 'default' :
-                            consolidatedMetrics.reputation_level === 'yellow' ? 'secondary' : 'destructive'
-                          }
-                          className="text-xs mt-1"
-                        >
-                          {consolidatedMetrics.reputation_level === 'green' ? 'Excelente' :
-                           consolidatedMetrics.reputation_level === 'yellow' ? 'Bom' : 'Atenção'}
-                        </Badge>
+                      {consolidatedMetrics?.reputation_color ? (
+                        <ReputationBadge
+                          color={consolidatedMetrics.reputation_color}
+                          levelId={consolidatedMetrics.reputation_level}
+                          positiveRate={consolidatedMetrics.positive_ratings_rate || 0}
+                          totalTransactions={consolidatedMetrics.reputation_transactions_total || 0}
+                        />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Sem dados de reputação</p>
                       )}
                     </div>
                   </div>

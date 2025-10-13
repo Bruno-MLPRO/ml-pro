@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, TrendingUp, Package, AlertTriangle, Image, Star } from "lucide-react";
+import { ArrowLeft, TrendingUp, Package, AlertTriangle, Image } from "lucide-react";
 import { toast } from "sonner";
+import { ReputationBadge } from "@/components/ReputationBadge";
 
 export default function MLAccountPerformance() {
   const { accountId } = useParams();
@@ -19,6 +20,74 @@ export default function MLAccountPerformance() {
 
   useEffect(() => {
     loadAccountData();
+    
+    // Realtime para página de desempenho
+    const channel = supabase
+      .channel(`ml-account-${accountId}-realtime`)
+      
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mercado_livre_metrics',
+          filter: `ml_account_id=eq.${accountId}`
+        },
+        () => {
+          console.log('Account metrics updated');
+          loadAccountData();
+        }
+      )
+      
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mercado_livre_orders',
+          filter: `ml_account_id=eq.${accountId}`
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            toast.success('Nova venda! 🎉');
+          }
+          loadAccountData();
+        }
+      )
+      
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mercado_livre_products',
+          filter: `ml_account_id=eq.${accountId}`
+        },
+        () => {
+          console.log('Products updated');
+          loadAccountData();
+        }
+      )
+      
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mercado_livre_full_stock',
+          filter: `ml_account_id=eq.${accountId}`
+        },
+        () => {
+          console.log('FULL stock updated');
+          loadAccountData();
+        }
+      )
+      
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [accountId, selectedPeriod]);
 
   const loadAccountData = async () => {
@@ -203,6 +272,58 @@ export default function MLAccountPerformance() {
           </Card>
         </div>
 
+        {/* Reputação e Métricas de Qualidade */}
+        {account.reputation_color && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Reputação</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <ReputationBadge
+                color={account.reputation_color}
+                levelId={account.reputation_level}
+                positiveRate={account.positive_ratings_rate || 0}
+                totalTransactions={account.reputation_transactions_total || 0}
+              />
+              
+              <div className="pt-4 border-t">
+                <h3 className="font-semibold mb-4">Métricas de Qualidade (Últimos 60 dias)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-lg border">
+                    <p className="text-sm text-muted-foreground mb-1">Reclamações</p>
+                    <p className="text-2xl font-bold">
+                      {((account.claims_rate || 0) * 100).toFixed(2)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {account.claims_value || 0} casos
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 rounded-lg border">
+                    <p className="text-sm text-muted-foreground mb-1">Atrasos</p>
+                    <p className="text-2xl font-bold">
+                      {((account.delayed_handling_rate || 0) * 100).toFixed(2)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {account.delayed_handling_value || 0} atrasos
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 rounded-lg border">
+                    <p className="text-sm text-muted-foreground mb-1">Cancelamentos</p>
+                    <p className="text-2xl font-bold">
+                      {((account.cancellations_rate || 0) * 100).toFixed(2)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {account.cancellations_value || 0} cancelados
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Estoque FULL */}
         {fullStock.length > 0 && (
           <Card>
@@ -303,11 +424,11 @@ export default function MLAccountPerformance() {
 
         {/* Mensagem se não houver alertas */}
         {lowQualityProducts.length === 0 && (
-          <Card className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+          <Card className="border-green-200 dark:border-green-800">
             <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Star className="h-5 w-5 text-green-600" />
-                <p className="text-green-800 dark:text-green-200 font-medium">
+              <div className="flex items-center gap-3 text-green-600 dark:text-green-400">
+                <Package className="h-5 w-5" />
+                <p className="font-medium">
                   ✅ Todos os anúncios ativos têm fotos de alta qualidade (≥ 1200x1200px)
                 </p>
               </div>

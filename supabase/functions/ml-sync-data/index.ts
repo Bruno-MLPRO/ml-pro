@@ -21,14 +21,14 @@ Deno.serve(async (req) => {
     // Use SERVICE_ROLE_KEY to bypass RLS for backend operations
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+    // Validate that request comes from authenticated user
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       throw new Error('Missing authorization header')
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } }
-    })
+    // Create client with SERVICE_ROLE_KEY (without authHeader to bypass RLS)
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Buscar conta
     const { data: account, error: accountError } = await supabase

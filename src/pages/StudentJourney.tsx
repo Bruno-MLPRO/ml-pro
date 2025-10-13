@@ -87,12 +87,6 @@ const StudentJourney = () => {
         .maybeSingle();
 
       if (journeyError) throw journeyError;
-      
-      // Set journey data with defaults if no journey exists
-      setJourney({
-        overall_progress: studentJourneyData?.overall_progress || 0,
-        current_phase: studentJourneyData?.current_phase || 'Onboarding'
-      });
 
       // Get milestone templates from the selected journey template
       const { data: milestoneTemplatesData, error: templatesError } = await supabase
@@ -135,6 +129,16 @@ const StudentJourney = () => {
             };
           });
           setMilestones(mergedMilestones);
+          
+          // Calculate overall progress based on completed milestones
+          const completedCount = mergedMilestones.filter(m => m.status === 'completed').length;
+          const totalCount = mergedMilestones.length;
+          const calculatedProgress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+          
+          setJourney({
+            overall_progress: calculatedProgress,
+            current_phase: studentJourneyData?.current_phase || 'Onboarding'
+          });
         } else {
           // No milestones yet, show templates with default status
           const defaultMilestones = (milestoneTemplatesData || []).map((template: any) => ({
@@ -148,6 +152,11 @@ const StudentJourney = () => {
             isExisting: false,
           }));
           setMilestones(defaultMilestones);
+          
+          setJourney({
+            overall_progress: 0,
+            current_phase: studentJourneyData?.current_phase || 'Onboarding'
+          });
         }
       } else {
         // No student journey yet, just show templates with default status
@@ -162,6 +171,11 @@ const StudentJourney = () => {
           isExisting: false,
         }));
         setMilestones(defaultMilestones);
+        
+        setJourney({
+          overall_progress: 0,
+          current_phase: 'Onboarding'
+        });
       }
     } catch (error) {
       console.error('Error loading journey:', error);

@@ -18,7 +18,8 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!
+    // Use SERVICE_ROLE_KEY to bypass RLS for backend operations
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
@@ -124,10 +125,9 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
       
       if (itemResponse.ok) {
         const item = await itemResponse.json()
-        products.push(item)
         
         // Salvar produto
-        await supabase
+        const { error } = await supabase
           .from('mercado_livre_products')
           .upsert({
             ml_account_id: account.id,
@@ -146,6 +146,12 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
           }, {
             onConflict: 'ml_account_id,ml_item_id'
           })
+        
+        if (error) {
+          console.error(`Error syncing product ${item.id}:`, error)
+        } else {
+          products.push(item)
+        }
       }
     }
   }
@@ -173,10 +179,8 @@ async function syncOrders(account: any, accessToken: string, supabase: any) {
   const data = await response.json()
   
   for (const order of data.results || []) {
-    orders.push(order)
-    
     // Salvar pedido
-    await supabase
+    const { error } = await supabase
       .from('mercado_livre_orders')
       .upsert({
         ml_account_id: account.id,
@@ -192,6 +196,12 @@ async function syncOrders(account: any, accessToken: string, supabase: any) {
       }, {
         onConflict: 'ml_account_id,ml_order_id'
       })
+    
+    if (error) {
+      console.error(`Error syncing order ${order.id}:`, error)
+    } else {
+      orders.push(order)
+    }
   }
 
   console.log(`Synced ${orders.length} orders`)
@@ -227,7 +237,7 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
     mercadoLiderLevel = userInfo.seller_reputation?.power_seller_status || 'Bronze'
   }
 
-  await supabase
+  const { error } = await supabase
     .from('mercado_livre_metrics')
     .upsert({
       ml_account_id: account.id,
@@ -252,7 +262,11 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
       onConflict: 'ml_account_id'
     })
 
-  console.log('Metrics updated:', { hasFull, hasDecola, isMercadoLider })
+  if (error) {
+    console.error('Error updating metrics:', error)
+  } else {
+    console.log('Metrics updated:', { hasFull, hasDecola, isMercadoLider })
+  }
 }
 
 async function validateMilestones(studentId: string, supabase: any) {
@@ -304,12 +318,6 @@ async function validateMilestones(studentId: string, supabase: any) {
 async function refreshToken(account: any, supabase: any): Promise<string> {
   const appId = Deno.env.get('MERCADO_LIVRE_APP_ID')!
   const secretKey = Deno.env.get('MERCADO_LIVRE_SECRET_KEY')!
-  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  
-  const adminSupabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    supabaseServiceKey
-  )
 
   const response = await fetch('https://api.mercadolibre.com/oauth/token', {
     method: 'POST',
@@ -329,7 +337,7 @@ async function refreshToken(account: any, supabase: any): Promise<string> {
   const tokens = await response.json()
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
-  await adminSupabase
+  const { error } = await supabase
     .from('mercado_livre_accounts')
     .update({
       access_token: tokens.access_token,
@@ -337,6 +345,11 @@ async function refreshToken(account: any, supabase: any): Promise<string> {
       token_expires_at: expiresAt
     })
     .eq('id', account.id)
+
+  if (error) {
+    console.error('Error updating tokens:', error)
+    throw new Error('Failed to update access tokens')
+  }
 
   return tokens.access_token
 }

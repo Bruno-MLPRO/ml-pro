@@ -214,6 +214,65 @@ export type Database = {
           },
         ]
       }
+      mercado_livre_full_stock: {
+        Row: {
+          available_units: number | null
+          created_at: string | null
+          damaged_units: number | null
+          id: string
+          inbound_units: number | null
+          inventory_id: string
+          lost_units: number | null
+          ml_account_id: string
+          ml_item_id: string
+          reserved_units: number | null
+          stock_status: string | null
+          student_id: string
+          synced_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          available_units?: number | null
+          created_at?: string | null
+          damaged_units?: number | null
+          id?: string
+          inbound_units?: number | null
+          inventory_id: string
+          lost_units?: number | null
+          ml_account_id: string
+          ml_item_id: string
+          reserved_units?: number | null
+          stock_status?: string | null
+          student_id: string
+          synced_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          available_units?: number | null
+          created_at?: string | null
+          damaged_units?: number | null
+          id?: string
+          inbound_units?: number | null
+          inventory_id?: string
+          lost_units?: number | null
+          ml_account_id?: string
+          ml_item_id?: string
+          reserved_units?: number | null
+          stock_status?: string | null
+          student_id?: string
+          synced_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_full_stock_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mercado_livre_metrics: {
         Row: {
           active_listings: number | null
@@ -368,11 +427,14 @@ export type Database = {
         Row: {
           available_quantity: number | null
           created_at: string | null
+          has_low_quality_photos: boolean | null
           id: string
           listing_type: string | null
+          min_photo_dimension: number | null
           ml_account_id: string
           ml_item_id: string
           permalink: string | null
+          photo_count: number | null
           price: number | null
           shipping_mode: string | null
           sold_quantity: number | null
@@ -386,11 +448,14 @@ export type Database = {
         Insert: {
           available_quantity?: number | null
           created_at?: string | null
+          has_low_quality_photos?: boolean | null
           id?: string
           listing_type?: string | null
+          min_photo_dimension?: number | null
           ml_account_id: string
           ml_item_id: string
           permalink?: string | null
+          photo_count?: number | null
           price?: number | null
           shipping_mode?: string | null
           sold_quantity?: number | null
@@ -404,11 +469,14 @@ export type Database = {
         Update: {
           available_quantity?: number | null
           created_at?: string | null
+          has_low_quality_photos?: boolean | null
           id?: string
           listing_type?: string | null
+          min_photo_dimension?: number | null
           ml_account_id?: string
           ml_item_id?: string
           permalink?: string | null
+          photo_count?: number | null
           price?: number | null
           shipping_mode?: string | null
           sold_quantity?: number | null

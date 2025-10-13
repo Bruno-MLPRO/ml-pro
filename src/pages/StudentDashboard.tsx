@@ -383,6 +383,13 @@ const StudentDashboard = () => {
                       <div className="flex gap-2">
                         <Button 
                           size="sm" 
+                          variant="default"
+                          onClick={() => navigate(`/aluno/ml-account/${account.id}`)}
+                        >
+                          Ver Dashboard
+                        </Button>
+                        <Button 
+                          size="sm" 
                           variant="outline"
                           onClick={() => handleSyncAccount(account.id)}
                         >

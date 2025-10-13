@@ -112,7 +112,6 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
   let hasMore = true
   const limit = 50
   
-  // Paginar produtos ativos
   while (hasMore) {
     const activeResponse = await fetch(
       `https://api.mercadolibre.com/users/${account.ml_user_id}/items/search?status=active&limit=${limit}&offset=${offset}`,
@@ -134,7 +133,27 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
       if (itemResponse.ok) {
         const item = await itemResponse.json()
         
-        // Salvar produto
+        // Analisar qualidade das fotos
+        let minDimension = 9999
+        let hasLowQualityPhotos = false
+        const photoCount = item.pictures?.length || 0
+        
+        if (item.pictures && item.pictures.length > 0) {
+          for (const picture of item.pictures) {
+            const sizeMatch = picture.max_size?.match(/(\d+)x(\d+)/)
+            if (sizeMatch) {
+              const width = parseInt(sizeMatch[1])
+              const height = parseInt(sizeMatch[2])
+              const smallestDimension = Math.min(width, height)
+              minDimension = Math.min(minDimension, smallestDimension)
+              
+              if (smallestDimension < 1200) {
+                hasLowQualityPhotos = true
+              }
+            }
+          }
+        }
+        
         const { error } = await supabase
           .from('mercado_livre_products')
           .upsert({
@@ -150,6 +169,9 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
             thumbnail: item.thumbnail,
             listing_type: item.listing_type_id,
             shipping_mode: item.shipping?.mode,
+            has_low_quality_photos: hasLowQualityPhotos,
+            min_photo_dimension: minDimension === 9999 ? null : minDimension,
+            photo_count: photoCount,
             synced_at: new Date().toISOString()
           }, {
             onConflict: 'ml_account_id,ml_item_id'
@@ -159,6 +181,10 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
           console.error(`Error syncing product ${item.id}:`, error)
         } else {
           products.push(item)
+          
+          if (item.shipping?.mode === 'me2' && item.inventory_id) {
+            await syncFullStock(account, item, accessToken, supabase)
+          }
         }
       }
     }
@@ -345,6 +371,65 @@ async function validateMilestones(studentId: string, supabase: any) {
       .eq('id', salesMilestone.id)
     
     console.log('Milestone validated: 10 Vendas')
+  }
+}
+
+async function syncFullStock(account: any, item: any, accessToken: string, supabase: any) {
+  try {
+    const inventoryId = item.inventory_id
+    if (!inventoryId) return
+
+    const response = await fetch(
+      `https://api.mercadolibre.com/inventories/${inventoryId}/stock/fulfillment`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    )
+
+    if (!response.ok) {
+      console.error(`Failed to fetch FULL stock for ${inventoryId}`)
+      return
+    }
+
+    const stockData = await response.json()
+    
+    // Calcular totais
+    const availableUnits = stockData.available_quantity || 0
+    const reservedUnits = stockData.reserved_quantity || 0
+    const damagedUnits = stockData.unavailable_quantity?.damaged || 0
+    const lostUnits = stockData.unavailable_quantity?.lost || 0
+    
+    // Determinar status
+    let stockStatus = 'good_quality'
+    if (availableUnits === 0) {
+      stockStatus = 'out_of_stock'
+    } else if (damagedUnits + lostUnits > availableUnits * 0.1) {
+      stockStatus = 'low_quality'
+    }
+
+    const { error } = await supabase
+      .from('mercado_livre_full_stock')
+      .upsert({
+        ml_account_id: account.id,
+        student_id: account.student_id,
+        inventory_id: inventoryId,
+        ml_item_id: item.id,
+        available_units: availableUnits,
+        reserved_units: reservedUnits,
+        inbound_units: stockData.inbound_quantity || 0,
+        damaged_units: damagedUnits,
+        lost_units: lostUnits,
+        stock_status: stockStatus,
+        synced_at: new Date().toISOString()
+      }, {
+        onConflict: 'ml_account_id,inventory_id'
+      })
+
+    if (error) {
+      console.error(`Error syncing FULL stock for ${inventoryId}:`, error)
+    } else {
+      console.log(`Synced FULL stock for ${inventoryId}`)
+    }
+  } catch (error) {
+    console.error('Error in syncFullStock:', error)
   }
 }
 

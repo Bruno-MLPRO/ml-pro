@@ -316,6 +316,28 @@ const StudentJourney = () => {
 
       if (error) throw error;
 
+      // Recalculate overall progress based on completed milestones
+      const { data: allMilestones, error: milestonesError } = await supabase
+        .from('milestones')
+        .select('status')
+        .eq('journey_id', journeyId);
+
+      if (milestonesError) throw milestonesError;
+
+      if (allMilestones && allMilestones.length > 0) {
+        const completedCount = allMilestones.filter(m => m.status === 'completed').length;
+        const totalCount = allMilestones.length;
+        const overallProgress = Math.round((completedCount / totalCount) * 100);
+
+        // Update the student journey overall progress
+        const { error: journeyUpdateError } = await supabase
+          .from('student_journeys')
+          .update({ overall_progress: overallProgress })
+          .eq('id', journeyId);
+
+        if (journeyUpdateError) throw journeyUpdateError;
+      }
+
       toast({
         title: "Status atualizado",
         description: "O status do milestone foi atualizado com sucesso.",

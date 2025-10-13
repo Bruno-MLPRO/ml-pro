@@ -28,13 +28,10 @@ Deno.serve(async (req) => {
       throw new Error('Unauthorized')
     }
 
-    // Buscar contas ML do usuário
+    // Buscar contas ML do usuário (sem JOIN para evitar problemas com RLS)
     const { data: accounts, error } = await supabase
       .from('mercado_livre_accounts')
-      .select(`
-        *,
-        mercado_livre_metrics (*)
-      `)
+      .select('*')
       .eq('student_id', user.id)
       .eq('is_active', true)
       .order('is_primary', { ascending: false })
@@ -43,16 +40,27 @@ Deno.serve(async (req) => {
       throw error
     }
 
-    // Formatar resposta
-    const formattedAccounts = accounts?.map(account => ({
-      id: account.id,
-      ml_nickname: account.ml_nickname,
-      is_primary: account.is_primary,
-      is_active: account.is_active,
-      connected_at: account.connected_at,
-      last_sync_at: account.last_sync_at,
-      metrics: account.mercado_livre_metrics?.[0] || null
-    })) || []
+    // Buscar métricas para cada conta separadamente (respeitando RLS)
+    const formattedAccounts = await Promise.all(
+      (accounts || []).map(async (account) => {
+        // Buscar métricas da conta
+        const { data: metrics } = await supabase
+          .from('mercado_livre_metrics')
+          .select('*')
+          .eq('ml_account_id', account.id)
+          .maybeSingle()
+
+        return {
+          id: account.id,
+          ml_nickname: account.ml_nickname,
+          is_primary: account.is_primary,
+          is_active: account.is_active,
+          connected_at: account.connected_at,
+          last_sync_at: account.last_sync_at,
+          metrics: metrics
+        }
+      })
+    )
 
     return new Response(
       JSON.stringify({ accounts: formattedAccounts }),

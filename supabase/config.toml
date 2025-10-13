@@ -1,1 +1,7 @@
 project_id = "yxlxholcipprdozohwhn"
+
+[functions.ml-oauth-callback]
+verify_jwt = false
+
+[functions.ml-webhook-receiver]
+verify_jwt = false

@@ -36,6 +36,7 @@ interface MLMetrics {
   has_decola: boolean;
   real_reputation_level: string | null;
   protection_end_date: string | null;
+  decola_problems_count: number;
   has_full: boolean;
   is_mercado_lider: boolean;
   mercado_lider_level: string | null;
@@ -398,23 +399,78 @@ export default function MLAccountDashboard() {
                     )}
                   </div>
 
-                  {/* Reputação Real (quando Decola está ativo) */}
-                  {metrics.has_decola && metrics.real_reputation_level && (
+                  {/* Programa Decola */}
+                  {metrics.has_decola && (
                     <Card className="bg-muted/50">
                       <CardContent className="pt-4">
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5" />
-                          <div>
-                            <h4 className="font-medium text-sm mb-1">Programa Decola Ativo</h4>
-                            <p className="text-sm text-muted-foreground">
-                              Sua reputação está sendo protegida. Reputação real: <span className="font-semibold capitalize">{metrics.real_reputation_level}</span>
-                            </p>
-                            {metrics.protection_end_date && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Proteção válida até: {new Date(metrics.protection_end_date).toLocaleDateString('pt-BR')}
+                        <div className="space-y-4">
+                          {/* Header */}
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <h4 className="font-medium text-sm mb-1">Programa Decola Ativo</h4>
+                              <p className="text-sm text-muted-foreground">
+                                Sua reputação está sendo protegida.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Contador de Problemas */}
+                          <div className="space-y-2 pl-8">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">Problemas no Programa</span>
+                              <span className={`text-sm font-bold ${
+                                metrics.decola_problems_count >= 4 ? 'text-red-500' :
+                                metrics.decola_problems_count >= 3 ? 'text-orange-500' :
+                                'text-green-500'
+                              }`}>
+                                {metrics.decola_problems_count}/5
+                              </span>
+                            </div>
+                            
+                            <Progress 
+                              value={(metrics.decola_problems_count / 5) * 100} 
+                              className={`h-2 ${
+                                metrics.decola_problems_count >= 4 ? '[&>div]:bg-red-500' :
+                                metrics.decola_problems_count >= 3 ? '[&>div]:bg-orange-500' :
+                                '[&>div]:bg-green-500'
+                              }`}
+                            />
+                            
+                            {metrics.decola_problems_count >= 4 && (
+                              <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" />
+                                Atenção! Você está próximo do limite de problemas.
                               </p>
                             )}
+                            
+                            <p className="text-xs text-muted-foreground">
+                              Ao atingir 5 problemas (reclamações + atrasos + cancelamentos), 
+                              o Programa Decola será encerrado e sua reputação real será exibida.
+                            </p>
                           </div>
+
+                          {/* Data de expiração */}
+                          {metrics.protection_end_date && (
+                            <div className="pl-8 pt-2 border-t">
+                              <p className="text-xs text-muted-foreground">
+                                Proteção válida até: {new Date(metrics.protection_end_date).toLocaleDateString('pt-BR')}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Reputação Real */}
+                          {metrics.real_reputation_level && (
+                            <div className="pl-8 pt-2 border-t">
+                              <p className="text-xs text-muted-foreground mb-2">Reputação Real:</p>
+                              <ReputationBadge
+                                color={metrics.real_reputation_level}
+                                levelId={null}
+                                positiveRate={metrics.positive_ratings_rate}
+                                totalTransactions={metrics.reputation_transactions_total}
+                              />
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -601,12 +657,29 @@ export default function MLAccountDashboard() {
                       </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="low_quality_photos" className="mt-4">
+                     <TabsContent value="low_quality_photos" className="mt-4">
                       <div>
-                        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                          <AlertTriangle className="w-5 h-5 text-orange-500" />
-                          Produtos com Fotos de Baixa Qualidade
-                        </h3>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5 text-orange-500" />
+                            Produtos com Fotos de Baixa Qualidade
+                          </h3>
+                          {lowQualityProducts.length > 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled
+                              className="gap-2"
+                            >
+                              <Image className="w-4 h-4" />
+                              Correção Automática (em breve)
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Fotos menores que 1200x1200px podem prejudicar a visibilidade dos seus anúncios.
+                          Recomendamos usar um editor de imagens para redimensionar as fotos manualmente.
+                        </p>
                         {renderProductList(
                           lowQualityProducts,
                           "Todos os seus anúncios possuem fotos de alta qualidade (≥ 1200x1200px)",
@@ -637,8 +710,8 @@ export default function MLAccountDashboard() {
                         </h3>
                         {renderProductList(
                           noTaxDataProducts,
-                          "Todos os seus anúncios possuem dados fiscais completos (NCM + Origem)",
-                          () => "Faltam dados fiscais: NCM ou Origem não cadastrados"
+                          "Todos os seus anúncios possuem dados fiscais completos (NCM)",
+                          () => "Falta cadastrar o NCM (Nomenclatura Comum do Mercosul)"
                         )}
                       </div>
                     </TabsContent>

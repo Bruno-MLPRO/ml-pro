@@ -169,20 +169,9 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
           console.log('Error fetching description for', item.id)
         }
 
-        // Buscar dados fiscais
-        let hasTaxData = false
-        try {
-          const taxResponse = await fetch(
-            `https://api.mercadolibre.com/items/${item.id}/tax_info`,
-            { headers: { 'Authorization': `Bearer ${accessToken}` } }
-          )
-          if (taxResponse.ok) {
-            const taxData = await taxResponse.json()
-            hasTaxData = !!(taxData.ncm && taxData.origin)
-          }
-        } catch (e) {
-          console.log('Error fetching tax info for', item.id)
-        }
+        // Buscar dados fiscais (NCM nos atributos - específico para Brasil)
+        const ncmAttribute = item.attributes?.find((attr: any) => attr.id === 'NCM')
+        const hasTaxData = !!(ncmAttribute?.value_name)
         
         const { error } = await supabase
           .from('mercado_livre_products')
@@ -415,6 +404,10 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
       has_decola: hasDecola,
       real_reputation_level: sellerReputation.real_level || null,
       protection_end_date: sellerReputation.protection_end_date || null,
+      decola_problems_count: hasDecola ? 
+        (metrics.claims?.value || 0) + 
+        (metrics.delayed_handling_time?.value || 0) + 
+        (metrics.cancellations?.value || 0) : 0,
       
       has_full: hasFull,
       is_mercado_lider: isMercadoLider,

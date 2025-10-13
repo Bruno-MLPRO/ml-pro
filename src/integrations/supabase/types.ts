@@ -282,6 +282,7 @@ export type Database = {
           claims_rate: number | null
           claims_value: number | null
           created_at: string | null
+          decola_problems_count: number | null
           delayed_handling_rate: number | null
           delayed_handling_value: number | null
           has_decola: boolean | null
@@ -317,6 +318,7 @@ export type Database = {
           claims_rate?: number | null
           claims_value?: number | null
           created_at?: string | null
+          decola_problems_count?: number | null
           delayed_handling_rate?: number | null
           delayed_handling_value?: number | null
           has_decola?: boolean | null
@@ -352,6 +354,7 @@ export type Database = {
           claims_rate?: number | null
           claims_value?: number | null
           created_at?: string | null
+          decola_problems_count?: number | null
           delayed_handling_rate?: number | null
           delayed_handling_value?: number | null
           has_decola?: boolean | null

@@ -154,6 +154,36 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
           }
         }
         
+        // Buscar descrição
+        let hasDescription = false
+        try {
+          const descResponse = await fetch(
+            `https://api.mercadolibre.com/items/${item.id}/description`,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+          )
+          if (descResponse.ok) {
+            const descData = await descResponse.json()
+            hasDescription = descData.plain_text && descData.plain_text.length > 50
+          }
+        } catch (e) {
+          console.log('Error fetching description for', item.id)
+        }
+
+        // Buscar dados fiscais
+        let hasTaxData = false
+        try {
+          const taxResponse = await fetch(
+            `https://api.mercadolibre.com/items/${item.id}/tax_info`,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+          )
+          if (taxResponse.ok) {
+            const taxData = await taxResponse.json()
+            hasTaxData = !!(taxData.ncm && taxData.origin)
+          }
+        } catch (e) {
+          console.log('Error fetching tax info for', item.id)
+        }
+        
         const { error } = await supabase
           .from('mercado_livre_products')
           .upsert({
@@ -169,6 +199,9 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
             thumbnail: item.thumbnail,
             listing_type: item.listing_type_id,
             shipping_mode: item.shipping?.mode,
+            logistic_type: item.shipping?.logistic_type,
+            has_description: hasDescription,
+            has_tax_data: hasTaxData,
             has_low_quality_photos: hasLowQualityPhotos,
             min_photo_dimension: minDimension === 9999 ? null : minDimension,
             photo_count: photoCount,

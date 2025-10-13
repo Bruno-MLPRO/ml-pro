@@ -5,7 +5,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink } from 'lucide-react';
+import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink, ShoppingCart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -629,7 +629,7 @@ const StudentDashboard = () => {
               ) : (
                 <>
                   {/* Métricas Principais */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="p-6 rounded-lg border border-border bg-background-elevated">
                       <div className="flex items-center gap-2 mb-2">
                         <DollarSign className="w-5 h-5 text-success" />
@@ -639,20 +639,20 @@ const StudentDashboard = () => {
                         {formatCurrency(consolidatedMetrics?.total_revenue || 0)}
                       </p>
                       <p className="text-xs text-foreground-secondary mt-1">
-                        {consolidatedMetrics?.total_sales || 0} vendas
+                        Últimos {selectedPeriod} dias
                       </p>
                     </div>
                     
                     <div className="p-6 rounded-lg border border-border bg-background-elevated">
                       <div className="flex items-center gap-2 mb-2">
-                        <Package className="w-5 h-5 text-primary" />
-                        <span className="text-sm text-foreground-secondary">Anúncios</span>
+                        <ShoppingCart className="w-5 h-5 text-primary" />
+                        <span className="text-sm text-foreground-secondary">Número de vendas</span>
                       </div>
                       <p className="text-3xl font-bold text-foreground">
-                        {consolidatedMetrics?.active_listings || 0}
+                        {consolidatedMetrics?.total_sales || 0}
                       </p>
                       <p className="text-xs text-foreground-secondary mt-1">
-                        ativos
+                        Últimos {selectedPeriod} dias
                       </p>
                     </div>
                     
@@ -664,69 +664,8 @@ const StudentDashboard = () => {
                       <p className="text-3xl font-bold text-foreground">
                         {formatCurrency(consolidatedMetrics?.average_ticket || 0)}
                       </p>
-                    </div>
-                    
-                    <div className="p-6 rounded-lg border border-border bg-background-elevated">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Star className="w-5 h-5 text-warning" />
-                        <span className="text-sm text-foreground-secondary">Reputação</span>
-                      </div>
-                      {consolidatedMetrics?.reputation_color ? (
-                        <ReputationBadge
-                          color={consolidatedMetrics.reputation_color}
-                          levelId={consolidatedMetrics.reputation_level}
-                          positiveRate={consolidatedMetrics.positive_ratings_rate || 0}
-                          totalTransactions={consolidatedMetrics.reputation_transactions_total || 0}
-                        />
-                      ) : (
-                        <p className="text-sm text-muted-foreground">Sem dados de reputação</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Status de Programas */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className={`p-4 rounded-lg border ${consolidatedMetrics?.has_decola ? 'border-success bg-success/10' : 'border-border'}`}>
-                      <div className="flex items-center gap-2">
-                        {consolidatedMetrics?.has_decola ? (
-                          <CheckCircle2 className="w-5 h-5 text-success" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-foreground-secondary" />
-                        )}
-                        <span className="font-semibold">Decola</span>
-                      </div>
                       <p className="text-xs text-foreground-secondary mt-1">
-                        {consolidatedMetrics?.has_decola ? 'Ativo' : 'Não ativado'}
-                      </p>
-                    </div>
-                    
-                    <div className={`p-4 rounded-lg border ${consolidatedMetrics?.has_full ? 'border-success bg-success/10' : 'border-border'}`}>
-                      <div className="flex items-center gap-2">
-                        {consolidatedMetrics?.has_full ? (
-                          <CheckCircle2 className="w-5 h-5 text-success" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-foreground-secondary" />
-                        )}
-                        <span className="font-semibold">FULL</span>
-                      </div>
-                      <p className="text-xs text-foreground-secondary mt-1">
-                        {consolidatedMetrics?.has_full ? 'Ativo' : 'Não ativado'}
-                      </p>
-                    </div>
-                    
-                    <div className={`p-4 rounded-lg border ${consolidatedMetrics?.is_mercado_lider ? 'border-warning bg-warning/10' : 'border-border'}`}>
-                      <div className="flex items-center gap-2">
-                        {consolidatedMetrics?.is_mercado_lider ? (
-                          <Crown className="w-5 h-5 text-warning" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-foreground-secondary" />
-                        )}
-                        <span className="font-semibold">Mercado Líder</span>
-                      </div>
-                      <p className="text-xs text-foreground-secondary mt-1">
-                        {consolidatedMetrics?.is_mercado_lider 
-                          ? consolidatedMetrics.mercado_lider_level 
-                          : 'Não atingido'}
+                        Últimos {selectedPeriod} dias
                       </p>
                     </div>
                   </div>

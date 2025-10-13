@@ -1,4 +1,4 @@
-import { Home, Users, User, Settings, LogOut, ListChecks, GraduationCap, UsersRound } from "lucide-react";
+import { Home, Users, User, Settings, LogOut, ListChecks, GraduationCap, UsersRound, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -120,6 +120,20 @@ export const Sidebar = () => {
               title="Dashboard"
             >
               <Home className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/aluno/contas-ml')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname.startsWith('/aluno/contas-ml')
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Contas ML"
+            >
+              <ShoppingBag className="w-5 h-5" strokeWidth={1.5} />
             </Button>
             <Button
               variant="ghost"

@@ -16,6 +16,7 @@ import StudentsManagement from "./pages/StudentsManagement";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import MLAccountPerformance from "./pages/MLAccountPerformance";
+import MLAccountDashboard from "./pages/MLAccountDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/gestor/equipe" element={<TeamManagement />} />
             <Route path="/aluno/dashboard" element={<StudentDashboard />} />
             <Route path="/aluno/jornadas" element={<StudentJourney />} />
+            <Route path="/aluno/contas-ml" element={<MLAccountDashboard />} />
             <Route path="/aluno/ml-account/:accountId" element={<MLAccountPerformance />} />
             <Route path="/aluno/:id" element={<StudentProfile />} />
             <Route path="/perfil" element={<Profile />} />

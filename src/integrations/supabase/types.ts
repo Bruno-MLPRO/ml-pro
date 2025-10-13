@@ -457,9 +457,12 @@ export type Database = {
         Row: {
           available_quantity: number | null
           created_at: string | null
+          has_description: boolean | null
           has_low_quality_photos: boolean | null
+          has_tax_data: boolean | null
           id: string
           listing_type: string | null
+          logistic_type: string | null
           min_photo_dimension: number | null
           ml_account_id: string
           ml_item_id: string
@@ -478,9 +481,12 @@ export type Database = {
         Insert: {
           available_quantity?: number | null
           created_at?: string | null
+          has_description?: boolean | null
           has_low_quality_photos?: boolean | null
+          has_tax_data?: boolean | null
           id?: string
           listing_type?: string | null
+          logistic_type?: string | null
           min_photo_dimension?: number | null
           ml_account_id: string
           ml_item_id: string
@@ -499,9 +505,12 @@ export type Database = {
         Update: {
           available_quantity?: number | null
           created_at?: string | null
+          has_description?: boolean | null
           has_low_quality_photos?: boolean | null
+          has_tax_data?: boolean | null
           id?: string
           listing_type?: string | null
+          logistic_type?: string | null
           min_photo_dimension?: number | null
           ml_account_id?: string
           ml_item_id?: string

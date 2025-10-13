@@ -296,15 +296,26 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
   const activeListings = products.filter((p: any) => p.status === 'active').length;
   const pausedListings = products.filter((p: any) => p.status === 'paused').length;
 
-  // Verificar status Decola e FULL
-  const hasDecola = products.some((p: any) => 
-    p.shipping?.logistic_type === 'drop_off' || 
-    p.shipping?.logistic_type === 'xd_drop_off'
-  );
-  
-  const hasFull = products.some((p: any) => 
-    p.shipping?.mode === 'me2'
-  );
+  // Verificar FULL: Só está ativo se há estoque FULL gerenciado recentemente
+  const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
+  const { data: fullStockItems } = await supabase
+    .from('mercado_livre_full_stock')
+    .select('id, available_units')
+    .eq('ml_account_id', account.id)
+    .gt('available_units', 0)
+    .gte('synced_at', thirtyDaysAgoISO);
+
+  const hasFull = fullStockItems && fullStockItems.length > 0;
+
+  // Verificar Decola: Produtos ativos com logistic_type específico
+  const { data: decolaProducts } = await supabase
+    .from('mercado_livre_products')
+    .select('id')
+    .eq('ml_account_id', account.id)
+    .eq('status', 'active')
+    .in('logistic_type', ['drop_off', 'xd_drop_off']);
+
+  const hasDecola = decolaProducts && decolaProducts.length > 0;
 
   const isMercadoLider = userInfo.seller_reputation?.power_seller_status === 'gold' ||
                          userInfo.seller_reputation?.power_seller_status === 'platinum'

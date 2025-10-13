@@ -49,14 +49,15 @@ interface MLMetrics {
 
 interface MLProduct {
   id: string;
-  ml_item_id: string;
   title: string;
-  thumbnail: string | null;
+  thumbnail: string;
   status: string;
   has_low_quality_photos: boolean;
+  has_description: boolean;
+  has_tax_data: boolean;
   min_photo_dimension: number | null;
   photo_count: number;
-  permalink: string | null;
+  permalink: string;
 }
 
 interface MLFullStock {
@@ -68,6 +69,11 @@ interface MLFullStock {
   inbound_units: number;
   damaged_units: number;
   stock_status: string | null;
+  mercado_livre_products?: {
+    title: string;
+    thumbnail: string;
+    permalink: string;
+  };
 }
 
 export default function MLAccountDashboard() {
@@ -80,6 +86,7 @@ export default function MLAccountDashboard() {
   const [products, setProducts] = useState<MLProduct[]>([]);
   const [fullStock, setFullStock] = useState<MLFullStock[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adsFilter, setAdsFilter] = useState<'low_quality_photos' | 'no_description' | 'no_tax_data'>('low_quality_photos');
 
   useEffect(() => {
     if (user) {
@@ -179,16 +186,31 @@ export default function MLAccountDashboard() {
           .from('mercado_livre_products')
           .select('*')
           .eq('ml_account_id', accountId)
-          .eq('has_low_quality_photos', true)
-          .order('title')
-          .limit(10),
+          .order('title'),
         
         supabase
           .from('mercado_livre_full_stock')
           .select('*')
           .eq('ml_account_id', accountId)
-          .order('synced_at', { ascending: false })
+          .order('ml_item_id')
       ]);
+
+      // Enriquecer dados do estoque com informações dos produtos
+      const enrichedStock = await Promise.all(
+        (stockResult.data || []).map(async (stock) => {
+          const { data: product } = await supabase
+            .from('mercado_livre_products')
+            .select('title, thumbnail, permalink')
+            .eq('ml_item_id', stock.ml_item_id)
+            .eq('ml_account_id', accountId)
+            .single();
+          
+          return {
+            ...stock,
+            mercado_livre_products: product || undefined
+          };
+        })
+      );
 
       if (metricsResult.error) throw metricsResult.error;
       if (productsResult.error) throw productsResult.error;
@@ -196,7 +218,7 @@ export default function MLAccountDashboard() {
 
       setMetrics(metricsResult.data);
       setProducts(productsResult.data || []);
-      setFullStock(stockResult.data || []);
+      setFullStock(enrichedStock);
     } catch (error: any) {
       console.error('Error loading account data:', error);
       toast.error('Erro ao carregar dados da conta');

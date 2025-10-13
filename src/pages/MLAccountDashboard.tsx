@@ -587,45 +587,6 @@ export default function MLAccountDashboard() {
                 </div>
               ) : (
                 <>
-                  {/* Estatísticas */}
-                  {metrics && (
-                    <div className="grid md:grid-cols-3 gap-4">
-                      <Card>
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm font-medium">Anúncios Ativos</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                            {metrics.active_listings}
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm font-medium">Anúncios Pausados</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                            {metrics.paused_listings}
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm font-medium">Fotos Baixa Qualidade</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                            {lowQualityPercentage.toFixed(1)}%
-                          </div>
-                          <p className="text-sm text-muted-foreground">{lowQualityProducts.length} de {metrics.total_listings}</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
-
                   {/* Subnavegação de Anúncios */}
                   <Tabs value={adsFilter} onValueChange={(v) => setAdsFilter(v as any)} className="w-full">
                     <TabsList className="grid w-full grid-cols-3">

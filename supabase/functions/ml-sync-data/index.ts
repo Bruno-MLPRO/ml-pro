@@ -387,6 +387,34 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
   // Extrair métricas de qualidade
   const metrics = userInfo.seller_reputation?.metrics || {};
 
+  // 🔧 CORREÇÃO: Para contas com Decola, usar valores REAIS (excluded)
+  const getMetricValue = (metric: any, field: 'rate' | 'value') => {
+    if (!metric) return 0;
+    
+    // Se tem Decola e existem valores reais no campo "excluded"
+    if (hasDecola && metric.excluded) {
+      const realField = field === 'rate' ? 'real_rate' : 'real_value';
+      return metric.excluded[realField] || 0;
+    }
+    
+    // Caso contrário, usar valores normais
+    return metric[field] || 0;
+  };
+
+  const claimsValue = getMetricValue(metrics.claims, 'value');
+  const claimsRate = getMetricValue(metrics.claims, 'rate');
+  const delayedValue = getMetricValue(metrics.delayed_handling_time, 'value');
+  const delayedRate = getMetricValue(metrics.delayed_handling_time, 'rate');
+  const cancellationsValue = getMetricValue(metrics.cancellations, 'value');
+  const cancellationsRate = getMetricValue(metrics.cancellations, 'rate');
+
+  console.log('Metrics collection:', {
+    hasDecola,
+    claims: { protected: metrics.claims?.value, real: claimsValue },
+    delayed: { protected: metrics.delayed_handling_time?.value, real: delayedValue },
+    cancellations: { protected: metrics.cancellations?.value, real: cancellationsValue }
+  });
+
   const { error } = await supabase
     .from('mercado_livre_metrics')
     .upsert({
@@ -410,22 +438,20 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
       neutral_ratings_rate: userInfo.seller_reputation?.transactions?.ratings?.neutral || 0,
       negative_ratings_rate: userInfo.seller_reputation?.transactions?.ratings?.negative || 0,
       
-      // Métricas de qualidade (últimos 60 dias)
-      claims_rate: metrics.claims?.rate || 0,
-      claims_value: metrics.claims?.value || 0,
-      delayed_handling_rate: metrics.delayed_handling_time?.rate || 0,
-      delayed_handling_value: metrics.delayed_handling_time?.value || 0,
-      cancellations_rate: metrics.cancellations?.rate || 0,
-      cancellations_value: metrics.cancellations?.value || 0,
+      // Métricas de qualidade (valores REAIS quando tem Decola)
+      claims_rate: claimsRate,
+      claims_value: claimsValue,
+      delayed_handling_rate: delayedRate,
+      delayed_handling_value: delayedValue,
+      cancellations_rate: cancellationsRate,
+      cancellations_value: cancellationsValue,
       
       // Programa Decola
       has_decola: hasDecola,
       real_reputation_level: sellerReputation.real_level || null,
       protection_end_date: sellerReputation.protection_end_date || null,
       decola_problems_count: hasDecola ? 
-        (metrics.claims?.value || 0) + 
-        (metrics.delayed_handling_time?.value || 0) + 
-        (metrics.cancellations?.value || 0) : 0,
+        claimsValue + delayedValue + cancellationsValue : 0,
       
       has_full: hasFull,
       is_mercado_lider: isMercadoLider,

@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ReputationBadge } from "@/components/ReputationBadge";
-import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt } from "lucide-react";
+import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface MLAccount {
@@ -61,6 +61,8 @@ interface MLProduct {
   min_photo_dimension: number | null;
   photo_count: number;
   permalink: string;
+  shipping_mode: string | null;
+  logistic_type: string | null;
 }
 
 interface MLFullStock {
@@ -79,6 +81,15 @@ interface MLFullStock {
   };
 }
 
+interface ShippingStats {
+  flex: number;
+  agencies: number;
+  collection: number;
+  full: number;
+  own: number;
+  total: number;
+}
+
 export default function MLAccountDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -90,6 +101,7 @@ export default function MLAccountDashboard() {
   const [fullStock, setFullStock] = useState<MLFullStock[]>([]);
   const [loading, setLoading] = useState(true);
   const [adsFilter, setAdsFilter] = useState<'low_quality_photos' | 'no_description' | 'no_tax_data'>('low_quality_photos');
+  const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -148,6 +160,31 @@ export default function MLAccountDashboard() {
       supabase.removeChannel(stockChannel);
     };
   }, [selectedAccountId]);
+
+  const calculateShippingStats = (products: MLProduct[]): ShippingStats => {
+    const activeProducts = products.filter(p => p.status === 'active');
+    const total = activeProducts.length;
+    
+    const flex = activeProducts.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+    ).length;
+    
+    const agencies = activeProducts.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
+    ).length;
+    
+    const collection = activeProducts.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
+    ).length;
+    
+    const full = activeProducts.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'fulfillment'
+    ).length;
+    
+    const own = total - (flex + agencies + collection + full);
+    
+    return { flex, agencies, collection, full, own, total };
+  };
 
   const loadMLAccounts = async () => {
     try {
@@ -222,6 +259,10 @@ export default function MLAccountDashboard() {
       setMetrics(metricsResult.data);
       setProducts(productsResult.data || []);
       setFullStock(enrichedStock);
+      
+      // Calculate shipping statistics
+      const stats = calculateShippingStats(productsResult.data || []);
+      setShippingStats(stats);
     } catch (error: any) {
       console.error('Error loading account data:', error);
       toast.error('Erro ao carregar dados da conta');
@@ -381,12 +422,10 @@ export default function MLAccountDashboard() {
                 <>
                   {/* Badges de Status */}
                   <div className="flex flex-wrap gap-3">
-                    <Badge variant={metrics.has_decola ? "default" : "outline"} className="px-4 py-2">
-                      {metrics.has_decola ? <CheckCircle2 className="w-4 h-4 mr-2" /> : <XCircle className="w-4 h-4 mr-2" />}
-                      Decola {metrics.has_decola ? "Ativo" : "Inativo"}
-                    </Badge>
-                    
-                    <Badge variant={metrics.has_full ? "default" : "outline"} className="px-4 py-2">
+                    <Badge 
+                      variant={metrics.has_full ? "default" : "outline"}
+                      className={metrics.has_full ? "px-4 py-2 bg-orange-500 hover:bg-orange-600" : "px-4 py-2"}
+                    >
                       {metrics.has_full ? <CheckCircle2 className="w-4 h-4 mr-2" /> : <XCircle className="w-4 h-4 mr-2" />}
                       FULL {metrics.has_full ? "Ativo" : "Inativo"}
                     </Badge>
@@ -477,15 +516,28 @@ export default function MLAccountDashboard() {
                   )}
 
                   {/* Reputação */}
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3">Reputação</h3>
-                    <ReputationBadge
-                      color={metrics.reputation_color}
-                      levelId={metrics.reputation_level}
-                      positiveRate={metrics.positive_ratings_rate}
-                      totalTransactions={metrics.reputation_transactions_total}
-                    />
-                  </div>
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle>Reputação</CardTitle>
+                        <Badge 
+                          variant={metrics.has_decola ? "default" : "outline"}
+                          className="ml-auto"
+                        >
+                          {metrics.has_decola ? <CheckCircle2 className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
+                          Decola {metrics.has_decola ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <ReputationBadge
+                        color={metrics.reputation_color}
+                        levelId={metrics.reputation_level}
+                        positiveRate={metrics.positive_ratings_rate}
+                        totalTransactions={metrics.reputation_transactions_total}
+                      />
+                    </CardContent>
+                  </Card>
 
                   {/* Métricas de Qualidade */}
                   <div>
@@ -571,6 +623,156 @@ export default function MLAccountDashboard() {
                       </Card>
                     </div>
                   </div>
+
+                  {/* Tipos de Envio */}
+                  {shippingStats && (
+                    <div className="mt-6">
+                      <h3 className="text-lg font-semibold mb-4">Tipos de Envio</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Distribuição de anúncios por modalidade de envio Mercado Livre
+                      </p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Badge FLEX */}
+                        {shippingStats.flex > 0 ? (
+                          <div className="p-4 rounded-lg border border-blue-500 bg-blue-50 dark:bg-blue-950">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Package className="w-5 h-5 text-blue-500" />
+                                <span className="font-semibold">FLEX</span>
+                              </div>
+                              <Badge className="bg-blue-500">
+                                {shippingStats.flex} produto{shippingStats.flex !== 1 ? 's' : ''}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-1">Leva ao correio</p>
+                            <div className="flex items-center gap-2">
+                              <Progress value={(shippingStats.flex / shippingStats.total) * 100} className="h-1 flex-1" />
+                              <span className="text-xs font-medium">{((shippingStats.flex / shippingStats.total) * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Package className="w-5 h-5 text-muted-foreground" />
+                                <span className="font-semibold text-muted-foreground">FLEX</span>
+                              </div>
+                              <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">Leva ao correio</p>
+                          </div>
+                        )}
+                        
+                        {/* Badge Agências */}
+                        {shippingStats.agencies > 0 ? (
+                          <div className="p-4 rounded-lg border border-purple-500 bg-purple-50 dark:bg-purple-950">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <MapPin className="w-5 h-5 text-purple-500" />
+                                <span className="font-semibold">Agências</span>
+                              </div>
+                              <Badge className="bg-purple-500">
+                                {shippingStats.agencies} produto{shippingStats.agencies !== 1 ? 's' : ''}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-1">Leva ao ponto de coleta</p>
+                            <div className="flex items-center gap-2">
+                              <Progress value={(shippingStats.agencies / shippingStats.total) * 100} className="h-1 flex-1" />
+                              <span className="text-xs font-medium">{((shippingStats.agencies / shippingStats.total) * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <MapPin className="w-5 h-5 text-muted-foreground" />
+                                <span className="font-semibold text-muted-foreground">Agências</span>
+                              </div>
+                              <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">Leva ao ponto de coleta</p>
+                          </div>
+                        )}
+                        
+                        {/* Badge Coleta */}
+                        {shippingStats.collection > 0 ? (
+                          <div className="p-4 rounded-lg border border-green-500 bg-green-50 dark:bg-green-950">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Truck className="w-5 h-5 text-green-500" />
+                                <span className="font-semibold">Coleta</span>
+                              </div>
+                              <Badge className="bg-green-500">
+                                {shippingStats.collection} produto{shippingStats.collection !== 1 ? 's' : ''}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-1">ML coleta em casa</p>
+                            <div className="flex items-center gap-2">
+                              <Progress value={(shippingStats.collection / shippingStats.total) * 100} className="h-1 flex-1" />
+                              <span className="text-xs font-medium">{((shippingStats.collection / shippingStats.total) * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Truck className="w-5 h-5 text-muted-foreground" />
+                                <span className="font-semibold text-muted-foreground">Coleta</span>
+                              </div>
+                              <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">ML coleta em casa</p>
+                          </div>
+                        )}
+                        
+                        {/* Badge FULL */}
+                        {shippingStats.full > 0 ? (
+                          <div className="p-4 rounded-lg border border-orange-500 bg-orange-50 dark:bg-orange-950">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Warehouse className="w-5 h-5 text-orange-500" />
+                                <span className="font-semibold">FULL</span>
+                              </div>
+                              <Badge className="bg-orange-500">
+                                {shippingStats.full} produto{shippingStats.full !== 1 ? 's' : ''}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-1">ML armazena e envia</p>
+                            <div className="flex items-center gap-2">
+                              <Progress value={(shippingStats.full / shippingStats.total) * 100} className="h-1 flex-1" />
+                              <span className="text-xs font-medium">{((shippingStats.full / shippingStats.total) * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Warehouse className="w-5 h-5 text-muted-foreground" />
+                                <span className="font-semibold text-muted-foreground">FULL</span>
+                              </div>
+                              <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">ML armazena e envia</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Resumo */}
+                      <div className="mt-4 pt-4 border-t">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Total de anúncios ativos</span>
+                          <span className="font-semibold">{shippingStats.total}</span>
+                        </div>
+                        {shippingStats.own > 0 && (
+                          <div className="flex items-center justify-between text-sm mt-2">
+                            <span className="text-muted-foreground">Envio próprio</span>
+                            <span>{shippingStats.own} ({((shippingStats.own / shippingStats.total) * 100).toFixed(0)}%)</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-center py-12">

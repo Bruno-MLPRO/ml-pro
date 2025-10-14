@@ -569,15 +569,15 @@ const StudentDashboard = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 dark:bg-gray-900 opacity-50">
+                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <Package className="w-5 h-5 text-gray-400" />
-                          <span className="font-semibold text-gray-400">FLEX</span>
+                          <Package className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-muted-foreground">FLEX</span>
                         </div>
-                        <Badge variant="outline" className="text-gray-400">Inativo</Badge>
+                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                       </div>
-                      <p className="text-xs text-gray-400">Leva ao correio</p>
+                      <p className="text-xs text-muted-foreground">Leva ao correio</p>
                     </div>
                   )}
 
@@ -600,15 +600,15 @@ const StudentDashboard = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 dark:bg-gray-900 opacity-50">
+                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <MapPin className="w-5 h-5 text-gray-400" />
-                          <span className="font-semibold text-gray-400">Agências</span>
+                          <MapPin className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-muted-foreground">Agências</span>
                         </div>
-                        <Badge variant="outline" className="text-gray-400">Inativo</Badge>
+                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                       </div>
-                      <p className="text-xs text-gray-400">Leva ao ponto de coleta</p>
+                      <p className="text-xs text-muted-foreground">Leva ao ponto de coleta</p>
                     </div>
                   )}
 
@@ -631,15 +631,15 @@ const StudentDashboard = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 dark:bg-gray-900 opacity-50">
+                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <Truck className="w-5 h-5 text-gray-400" />
-                          <span className="font-semibold text-gray-400">Coleta</span>
+                          <Truck className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-muted-foreground">Coleta</span>
                         </div>
-                        <Badge variant="outline" className="text-gray-400">Inativo</Badge>
+                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                       </div>
-                      <p className="text-xs text-gray-400">ML coleta em casa</p>
+                      <p className="text-xs text-muted-foreground">ML coleta em casa</p>
                     </div>
                   )}
 
@@ -662,15 +662,15 @@ const StudentDashboard = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 dark:bg-gray-900 opacity-50">
+                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <Warehouse className="w-5 h-5 text-gray-400" />
-                          <span className="font-semibold text-gray-400">FULL</span>
+                          <Warehouse className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-muted-foreground">FULL</span>
                         </div>
-                        <Badge variant="outline" className="text-gray-400">Inativo</Badge>
+                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                       </div>
-                      <p className="text-xs text-gray-400">ML armazena e envia</p>
+                      <p className="text-xs text-muted-foreground">ML armazena e envia</p>
                     </div>
                   )}
                 </div>

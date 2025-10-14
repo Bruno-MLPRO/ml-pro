@@ -354,40 +354,98 @@ export default function StudentsManagement() {
   };
 
   const handleCreateStudent = async () => {
+    // Validação dos campos obrigatórios
+    if (!formData.email || !formData.full_name) {
+      toast({
+        title: "Erro",
+        description: "Por favor, preencha todos os campos obrigatórios",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validação adicional para estrutura PJ
+    if (formData.estrutura_vendedor === 'PJ' && !formData.tipo_pj) {
+      toast({
+        title: "Erro",
+        description: "Tipo de PJ é obrigatório quando a estrutura é PJ",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validação de formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast({
+        title: "Erro",
+        description: "Por favor, insira um email válido",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
+      // Preparar dados para envio
+      const studentData: any = {
+        email: formData.email,
+        password: DEFAULT_PASSWORD,
+        full_name: formData.full_name,
+        phone: formData.phone,
+        turma: formData.turma,
+        estado: formData.estado,
+        estrutura_vendedor: formData.estrutura_vendedor,
+        possui_contador: formData.possui_contador,
+        caixa: formData.caixa ? parseFloat(formData.caixa) : null,
+        hub_logistico: formData.hub_logistico,
+        sistemas_externos: formData.sistemas_externos,
+        mentoria_status: formData.mentoria_status,
+      };
+
+      // Só enviar tipo_pj e cnpj se estrutura for PJ
+      if (formData.estrutura_vendedor === 'PJ') {
+        studentData.tipo_pj = formData.tipo_pj;
+        studentData.cnpj = formData.cnpj;
+      }
+
+      console.log('Sending student data to edge function:', studentData);
+
       const { data, error } = await supabase.functions.invoke('create-student', {
-        body: {
-          email: formData.email,
-          password: DEFAULT_PASSWORD,
-          full_name: formData.full_name,
-          phone: formData.phone,
-          turma: formData.turma,
-          estado: formData.estado,
-          estrutura_vendedor: formData.estrutura_vendedor,
-          tipo_pj: formData.estrutura_vendedor === "PJ" ? formData.tipo_pj : null,
-          cnpj: formData.estrutura_vendedor === "PJ" ? formData.cnpj : null,
-          possui_contador: formData.possui_contador,
-          caixa: formData.caixa ? parseFloat(formData.caixa) : null,
-          hub_logistico: formData.hub_logistico,
-          sistemas_externos: formData.sistemas_externos,
-          mentoria_status: formData.mentoria_status,
-        },
+        body: studentData,
       });
 
       if (error) {
         console.error('Error calling create-student function:', error);
+        
+        let errorMessage = "Erro ao criar aluno";
+        if (error.message?.includes('Edge Function')) {
+          errorMessage = "Erro ao processar a solicitação. Verifique sua conexão e tente novamente.";
+        } else if (error.message?.includes('autorizado')) {
+          errorMessage = "Você não tem permissão para criar alunos. Faça login novamente.";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+
         toast({
           title: "Erro ao criar aluno",
-          description: error.message || "Erro ao criar aluno",
+          description: errorMessage,
           variant: "destructive",
         });
         return;
       }
 
       if (data?.error) {
+        let errorMessage = data.error;
+        
+        if (errorMessage.includes('already registered') || errorMessage.includes('já está cadastrado')) {
+          errorMessage = "Este email já está cadastrado";
+        } else if (errorMessage.includes('tipo_pj')) {
+          errorMessage = "Erro na validação do tipo de PJ. Verifique os dados.";
+        }
+
         toast({
           title: "Erro ao criar aluno",
-          description: data.error,
+          description: errorMessage,
           variant: "destructive",
         });
         return;
@@ -401,11 +459,17 @@ export default function StudentsManagement() {
       setIsCreateDialogOpen(false);
       resetForm();
       fetchStudents();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Unexpected error:', err);
+      
+      let errorMessage = "Erro inesperado ao criar aluno";
+      if (err.message) {
+        errorMessage = err.message;
+      }
+
       toast({
         title: "Erro ao criar aluno",
-        description: "Erro inesperado ao criar aluno",
+        description: errorMessage,
         variant: "destructive",
       });
     }

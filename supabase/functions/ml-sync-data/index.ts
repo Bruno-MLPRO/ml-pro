@@ -169,9 +169,27 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
           console.log('Error fetching description for', item.id)
         }
 
-        // Buscar dados fiscais (NCM nos atributos - específico para Brasil)
-        const ncmAttribute = item.attributes?.find((attr: any) => attr.id === 'NCM')
-        const hasTaxData = !!(ncmAttribute?.value_name)
+        // Buscar dados fiscais - Verificar múltiplos atributos fiscais
+        const fiscalAttributeIds = ['GTIN', 'EAN', 'NCM', 'SELLER_SKU'];
+        
+        // Verificar atributos fiscais com valores preenchidos
+        const fiscalAttributesFound = item.attributes?.filter((attr: any) => 
+          fiscalAttributeIds.includes(attr.id) && 
+          (attr.value_name || attr.value_id || attr.values?.[0]?.name)
+        ) || [];
+        
+        // Verificar sale_terms para SELLER_SKU
+        const fiscalSaleTermsFound = item.sale_terms?.filter((term: any) => 
+          term.id === 'SELLER_SKU' && term.value_name
+        ) || [];
+        
+        const hasTaxData = fiscalAttributesFound.length > 0 || fiscalSaleTermsFound.length > 0;
+        
+        // Log para debug (produtos sem dados fiscais)
+        if (!hasTaxData) {
+          console.log(`⚠️ Item sem dados fiscais: ${item.id} - ${item.title}`);
+          console.log('  Atributos fiscais encontrados:', fiscalAttributesFound.map((a: any) => `${a.id}=${a.value_name || a.value_id}`));
+        }
         
         const { error } = await supabase
           .from('mercado_livre_products')

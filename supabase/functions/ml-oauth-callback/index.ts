@@ -27,31 +27,13 @@ Deno.serve(async (req) => {
     const secretKey = Deno.env.get('MERCADO_LIVRE_SECRET_KEY')!
     const callbackUrl = `${supabaseUrl}/functions/v1/ml-oauth-callback`
 
-    console.log('=== ML OAuth Callback Started ===')
-    console.log('Code received:', code ? 'YES' : 'NO')
-    console.log('State received:', state ? 'YES' : 'NO')
-    console.log('Callback URL:', callbackUrl)
-    console.log('APP_ID configured:', appId ? 'YES' : 'NO')
-    console.log('SECRET_KEY configured:', secretKey ? 'YES' : 'NO')
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Trocar código por tokens
     console.log('Exchanging code for tokens...')
-    
-    console.log('Token request params:', {
-      grant_type: 'authorization_code',
-      client_id: appId,
-      redirect_uri: callbackUrl,
-      code_length: code.length
-    })
-    
     const tokenResponse = await fetch('https://api.mercadolibre.com/oauth/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: appId,
@@ -63,17 +45,8 @@ Deno.serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
-      console.error('=== Token Exchange Failed ===')
-      console.error('Status:', tokenResponse.status)
-      console.error('Error:', errorText)
-      
-      let mlError = 'Failed to exchange code for tokens'
-      try {
-        const errorJson = JSON.parse(errorText)
-        mlError = errorJson.message || errorJson.error || mlError
-      } catch {}
-      
-      throw new Error(`ML API Error: ${mlError} (Status: ${tokenResponse.status})`)
+      console.error('Token exchange failed:', errorText)
+      throw new Error('Failed to exchange code for tokens')
     }
 
     const tokens = await tokenResponse.json()
@@ -91,26 +64,7 @@ Deno.serve(async (req) => {
     const mlUser = await userResponse.json()
     console.log('ML user info:', mlUser.id, mlUser.nickname)
 
-    // Verificar se este state já foi processado (prevenir duplicatas)
-    const { data: stateCheck } = await supabase
-      .from('mercado_livre_accounts')
-      .select('id')
-      .eq('ml_user_id', stateId)
-      .maybeSingle()
-    
-    if (!stateCheck) {
-      console.log('State already processed, preventing duplicate')
-      const dashboardUrl = `${url.origin}/aluno/dashboard?ml_already_processed=true`
-      return new Response(null, {
-        status: 302,
-        headers: {
-          'Location': dashboardUrl,
-          ...corsHeaders
-        }
-      })
-    }
-    
-    // Deletar entrada temporária após verificação
+    // Deletar entrada temporária
     await supabase
       .from('mercado_livre_accounts')
       .delete()
@@ -119,61 +73,25 @@ Deno.serve(async (req) => {
     // Calcular expiração do token
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
-    // Verificar se conta já existe
-    const { data: existingAccount } = await supabase
+    // Salvar conta no banco
+    const { data: account, error: insertError } = await supabase
       .from('mercado_livre_accounts')
-      .select('id')
-      .eq('student_id', userId)
-      .eq('ml_user_id', mlUser.id.toString())
+      .insert({
+        student_id: userId,
+        ml_user_id: mlUser.id.toString(),
+        ml_nickname: mlUser.nickname,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_expires_at: expiresAt,
+        is_primary: false,
+        is_active: true
+      })
+      .select()
       .single()
 
-    let account;
-    if (existingAccount) {
-      // Atualizar conta existente
-      console.log('Updating existing account:', existingAccount.id)
-      const { data: updatedAccount, error: updateError } = await supabase
-        .from('mercado_livre_accounts')
-        .update({
-          ml_nickname: mlUser.nickname,
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          token_expires_at: expiresAt,
-          is_active: true,
-          last_sync_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingAccount.id)
-        .select()
-        .single()
-
-      if (updateError) {
-        console.error('Error updating account:', updateError)
-        throw new Error('Erro ao atualizar conta do Mercado Livre. Por favor, tente novamente.')
-      }
-      account = updatedAccount
-    } else {
-      // Inserir nova conta
-      console.log('Creating new account')
-      const { data: newAccount, error: insertError } = await supabase
-        .from('mercado_livre_accounts')
-        .insert({
-          student_id: userId,
-          ml_user_id: mlUser.id.toString(),
-          ml_nickname: mlUser.nickname,
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          token_expires_at: expiresAt,
-          is_primary: false,
-          is_active: true
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        console.error('Error inserting account:', insertError)
-        throw new Error('Erro ao conectar conta do Mercado Livre. Por favor, tente novamente.')
-      }
-      account = newAccount
+    if (insertError) {
+      console.error('Error inserting account:', insertError)
+      throw insertError
     }
 
     console.log('Account saved:', account.id)
@@ -181,17 +99,11 @@ Deno.serve(async (req) => {
     // Configurar webhooks em background
     setupWebhooks(mlUser.id, tokens.access_token, account.id, supabase)
 
-    // Iniciar sincronização inicial em background (só para contas novas)
-    if (!existingAccount) {
-      initialSync(account.id, mlUser.id.toString(), tokens.access_token, userId, supabase)
-    } else {
-      console.log('Account reconnected, updating metrics only')
-    }
+    // Iniciar sincronização inicial em background
+    initialSync(account.id, mlUser.id.toString(), tokens.access_token, userId, supabase)
 
-    // Redirecionar para o dashboard com informações adicionais
-    const dashboardUrl = `${url.origin}/aluno/dashboard?ml_connected=true&nickname=${encodeURIComponent(mlUser.nickname)}&timestamp=${Date.now()}`
-    
-    console.log('Redirecting to:', dashboardUrl)
+    // Redirecionar para o dashboard
+    const dashboardUrl = `${url.origin}/aluno/dashboard?ml_connected=true`
     
     return new Response(null, {
       status: 302,
@@ -202,23 +114,7 @@ Deno.serve(async (req) => {
     })
   } catch (error) {
     console.error('Error in ml-oauth-callback:', error)
-    
-    let errorMessage = 'Erro desconhecido ao conectar conta do Mercado Livre'
-    
-  if (error instanceof Error) {
-    // Tratar erros específicos
-    if (error.message.includes('requested path is invalid')) {
-      errorMessage = 'URL de callback não autorizada no Mercado Livre. Verifique as configurações do app.'
-    } else if (error.message.includes('duplicate key')) {
-      errorMessage = 'Esta conta do Mercado Livre já está conectada. Tente desconectar primeiro.'
-    } else if (error.message.includes('Failed to exchange code') || error.message.includes('ML API Error')) {
-      errorMessage = 'Credenciais do Mercado Livre inválidas. Verifique APP_ID e SECRET_KEY.'
-    } else if (error.message.includes('Failed to fetch user info')) {
-      errorMessage = 'Não foi possível obter informações da conta do Mercado Livre.'
-    } else {
-      errorMessage = error.message
-    }
-  }
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     
     const errorUrl = `${new URL(req.url).origin}/aluno/dashboard?ml_error=${encodeURIComponent(errorMessage)}`
     return new Response(null, {

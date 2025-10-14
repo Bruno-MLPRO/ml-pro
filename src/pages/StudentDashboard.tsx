@@ -562,7 +562,6 @@ const StudentDashboard = () => {
                           {shippingStats.flex.count} produto{shippingStats.flex.count !== 1 ? 's' : ''}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-1">Leva ao correio</p>
                       <div className="flex items-center gap-2">
                         <Progress value={shippingStats.flex.percentage} className="h-1 flex-1" />
                         <span className="text-xs font-medium">{shippingStats.flex.percentage.toFixed(0)}%</span>
@@ -577,7 +576,7 @@ const StudentDashboard = () => {
                         </div>
                         <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">Leva ao correio</p>
+                      
                     </div>
                   )}
 
@@ -593,7 +592,6 @@ const StudentDashboard = () => {
                           {shippingStats.agencies.count} produto{shippingStats.agencies.count !== 1 ? 's' : ''}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-1">Leva ao ponto de coleta</p>
                       <div className="flex items-center gap-2">
                         <Progress value={shippingStats.agencies.percentage} className="h-1 flex-1" />
                         <span className="text-xs font-medium">{shippingStats.agencies.percentage.toFixed(0)}%</span>
@@ -608,7 +606,7 @@ const StudentDashboard = () => {
                         </div>
                         <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">Leva ao ponto de coleta</p>
+                      
                     </div>
                   )}
 
@@ -624,7 +622,6 @@ const StudentDashboard = () => {
                           {shippingStats.collection.count} produto{shippingStats.collection.count !== 1 ? 's' : ''}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-1">ML coleta em casa</p>
                       <div className="flex items-center gap-2">
                         <Progress value={shippingStats.collection.percentage} className="h-1 flex-1" />
                         <span className="text-xs font-medium">{shippingStats.collection.percentage.toFixed(0)}%</span>
@@ -639,7 +636,7 @@ const StudentDashboard = () => {
                         </div>
                         <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">ML coleta em casa</p>
+                      
                     </div>
                   )}
 
@@ -655,7 +652,6 @@ const StudentDashboard = () => {
                           {shippingStats.full.count} produto{shippingStats.full.count !== 1 ? 's' : ''}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-1">ML armazena e envia</p>
                       <div className="flex items-center gap-2">
                         <Progress value={shippingStats.full.percentage} className="h-1 flex-1" />
                         <span className="text-xs font-medium">{shippingStats.full.percentage.toFixed(0)}%</span>
@@ -670,7 +666,7 @@ const StudentDashboard = () => {
                         </div>
                         <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">ML armazena e envia</p>
+                      
                     </div>
                   )}
                 </div>

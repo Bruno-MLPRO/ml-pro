@@ -609,31 +609,56 @@ export default function StudentDetails() {
                           <CardHeader>
                             <CardTitle className="text-sm font-medium">Status da Conta</CardTitle>
                           </CardHeader>
-                          <CardContent className="space-y-2">
+                          <CardContent className="space-y-4">
                             {(() => {
                               const account = mlAccounts.find(a => a.id === selectedAccountId);
                               return account ? (
                                 <>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-sm text-muted-foreground">Nome da Conta</span>
-                                    <span className="font-medium">@{account.ml_nickname}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-sm text-muted-foreground">Status</span>
-                                    <Badge variant={account.is_active ? "default" : "secondary"}>
-                                      {account.is_active ? "Ativa" : "Inativa"}
-                                    </Badge>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-sm text-muted-foreground">Conta Principal</span>
-                                    <span className="font-medium">{account.is_primary ? "Sim" : "Não"}</span>
-                                  </div>
-                                  {account.last_sync_at && (
+                                  <div className="space-y-2">
                                     <div className="flex items-center justify-between">
-                                      <span className="text-sm text-muted-foreground">Última Sincronização</span>
-                                      <span className="font-medium text-sm">
-                                        {new Date(account.last_sync_at).toLocaleString('pt-BR')}
-                                      </span>
+                                      <span className="text-sm text-muted-foreground">Nome da Conta</span>
+                                      <span className="font-medium">@{account.ml_nickname}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm text-muted-foreground">Status</span>
+                                      <Badge variant={account.is_active ? "default" : "secondary"}>
+                                        {account.is_active ? "Ativa" : "Inativa"}
+                                      </Badge>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm text-muted-foreground">Conta Principal</span>
+                                      <span className="font-medium">{account.is_primary ? "Sim" : "Não"}</span>
+                                    </div>
+                                    {account.last_sync_at && (
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm text-muted-foreground">Última Sincronização</span>
+                                        <span className="font-medium text-sm">
+                                          {new Date(account.last_sync_at).toLocaleString('pt-BR')}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Reputação */}
+                                  {metrics && (
+                                    <div className="pt-4 border-t space-y-3">
+                                      <h4 className="font-semibold">Reputação</h4>
+                                      <ReputationBadge
+                                        color={metrics.reputation_color}
+                                        levelId={metrics.reputation_level}
+                                        positiveRate={metrics.positive_ratings_rate}
+                                        totalTransactions={metrics.reputation_transactions_total}
+                                      />
+                                      <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                          <p className="text-muted-foreground text-xs">Avaliações Positivas</p>
+                                          <p className="text-lg font-bold">{metrics.positive_ratings_rate.toFixed(1)}%</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-muted-foreground text-xs">Total de Transações</p>
+                                          <p className="text-lg font-bold">{metrics.reputation_transactions_total}</p>
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
                                 </>
@@ -699,32 +724,9 @@ export default function StudentDetails() {
                         )}
                       </div>
 
-                      {/* Reputação */}
+                      {/* Programas Especiais e Problemas */}
                       {metrics && (
                         <>
-                          <Card>
-                            <CardHeader>
-                              <CardTitle>Reputação</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                              <ReputationBadge
-                                color={metrics.reputation_color}
-                                levelId={metrics.reputation_level}
-                                positiveRate={metrics.positive_ratings_rate}
-                                totalTransactions={metrics.reputation_transactions_total}
-                              />
-                              <div className="grid md:grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <p className="text-muted-foreground">Avaliações Positivas</p>
-                                  <p className="text-lg font-bold">{metrics.positive_ratings_rate.toFixed(1)}%</p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground">Total de Transações</p>
-                                  <p className="text-lg font-bold">{metrics.reputation_transactions_total}</p>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
 
                           {/* Programas Especiais */}
                           <div className="grid md:grid-cols-2 gap-4">

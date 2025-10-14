@@ -407,26 +407,33 @@ export default function StudentDetails() {
 
   const loadMilestonesByTemplate = async (journeyId: string, templateId: string) => {
     try {
+      console.log('Loading milestones for journey:', journeyId, 'template:', templateId);
+      
       const { data: mtemps, error: mtError } = await supabase
         .from('milestone_templates')
         .select('id')
         .eq('journey_template_id', templateId);
 
       if (mtError) throw mtError;
+      console.log('Milestone templates found:', mtemps);
+      
       const templateIds = (mtemps || []).map(t => t.id);
-      if (templateIds.length === 0) {
-        setMilestones([]);
-        return;
-      }
-
-      const { data: milestonesData, error: mError } = await supabase
+      
+      // Buscar milestones que têm template_id OU que pertencem a este journey
+      // (pois alguns podem não ter template_id preenchido)
+      let query = supabase
         .from('milestones')
         .select('*')
-        .eq('journey_id', journeyId)
-        .in('template_id', templateIds)
-        .order('order_index');
+        .eq('journey_id', journeyId);
+      
+      if (templateIds.length > 0) {
+        query = query.or(`template_id.in.(${templateIds.join(',')}),template_id.is.null`);
+      }
+      
+      const { data: milestonesData, error: mError } = await query.order('order_index');
 
       if (mError) throw mError;
+      console.log('Milestones found:', milestonesData);
       setMilestones(milestonesData || []);
     } catch (error: any) {
       console.error('Error loading milestones by template:', error);

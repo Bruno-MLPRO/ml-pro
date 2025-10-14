@@ -29,7 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus, Pencil, Trash2, ExternalLink, X } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, ExternalLink, X, CheckCircle2, XCircle, User, Rocket, Package, Warehouse } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Sidebar } from "@/components/Sidebar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,6 +43,8 @@ interface Student {
   email: string;
   phone: string;
   turma: string;
+  cpf: string | null;
+  cnpj: string | null;
   estrutura_vendedor: string;
   tipo_pj: string | null;
   possui_contador: boolean;
@@ -51,6 +54,9 @@ interface Student {
   mentoria_status: string;
   current_phase?: string;
   overall_progress?: number;
+  has_ml_decola?: boolean;
+  has_ml_flex?: boolean;
+  has_ml_full?: boolean;
 }
 
 interface Plan {
@@ -82,7 +88,7 @@ export default function StudentsManagement() {
   const [journeyTemplates, setJourneyTemplates] = useState<JourneyTemplate[]>([]);
   const [selectedJourneyId, setSelectedJourneyId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("Ativo");
+  const [statusFilter, setStatusFilter] = useState("Todos");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDetailsDialogOpen, setIsViewDetailsDialogOpen] = useState(false);
@@ -232,6 +238,18 @@ export default function StudentsManagement() {
       .select("student_id, apps_extensions(id, name, color)")
       .in("student_id", studentIds);
 
+    // Fetch Mercado Livre metrics for all students
+    const { data: mlMetricsData } = await supabase
+      .from("mercado_livre_metrics")
+      .select("student_id, has_decola, has_full")
+      .in("student_id", studentIds);
+
+    // Fetch Mercado Livre products to check for FLEX
+    const { data: mlProductsData } = await supabase
+      .from("mercado_livre_products")
+      .select("student_id, shipping_mode, logistic_type")
+      .in("student_id", studentIds);
+
     if (journeyIds.length === 0) {
       setStudents(profilesData || []);
       return;
@@ -308,13 +326,27 @@ export default function StudentsManagement() {
         .flat()
         .filter(Boolean) || [];
 
+      // Calculate ML indicators
+      const studentMetrics = mlMetricsData?.filter(m => m.student_id === profile.id) || [];
+      const has_ml_decola = studentMetrics.some(m => m.has_decola === true);
+      const has_ml_full = studentMetrics.some(m => m.has_full === true);
+      
+      // FLEX: shipping_mode = 'me2' AND logistic_type = 'drop_off'
+      const studentProducts = mlProductsData?.filter(p => p.student_id === profile.id) || [];
+      const has_ml_flex = studentProducts.some(p => 
+        p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+      );
+
       return {
         ...profile,
         current_phase: journey?.current_phase || "Onboarding",
         journey_progress: progressByTemplate,
         in_progress_milestones: inProgressByTemplate,
         milestones_status: statusByTemplate,
-        student_apps: studentApps
+        student_apps: studentApps,
+        has_ml_decola,
+        has_ml_flex,
+        has_ml_full,
       };
     }) || [];
 
@@ -1118,56 +1150,111 @@ export default function StudentsManagement() {
               </Dialog>
             </div>
 
-            <div className="border rounded-lg">
+            <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Turma</TableHead>
-                    <TableHead>Fase</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Nome</TableHead>
+                    <TableHead className="font-semibold">Email</TableHead>
+                    <TableHead className="font-semibold">Plano</TableHead>
+                    <TableHead className="font-semibold">CPF/CNPJ</TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <User className="h-4 w-4" />
+                        <span>Contador</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Rocket className="h-4 w-4" />
+                        <span>Decola</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Package className="h-4 w-4" />
+                        <span>Flex</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Warehouse className="h-4 w-4" />
+                        <span>Full</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right font-semibold">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredStudents.map((student) => (
-                    <TableRow key={student.id}>
-                      <TableCell className="font-medium">{student.full_name}</TableCell>
-                      <TableCell>{student.email}</TableCell>
-                      <TableCell>{student.phone || "-"}</TableCell>
-                      <TableCell>{student.turma || "-"}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPhaseColor(
-                            student.current_phase || "Onboarding"
-                          )}`}
-                        >
-                          {student.current_phase || "Onboarding"}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            student.mentoria_status === "Ativo"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                              : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
-                          }`}
-                        >
-                          {student.mentoria_status || "Ativo"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(student)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteStudent(student.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredStudents.map((student) => {
+                    const documentType = student.cnpj 
+                      ? student.tipo_pj || 'PJ' 
+                      : 'CPF';
+                    const documentNumber = student.cnpj || student.cpf || '-';
+                    
+                    return (
+                      <TableRow 
+                        key={student.id} 
+                        className="hover:bg-muted/30 cursor-pointer transition-colors"
+                        onClick={() => openViewDetailsDialog(student)}
+                      >
+                        <TableCell className="font-medium">
+                          {student.full_name}
+                          {student.mentoria_status !== "Ativo" && (
+                            <span className="text-muted-foreground italic ml-2">(Inativo)</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{student.email}</TableCell>
+                        <TableCell>
+                          <span className="font-medium">{student.turma || "-"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={documentType === 'CPF' ? 'secondary' : documentType === 'MEI' ? 'default' : 'outline'}>
+                              {documentType}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">{documentNumber}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.possui_contador ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_ml_decola ? (
+                            <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_ml_flex ? (
+                            <CheckCircle2 className="h-5 w-5 text-purple-600 dark:text-purple-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_ml_full ? (
+                            <CheckCircle2 className="h-5 w-5 text-orange-600 dark:text-orange-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(student)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteStudent(student.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

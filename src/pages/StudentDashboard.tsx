@@ -84,6 +84,33 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Tratar parâmetros de retorno do OAuth do ML
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const mlError = urlParams.get('ml_error');
+    const mlConnected = urlParams.get('ml_connected');
+
+    if (mlError) {
+      toast({
+        title: "Erro ao conectar Mercado Livre",
+        description: decodeURIComponent(mlError),
+        variant: "destructive",
+      });
+      // Limpar parâmetro da URL
+      window.history.replaceState({}, '', '/aluno/dashboard');
+    }
+
+    if (mlConnected === 'true') {
+      toast({
+        title: "Conta conectada com sucesso!",
+        description: "Sua conta do Mercado Livre foi conectada. Os dados serão sincronizados em breve.",
+      });
+      // Limpar parâmetro da URL e recarregar dados
+      window.history.replaceState({}, '', '/aluno/dashboard');
+      if (user) loadMLAccounts();
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!authLoading && (!user || userRole !== 'student')) {
       navigate('/auth');
@@ -316,22 +343,39 @@ const StudentDashboard = () => {
   }
 
   const handleConnectML = async () => {
-    setConnectingML(true)
+    setConnectingML(true);
+    toast({
+      title: "Redirecionando...",
+      description: "Você será redirecionado para o Mercado Livre para autorizar a conexão.",
+    });
+    
     try {
-      const { data, error } = await supabase.functions.invoke('ml-auth-start')
+      const { data, error } = await supabase.functions.invoke('ml-auth-start');
       
       if (error) {
-        console.error('Error starting ML auth:', error)
-        return
+        console.error('Error starting ML auth:', error);
+        toast({
+          title: "Erro ao iniciar conexão",
+          description: "Não foi possível iniciar o processo de conexão. Tente novamente.",
+          variant: "destructive",
+        });
+        setConnectingML(false);
+        return;
       }
 
       if (data?.authorization_url) {
-        window.location.href = data.authorization_url
+        window.location.href = data.authorization_url;
+      } else {
+        throw new Error('No authorization URL received');
       }
     } catch (error) {
-      console.error('Error connecting to ML:', error)
-    } finally {
-      setConnectingML(false)
+      console.error('Error in handleConnectML:', error);
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro ao conectar com o Mercado Livre.",
+        variant: "destructive",
+      });
+      setConnectingML(false);
     }
   }
 

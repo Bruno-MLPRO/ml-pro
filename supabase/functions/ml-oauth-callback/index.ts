@@ -73,25 +73,61 @@ Deno.serve(async (req) => {
     // Calcular expiração do token
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
-    // Salvar conta no banco
-    const { data: account, error: insertError } = await supabase
+    // Verificar se conta já existe
+    const { data: existingAccount } = await supabase
       .from('mercado_livre_accounts')
-      .insert({
-        student_id: userId,
-        ml_user_id: mlUser.id.toString(),
-        ml_nickname: mlUser.nickname,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        token_expires_at: expiresAt,
-        is_primary: false,
-        is_active: true
-      })
-      .select()
+      .select('id')
+      .eq('student_id', userId)
+      .eq('ml_user_id', mlUser.id.toString())
       .single()
 
-    if (insertError) {
-      console.error('Error inserting account:', insertError)
-      throw insertError
+    let account;
+    if (existingAccount) {
+      // Atualizar conta existente
+      console.log('Updating existing account:', existingAccount.id)
+      const { data: updatedAccount, error: updateError } = await supabase
+        .from('mercado_livre_accounts')
+        .update({
+          ml_nickname: mlUser.nickname,
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          token_expires_at: expiresAt,
+          is_active: true,
+          last_sync_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingAccount.id)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error('Error updating account:', updateError)
+        throw new Error('Erro ao atualizar conta do Mercado Livre. Por favor, tente novamente.')
+      }
+      account = updatedAccount
+    } else {
+      // Inserir nova conta
+      console.log('Creating new account')
+      const { data: newAccount, error: insertError } = await supabase
+        .from('mercado_livre_accounts')
+        .insert({
+          student_id: userId,
+          ml_user_id: mlUser.id.toString(),
+          ml_nickname: mlUser.nickname,
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          token_expires_at: expiresAt,
+          is_primary: false,
+          is_active: true
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        console.error('Error inserting account:', insertError)
+        throw new Error('Erro ao conectar conta do Mercado Livre. Por favor, tente novamente.')
+      }
+      account = newAccount
     }
 
     console.log('Account saved:', account.id)
@@ -99,8 +135,12 @@ Deno.serve(async (req) => {
     // Configurar webhooks em background
     setupWebhooks(mlUser.id, tokens.access_token, account.id, supabase)
 
-    // Iniciar sincronização inicial em background
-    initialSync(account.id, mlUser.id.toString(), tokens.access_token, userId, supabase)
+    // Iniciar sincronização inicial em background (só para contas novas)
+    if (!existingAccount) {
+      initialSync(account.id, mlUser.id.toString(), tokens.access_token, userId, supabase)
+    } else {
+      console.log('Account reconnected, updating metrics only')
+    }
 
     // Redirecionar para o dashboard
     const dashboardUrl = `${url.origin}/aluno/dashboard?ml_connected=true`
@@ -114,7 +154,21 @@ Deno.serve(async (req) => {
     })
   } catch (error) {
     console.error('Error in ml-oauth-callback:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    
+    let errorMessage = 'Erro desconhecido ao conectar conta do Mercado Livre'
+    
+    if (error instanceof Error) {
+      // Tratar erros específicos
+      if (error.message.includes('duplicate key')) {
+        errorMessage = 'Esta conta do Mercado Livre já está conectada. Tente desconectar primeiro.'
+      } else if (error.message.includes('Failed to exchange code')) {
+        errorMessage = 'Falha ao validar autorização do Mercado Livre. Por favor, tente novamente.'
+      } else if (error.message.includes('Failed to fetch user info')) {
+        errorMessage = 'Não foi possível obter informações da conta do Mercado Livre.'
+      } else {
+        errorMessage = error.message
+      }
+    }
     
     const errorUrl = `${new URL(req.url).origin}/aluno/dashboard?ml_error=${encodeURIComponent(errorMessage)}`
     return new Response(null, {

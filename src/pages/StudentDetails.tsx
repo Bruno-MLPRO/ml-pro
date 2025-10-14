@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ReputationBadge } from "@/components/ReputationBadge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   ArrowLeft, User, Phone, Mail, MapPin, Building2, DollarSign, Package, 
   TrendingUp, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle,
-  ExternalLink, Home, Image
+  ExternalLink, Home, Image, Plus
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -122,10 +123,16 @@ export default function StudentDetails() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"visao-geral" | "contas-ml" | "apps" | "jornada">("visao-geral");
   const [metrics, setMetrics] = useState<MLMetrics | null>(null);
+  const [consolidatedMetrics, setConsolidatedMetrics] = useState<MLMetrics | null>(null);
   const [products, setProducts] = useState<MLProduct[]>([]);
   const [fullStock, setFullStock] = useState<MLFullStock[]>([]);
   const [studentApps, setStudentApps] = useState<StudentApp[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [availableApps, setAvailableApps] = useState<any[]>([]);
+  const [isAddingApp, setIsAddingApp] = useState(false);
+  const [selectedAppId, setSelectedAppId] = useState<string>("");
+  const [journeys, setJourneys] = useState<any[]>([]);
+  const [selectedJourneyId, setSelectedJourneyId] = useState<string>("");
 
   useEffect(() => {
     if (userRole !== 'manager') {
@@ -170,6 +177,8 @@ export default function StudentDetails() {
 
       if (accountsData && accountsData.length > 0) {
         setSelectedAccountId(accountsData[0].id);
+        // Carregar métricas consolidadas de todas as contas
+        await loadConsolidatedMetrics(accountsData.map(a => a.id));
       }
 
       // Buscar apps do aluno
@@ -182,22 +191,27 @@ export default function StudentDetails() {
       const apps = appsData?.map(sa => sa.apps_extensions).flat().filter(Boolean) || [];
       setStudentApps(apps as StudentApp[]);
 
-      // Buscar jornada e etapas
-      const { data: journeyData, error: journeyError } = await supabase
+      // Buscar jornadas do aluno
+      const { data: journeysData, error: journeyError } = await supabase
         .from('student_journeys')
-        .select('id')
-        .eq('student_id', studentId)
-        .single();
+        .select('id, current_phase, overall_progress')
+        .eq('student_id', studentId);
 
-      if (!journeyError && journeyData) {
+      if (!journeyError && journeysData && journeysData.length > 0) {
+        setJourneys(journeysData);
+        setSelectedJourneyId(journeysData[0].id);
+        
         const { data: milestonesData } = await supabase
           .from('milestones')
           .select('*')
-          .eq('journey_id', journeyData.id)
+          .eq('journey_id', journeysData[0].id)
           .order('order_index');
 
         setMilestones(milestonesData || []);
       }
+
+      // Buscar apps disponíveis
+      await loadAvailableApps();
     } catch (error: any) {
       console.error('Error loading student data:', error);
       toast({
@@ -207,6 +221,32 @@ export default function StudentDetails() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadConsolidatedMetrics = async (accountIds: string[]) => {
+    try {
+      const { data: allMetrics } = await supabase
+        .from('mercado_livre_metrics')
+        .select('*')
+        .eq('student_id', studentId)
+        .in('ml_account_id', accountIds);
+
+      if (allMetrics && allMetrics.length > 0) {
+        const consolidated = allMetrics.reduce((acc, m) => ({
+          total_sales: acc.total_sales + (m.total_sales || 0),
+          total_revenue: acc.total_revenue + (m.total_revenue || 0),
+          average_ticket: 0,
+        }), { total_sales: 0, total_revenue: 0, average_ticket: 0 });
+
+        consolidated.average_ticket = consolidated.total_sales > 0 
+          ? consolidated.total_revenue / consolidated.total_sales 
+          : 0;
+
+        setConsolidatedMetrics(consolidated as any);
+      }
+    } catch (error: any) {
+      console.error('Error loading consolidated metrics:', error);
     }
   };
 
@@ -240,6 +280,79 @@ export default function StudentDetails() {
       setFullStock(stockResult.data || []);
     } catch (error: any) {
       console.error('Error loading account data:', error);
+    }
+  };
+
+  const loadAvailableApps = async () => {
+    try {
+      const { data } = await supabase
+        .from('apps_extensions')
+        .select('*')
+        .order('name');
+      setAvailableApps(data || []);
+    } catch (error: any) {
+      console.error('Error loading available apps:', error);
+    }
+  };
+
+  const addAppToStudent = async () => {
+    if (!selectedAppId || !studentId) return;
+    
+    const { error } = await supabase
+      .from('student_apps')
+      .insert({ student_id: studentId, app_id: selectedAppId });
+    
+    if (error) {
+      toast({ 
+        title: "Erro ao adicionar app", 
+        description: error.message,
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    toast({ title: "App adicionado com sucesso!" });
+    loadStudentData();
+    setIsAddingApp(false);
+    setSelectedAppId("");
+  };
+
+  const updateMilestoneStatus = async (milestoneId: string, newStatus: string) => {
+    const updateData: any = { status: newStatus };
+    
+    if (newStatus === 'completed') {
+      updateData.completed_at = new Date().toISOString();
+    }
+    
+    const { error } = await supabase
+      .from('milestones')
+      .update(updateData)
+      .eq('id', milestoneId);
+    
+    if (error) {
+      toast({ 
+        title: "Erro ao atualizar etapa", 
+        description: error.message,
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    toast({ title: "Etapa atualizada com sucesso!" });
+    loadStudentData();
+  };
+
+  const loadJourneyMilestones = async (journeyId: string) => {
+    try {
+      const { data: milestonesData } = await supabase
+        .from('milestones')
+        .select('*')
+        .eq('journey_id', journeyId)
+        .order('order_index');
+
+      setMilestones(milestonesData || []);
+    } catch (error: any) {
+      console.error('Error loading milestones:', error);
     }
   };
 
@@ -405,22 +518,23 @@ export default function StudentDetails() {
               </div>
 
               {/* Resumo de Performance ML */}
-              {metrics && (
+              {consolidatedMetrics && (
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Performance Mercado Livre</h3>
-                  <div className="grid md:grid-cols-4 gap-4">
+                  <div className="grid md:grid-cols-3 gap-4">
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-sm font-medium">Vendas Totais</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{metrics.total_sales}</div>
+                        <div className="text-2xl font-bold">{consolidatedMetrics.total_sales}</div>
+                        <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                       </CardContent>
                     </Card>
 
                     <Card>
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
+                        <CardTitle className="text-sm font-medium">Faturamento</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold">
@@ -429,8 +543,9 @@ export default function StudentDetails() {
                             currency: 'BRL',
                             minimumFractionDigits: 0,
                             maximumFractionDigits: 0
-                          }).format(metrics.total_revenue)}
+                          }).format(consolidatedMetrics.total_revenue)}
                         </div>
+                        <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                       </CardContent>
                     </Card>
 
@@ -443,20 +558,9 @@ export default function StudentDetails() {
                           {new Intl.NumberFormat('pt-BR', { 
                             style: 'currency', 
                             currency: 'BRL' 
-                          }).format(metrics.average_ticket)}
+                          }).format(consolidatedMetrics.average_ticket)}
                         </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">Anúncios</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold">{metrics.total_listings}</div>
-                        <p className="text-sm text-muted-foreground">
-                          {metrics.active_listings} ativos
-                        </p>
+                        <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                       </CardContent>
                     </Card>
                   </div>
@@ -496,50 +600,51 @@ export default function StudentDetails() {
                     </Select>
                   </div>
 
-                  {/* Estado da Conta */}
+                  {/* Layout: Status da Conta + Métricas */}
                   {selectedAccountId && (
                     <>
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-sm font-medium">Status da Conta</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          {(() => {
-                            const account = mlAccounts.find(a => a.id === selectedAccountId);
-                            return account ? (
-                              <>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-muted-foreground">Nickname</span>
-                                  <span className="font-medium">@{account.ml_nickname}</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-muted-foreground">Status</span>
-                                  <Badge variant={account.is_active ? "default" : "secondary"}>
-                                    {account.is_active ? "Ativa" : "Inativa"}
-                                  </Badge>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-muted-foreground">Conta Principal</span>
-                                  <span className="font-medium">{account.is_primary ? "Sim" : "Não"}</span>
-                                </div>
-                                {account.last_sync_at && (
+                      <div className="grid md:grid-cols-2 gap-4">
+                        {/* Coluna 1: Status da Conta */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm font-medium">Status da Conta</CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-2">
+                            {(() => {
+                              const account = mlAccounts.find(a => a.id === selectedAccountId);
+                              return account ? (
+                                <>
                                   <div className="flex items-center justify-between">
-                                    <span className="text-sm text-muted-foreground">Última Sincronização</span>
-                                    <span className="font-medium text-sm">
-                                      {new Date(account.last_sync_at).toLocaleString('pt-BR')}
-                                    </span>
+                                    <span className="text-sm text-muted-foreground">Nome da Conta</span>
+                                    <span className="font-medium">@{account.ml_nickname}</span>
                                   </div>
-                                )}
-                              </>
-                            ) : null;
-                          })()}
-                        </CardContent>
-                      </Card>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">Status</span>
+                                    <Badge variant={account.is_active ? "default" : "secondary"}>
+                                      {account.is_active ? "Ativa" : "Inativa"}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">Conta Principal</span>
+                                    <span className="font-medium">{account.is_primary ? "Sim" : "Não"}</span>
+                                  </div>
+                                  {account.last_sync_at && (
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm text-muted-foreground">Última Sincronização</span>
+                                      <span className="font-medium text-sm">
+                                        {new Date(account.last_sync_at).toLocaleString('pt-BR')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
+                              ) : null;
+                            })()}
+                          </CardContent>
+                        </Card>
 
-                      {/* Métricas */}
-                      {metrics ? (
-                        <>
-                          <div className="grid md:grid-cols-3 gap-4">
+                        {/* Coluna 2: Métricas */}
+                        {metrics && (
+                          <div className="grid gap-4">
                             <Card>
                               <CardHeader className="pb-3">
                                 <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -549,6 +654,7 @@ export default function StudentDetails() {
                               </CardHeader>
                               <CardContent>
                                 <div className="text-2xl font-bold">{metrics.total_sales}</div>
+                                <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                               </CardContent>
                             </Card>
 
@@ -556,7 +662,7 @@ export default function StudentDetails() {
                               <CardHeader className="pb-3">
                                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                                   <DollarSign className="w-4 h-4" />
-                                  Receita Total
+                                  Faturamento
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
@@ -568,6 +674,7 @@ export default function StudentDetails() {
                                     maximumFractionDigits: 0
                                   }).format(metrics.total_revenue)}
                                 </div>
+                                <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                               </CardContent>
                             </Card>
 
@@ -585,11 +692,16 @@ export default function StudentDetails() {
                                     currency: 'BRL' 
                                   }).format(metrics.average_ticket)}
                                 </div>
+                                <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                               </CardContent>
                             </Card>
                           </div>
+                        )}
+                      </div>
 
-                          {/* Reputação */}
+                      {/* Reputação */}
+                      {metrics && (
+                        <>
                           <Card>
                             <CardHeader>
                               <CardTitle>Reputação</CardTitle>
@@ -739,12 +851,6 @@ export default function StudentDetails() {
                             </CardContent>
                           </Card>
                         </>
-                      ) : (
-                        <Card>
-                          <CardContent className="p-8 text-center">
-                            <p className="text-muted-foreground">Nenhuma métrica disponível para esta conta</p>
-                          </CardContent>
-                        </Card>
                       )}
                     </>
                   )}
@@ -755,8 +861,12 @@ export default function StudentDetails() {
             {/* TAB: APPS */}
             <TabsContent value="apps" className="space-y-6">
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle>Apps e Extensões</CardTitle>
+                  <Button onClick={() => setIsAddingApp(true)} size="sm">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar App
+                  </Button>
                 </CardHeader>
                 <CardContent>
                   {studentApps.length === 0 ? (
@@ -791,7 +901,26 @@ export default function StudentDetails() {
             <TabsContent value="jornada" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Jornada do Aluno</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Jornada do Aluno</CardTitle>
+                    {journeys.length > 1 && (
+                      <Select value={selectedJourneyId} onValueChange={(value) => {
+                        setSelectedJourneyId(value);
+                        loadJourneyMilestones(value);
+                      }}>
+                        <SelectTrigger className="w-48">
+                          <SelectValue placeholder="Selecione a jornada" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {journeys.map(journey => (
+                            <SelectItem key={journey.id} value={journey.id}>
+                              {journey.current_phase || 'Jornada'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {milestones.length === 0 ? (
@@ -823,20 +952,38 @@ export default function StudentDetails() {
                             
                             <div className="space-y-2 pl-4">
                               {phaseMilestones.map(milestone => (
-                                <div key={milestone.id} className="flex items-start gap-3 p-3 bg-muted/50 rounded">
-                                  {milestone.status === 'completed' ? (
-                                    <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                                  ) : milestone.status === 'in_progress' ? (
-                                    <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
-                                  ) : (
-                                    <XCircle className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                                  )}
-                                  <div className="flex-1">
-                                    <p className="font-medium">{milestone.title}</p>
-                                    {milestone.description && (
-                                      <p className="text-sm text-muted-foreground">{milestone.description}</p>
+                                <div 
+                                  key={milestone.id} 
+                                  className="flex items-center justify-between gap-3 p-3 bg-muted/30 rounded-lg"
+                                >
+                                  <div className="flex items-center gap-3 flex-1">
+                                    {milestone.status === 'completed' ? (
+                                      <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                                    ) : milestone.status === 'in_progress' ? (
+                                      <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                                    ) : (
+                                      <XCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                                     )}
+                                    <div className="flex-1">
+                                      <p className="font-medium text-sm">{milestone.title}</p>
+                                      {milestone.description && (
+                                        <p className="text-xs text-muted-foreground">{milestone.description}</p>
+                                      )}
+                                    </div>
                                   </div>
+                                  <Select 
+                                    value={milestone.status} 
+                                    onValueChange={(value) => updateMilestoneStatus(milestone.id, value)}
+                                  >
+                                    <SelectTrigger className="w-40">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="not_started">Não Iniciada</SelectItem>
+                                      <SelectItem value="in_progress">Em Progresso</SelectItem>
+                                      <SelectItem value="completed">Concluída</SelectItem>
+                                    </SelectContent>
+                                  </Select>
                                 </div>
                               ))}
                             </div>
@@ -851,6 +998,39 @@ export default function StudentDetails() {
           </Tabs>
         </div>
       </div>
+
+      {/* Dialog para Adicionar App */}
+      <Dialog open={isAddingApp} onOpenChange={setIsAddingApp}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar App/Extensão</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Select value={selectedAppId} onValueChange={setSelectedAppId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um app" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableApps
+                  .filter(app => !studentApps.some(sa => sa.id === app.id))
+                  .map(app => (
+                    <SelectItem key={app.id} value={app.id}>
+                      {app.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setIsAddingApp(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={addAppToStudent} disabled={!selectedAppId}>
+                Adicionar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

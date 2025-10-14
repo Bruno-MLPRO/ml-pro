@@ -57,6 +57,7 @@ interface Student {
   has_ml_decola?: boolean;
   has_ml_flex?: boolean;
   has_ml_full?: boolean;
+  manager_id?: string | null;
 }
 
 interface Plan {
@@ -97,6 +98,8 @@ export default function StudentsManagement() {
   const [dialogJourneyId, setDialogJourneyId] = useState<string>("");
   const [studentApps, setStudentApps] = useState<any[]>([]);
   const [availableApps, setAvailableApps] = useState<any[]>([]);
+  const [managers, setManagers] = useState<Array<{ id: string; full_name: string }>>([]);
+  const [selectedManagerId, setSelectedManagerId] = useState<string>("current");
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -129,8 +132,14 @@ export default function StudentsManagement() {
 
     if (user && userRole === 'manager') {
       fetchJourneyTemplates();
+      fetchManagers();
       fetchStudents();
       fetchPlans();
+
+      // Set default manager to logged-in user
+      if (user) {
+        setSelectedManagerId(user.id);
+      }
 
       // Set up realtime subscription for profile updates
       const channel = supabase
@@ -199,6 +208,34 @@ export default function StudentsManagement() {
     setPlans(data || []);
   };
 
+  const fetchManagers = async () => {
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "manager");
+
+    if (!rolesData) return;
+
+    const managerIds = rolesData.map((r) => r.user_id);
+
+    const { data: managersData, error } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", managerIds)
+      .order("full_name");
+
+    if (error) {
+      toast({
+        title: "Erro ao carregar gestores",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setManagers(managersData || []);
+  };
+
   const fetchStudents = async () => {
     const { data: rolesData } = await supabase
       .from("user_roles")
@@ -226,7 +263,7 @@ export default function StudentsManagement() {
     // Fetch journey data for each student
     const { data: journeysData } = await supabase
       .from("student_journeys")
-      .select("id, student_id, current_phase")
+      .select("id, student_id, current_phase, manager_id")
       .in("student_id", studentIds);
 
     // Fetch all milestones for these students
@@ -340,6 +377,7 @@ export default function StudentsManagement() {
       return {
         ...profile,
         current_phase: journey?.current_phase || "Onboarding",
+        manager_id: journey?.manager_id || null,
         journey_progress: progressByTemplate,
         in_progress_milestones: inProgressByTemplate,
         milestones_status: statusByTemplate,
@@ -810,7 +848,11 @@ export default function StudentsManagement() {
       (statusFilter === "Ativo" && student.mentoria_status === "Ativo") ||
       (statusFilter === "Inativo" && student.mentoria_status === "Inativo");
     
-    return matchesSearch && matchesStatus;
+    const matchesManager = 
+      selectedManagerId === "all" ||
+      student.manager_id === selectedManagerId;
+    
+    return matchesSearch && matchesStatus && matchesManager;
   });
 
   const StudentForm = () => (
@@ -1020,9 +1062,26 @@ export default function StudentsManagement() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-4 mb-4 flex-wrap">
               <div className="flex items-center gap-2">
-                <Label htmlFor="status-filter" className="text-sm">Filtrar por:</Label>
+                <Label htmlFor="manager-filter" className="text-sm">Gestor:</Label>
+                <Select value={selectedManagerId} onValueChange={setSelectedManagerId}>
+                  <SelectTrigger id="manager-filter" className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Ver todos</SelectItem>
+                    {managers.map((manager) => (
+                      <SelectItem key={manager.id} value={manager.id}>
+                        {manager.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Label htmlFor="status-filter" className="text-sm">Status:</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger id="status-filter" className="w-[180px]">
                     <SelectValue />
@@ -1178,6 +1237,39 @@ export default function StudentsManagement() {
           </TabsContent>
 
           <TabsContent value="list" className="space-y-6">
+            <div className="flex items-center gap-4 mb-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="manager-filter-list" className="text-sm">Gestor:</Label>
+                <Select value={selectedManagerId} onValueChange={setSelectedManagerId}>
+                  <SelectTrigger id="manager-filter-list" className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Ver todos</SelectItem>
+                    {managers.map((manager) => (
+                      <SelectItem key={manager.id} value={manager.id}>
+                        {manager.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Label htmlFor="status-filter-list" className="text-sm">Status:</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger id="status-filter-list" className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Ativo">Apenas ativos</SelectItem>
+                    <SelectItem value="Inativo">Apenas inativos</SelectItem>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="flex justify-between items-center mb-6">
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />

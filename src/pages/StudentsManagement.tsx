@@ -354,31 +354,12 @@ export default function StudentsManagement() {
   };
 
   const handleCreateStudent = async () => {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: formData.email,
-      password: DEFAULT_PASSWORD,
-      options: {
-        data: {
+    try {
+      const { data, error } = await supabase.functions.invoke('create-student', {
+        body: {
+          email: formData.email,
+          password: DEFAULT_PASSWORD,
           full_name: formData.full_name,
-          role: "student",
-        },
-        emailRedirectTo: `${window.location.origin}/`,
-      },
-    });
-
-    if (authError) {
-      toast({
-        title: "Erro ao criar aluno",
-        description: authError.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (authData.user) {
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({
           phone: formData.phone,
           turma: formData.turma,
           estado: formData.estado,
@@ -390,27 +371,44 @@ export default function StudentsManagement() {
           hub_logistico: formData.hub_logistico,
           sistemas_externos: formData.sistemas_externos,
           mentoria_status: formData.mentoria_status,
-        })
-        .eq("id", authData.user.id);
+        },
+      });
 
-      if (profileError) {
+      if (error) {
+        console.error('Error calling create-student function:', error);
         toast({
-          title: "Erro ao atualizar perfil",
-          description: profileError.message,
+          title: "Erro ao criar aluno",
+          description: error.message || "Erro ao criar aluno",
           variant: "destructive",
         });
         return;
       }
+
+      if (data?.error) {
+        toast({
+          title: "Erro ao criar aluno",
+          description: data.error,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Aluno criado com sucesso",
+        description: `Senha padrão: ${DEFAULT_PASSWORD}`,
+      });
+
+      setIsCreateDialogOpen(false);
+      resetForm();
+      fetchStudents();
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      toast({
+        title: "Erro ao criar aluno",
+        description: "Erro inesperado ao criar aluno",
+        variant: "destructive",
+      });
     }
-
-    toast({
-      title: "Aluno criado com sucesso",
-      description: `Senha padrão: ${DEFAULT_PASSWORD}`,
-    });
-
-    setIsCreateDialogOpen(false);
-    resetForm();
-    fetchStudents();
   };
 
   const handleUpdateStudent = async () => {

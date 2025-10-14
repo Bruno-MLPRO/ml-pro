@@ -10,6 +10,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  const appUrl = Deno.env.get('APP_URL') || 'https://ml-pro.lovable.app'
+
   try {
     const url = new URL(req.url)
     const code = url.searchParams.get('code')
@@ -100,7 +102,7 @@ Deno.serve(async (req) => {
     
     if (!stateCheck) {
       console.log('State already processed, preventing duplicate')
-      const dashboardUrl = `${url.origin}/aluno/dashboard?ml_already_processed=true`
+      const dashboardUrl = `${appUrl}/aluno/dashboard?ml_already_processed=true`
       return new Response(null, {
         status: 302,
         headers: {
@@ -189,7 +191,7 @@ Deno.serve(async (req) => {
     }
 
     // Redirecionar para o dashboard com informações adicionais
-    const dashboardUrl = `${url.origin}/aluno/dashboard?ml_connected=true&nickname=${encodeURIComponent(mlUser.nickname)}&timestamp=${Date.now()}`
+    const dashboardUrl = `${appUrl}/aluno/dashboard?ml_connected=true&nickname=${encodeURIComponent(mlUser.nickname)}&timestamp=${Date.now()}`
     
     console.log('Redirecting to:', dashboardUrl)
     
@@ -220,7 +222,7 @@ Deno.serve(async (req) => {
     }
   }
     
-    const errorUrl = `${new URL(req.url).origin}/aluno/dashboard?ml_error=${encodeURIComponent(errorMessage)}`
+    const errorUrl = `${appUrl}/aluno/dashboard?ml_error=${encodeURIComponent(errorMessage)}`
     return new Response(null, {
       status: 302,
       headers: {

@@ -5,7 +5,8 @@ import { Sidebar } from '@/components/Sidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink, ShoppingCart } from 'lucide-react';
+import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink, ShoppingCart, MapPin, Truck, Warehouse } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -60,6 +61,15 @@ interface MLMetrics {
   mercado_lider_level: string | null;
 }
 
+interface ShippingStats {
+  flex: { count: number; percentage: number };
+  agencies: { count: number; percentage: number };
+  collection: { count: number; percentage: number };
+  full: { count: number; percentage: number };
+  own: { count: number; percentage: number };
+  total: number;
+}
+
 const StudentDashboard = () => {
   const { user, userRole, loading: authLoading } = useAuth();
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -67,6 +77,7 @@ const StudentDashboard = () => {
   const [importantLinks, setImportantLinks] = useState<ImportantLink[]>([]);
   const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
   const [consolidatedMetrics, setConsolidatedMetrics] = useState<MLMetrics | null>(null);
+  const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<7 | 15 | 30>(30);
   const [loading, setLoading] = useState(true);
   const [connectingML, setConnectingML] = useState(false);
@@ -199,6 +210,43 @@ const StudentDashboard = () => {
     }
   };
 
+  const calculateShippingStats = async (studentId: string): Promise<ShippingStats> => {
+    const { data: products } = await supabase
+      .from('mercado_livre_products')
+      .select('shipping_mode, logistic_type')
+      .eq('student_id', studentId)
+      .eq('status', 'active');
+    
+    const total = products?.length || 0;
+    
+    const flex = products?.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+    ).length || 0;
+    
+    const agencies = products?.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
+    ).length || 0;
+    
+    const collection = products?.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
+    ).length || 0;
+    
+    const full = products?.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'fulfillment'
+    ).length || 0;
+    
+    const own = total - (flex + agencies + collection + full);
+    
+    return {
+      flex: { count: flex, percentage: total > 0 ? (flex / total) * 100 : 0 },
+      agencies: { count: agencies, percentage: total > 0 ? (agencies / total) * 100 : 0 },
+      collection: { count: collection, percentage: total > 0 ? (collection / total) * 100 : 0 },
+      full: { count: full, percentage: total > 0 ? (full / total) * 100 : 0 },
+      own: { count: own, percentage: total > 0 ? (own / total) * 100 : 0 },
+      total
+    };
+  };
+
   const loadMLAccounts = async () => {
     try {
       if (!user) return
@@ -257,6 +305,10 @@ const StudentDashboard = () => {
           is_mercado_lider: firstAccountMetrics?.is_mercado_lider || false,
           mercado_lider_level: firstAccountMetrics?.mercado_lider_level || null
         })
+        
+        // Carregar estatísticas de envio
+        const stats = await calculateShippingStats(user.id);
+        setShippingStats(stats);
       }
     } catch (error) {
       console.error('Error loading ML accounts:', error)
@@ -483,6 +535,162 @@ const StudentDashboard = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Badges de Tipo de Envio */}
+          {mlAccounts.length > 0 && shippingStats && (
+            <Card className="mb-6">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-primary" />
+                  <CardTitle>Tipos de Envio</CardTitle>
+                </div>
+                <CardDescription>
+                  Distribuição de anúncios por modalidade de envio Mercado Livre
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* FLEX Badge */}
+                  {shippingStats.flex.count > 0 ? (
+                    <div className="p-4 rounded-lg border border-blue-500 bg-blue-50 dark:bg-blue-950">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-5 h-5 text-blue-500" />
+                          <span className="font-semibold">FLEX</span>
+                        </div>
+                        <Badge className="bg-blue-500">
+                          {shippingStats.flex.count} produto{shippingStats.flex.count !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">Leva ao correio</p>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.flex.percentage} className="h-1 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.flex.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 dark:bg-gray-900 opacity-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-5 h-5 text-gray-400" />
+                          <span className="font-semibold text-gray-400">FLEX</span>
+                        </div>
+                        <Badge variant="outline" className="text-gray-400">Inativo</Badge>
+                      </div>
+                      <p className="text-xs text-gray-400">Leva ao correio</p>
+                    </div>
+                  )}
+
+                  {/* Agências Badge */}
+                  {shippingStats.agencies.count > 0 ? (
+                    <div className="p-4 rounded-lg border border-purple-500 bg-purple-50 dark:bg-purple-950">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-5 h-5 text-purple-500" />
+                          <span className="font-semibold">Agências</span>
+                        </div>
+                        <Badge className="bg-purple-500">
+                          {shippingStats.agencies.count} produto{shippingStats.agencies.count !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">Leva ao ponto de coleta</p>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.agencies.percentage} className="h-1 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.agencies.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 dark:bg-gray-900 opacity-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-5 h-5 text-gray-400" />
+                          <span className="font-semibold text-gray-400">Agências</span>
+                        </div>
+                        <Badge variant="outline" className="text-gray-400">Inativo</Badge>
+                      </div>
+                      <p className="text-xs text-gray-400">Leva ao ponto de coleta</p>
+                    </div>
+                  )}
+
+                  {/* Coleta Badge */}
+                  {shippingStats.collection.count > 0 ? (
+                    <div className="p-4 rounded-lg border border-green-500 bg-green-50 dark:bg-green-950">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Truck className="w-5 h-5 text-green-500" />
+                          <span className="font-semibold">Coleta</span>
+                        </div>
+                        <Badge className="bg-green-500">
+                          {shippingStats.collection.count} produto{shippingStats.collection.count !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">ML coleta em casa</p>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.collection.percentage} className="h-1 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.collection.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 dark:bg-gray-900 opacity-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Truck className="w-5 h-5 text-gray-400" />
+                          <span className="font-semibold text-gray-400">Coleta</span>
+                        </div>
+                        <Badge variant="outline" className="text-gray-400">Inativo</Badge>
+                      </div>
+                      <p className="text-xs text-gray-400">ML coleta em casa</p>
+                    </div>
+                  )}
+
+                  {/* FULL Badge */}
+                  {shippingStats.full.count > 0 ? (
+                    <div className="p-4 rounded-lg border border-orange-500 bg-orange-50 dark:bg-orange-950">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Warehouse className="w-5 h-5 text-orange-500" />
+                          <span className="font-semibold">FULL</span>
+                        </div>
+                        <Badge className="bg-orange-500">
+                          {shippingStats.full.count} produto{shippingStats.full.count !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">ML armazena e envia</p>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.full.percentage} className="h-1 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.full.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 dark:bg-gray-900 opacity-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Warehouse className="w-5 h-5 text-gray-400" />
+                          <span className="font-semibold text-gray-400">FULL</span>
+                        </div>
+                        <Badge variant="outline" className="text-gray-400">Inativo</Badge>
+                      </div>
+                      <p className="text-xs text-gray-400">ML armazena e envia</p>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Resumo Total */}
+                <div className="mt-4 pt-4 border-t">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Total de anúncios ativos</span>
+                    <span className="font-semibold">{shippingStats.total}</span>
+                  </div>
+                  {shippingStats.own.count > 0 && (
+                    <div className="flex items-center justify-between text-sm mt-2">
+                      <span className="text-muted-foreground">Envio próprio</span>
+                      <span>{shippingStats.own.count} ({shippingStats.own.percentage.toFixed(0)}%)</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             {/* Avisos */}

@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { ReputationBadge } from '@/components/ReputationBadge';
+import { PlanBonusCard } from '@/components/PlanBonusCard';
 
 interface Notice {
   id: string;
@@ -70,6 +71,23 @@ interface ShippingStats {
   total: number;
 }
 
+interface BonusDelivery {
+  id: string;
+  bonus_id: string;
+  delivered: boolean;
+  delivered_at: string | null;
+  delivered_by: string | null;
+  notes: string | null;
+  bonus: {
+    name: string;
+    description: string | null;
+    cost: number;
+  };
+  deliveredByProfile?: {
+    full_name: string;
+  };
+}
+
 const StudentDashboard = () => {
   const { user, userRole, loading: authLoading } = useAuth();
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -78,6 +96,7 @@ const StudentDashboard = () => {
   const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
   const [consolidatedMetrics, setConsolidatedMetrics] = useState<MLMetrics | null>(null);
   const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
+  const [bonusDeliveries, setBonusDeliveries] = useState<BonusDelivery[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<7 | 15 | 30>(30);
   const [loading, setLoading] = useState(true);
   const [connectingML, setConnectingML] = useState(false);
@@ -197,7 +216,8 @@ const StudentDashboard = () => {
       const [noticesData, callSchedulesData, linksData] = await Promise.all([
         supabase.from('notices').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(5),
         supabase.from('call_schedules').select('*').gte('date', new Date().toISOString().split('T')[0]).order('date', { ascending: true }).limit(4),
-        supabase.from('important_links').select('*').order('order_index', { ascending: true })
+        supabase.from('important_links').select('*').order('order_index', { ascending: true }),
+        loadBonusDeliveries()
       ]);
 
       if (noticesData.data) setNotices(noticesData.data);
@@ -385,6 +405,38 @@ const StudentDashboard = () => {
     }).format(value)
   }
 
+
+  const loadBonusDeliveries = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('student_bonus_delivery')
+        .select(`
+          id,
+          bonus_id,
+          delivered,
+          delivered_at,
+          delivered_by,
+          notes,
+          bonus:bonus_id (
+            name,
+            description,
+            cost
+          ),
+          deliveredByProfile:profiles!delivered_by (
+            full_name
+          )
+        `)
+        .eq('student_id', user.id)
+        .order('delivered', { ascending: true });
+
+      if (error) throw error;
+      setBonusDeliveries(data as BonusDelivery[]);
+    } catch (error: any) {
+      console.error('Error loading bonus deliveries:', error);
+    }
+  };
 
   const formatDescription = (description: string) => {
     // Split by lines and check if it's a list format
@@ -690,6 +742,18 @@ const StudentDashboard = () => {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* Bônus do Plano */}
+          {bonusDeliveries.length > 0 && (
+            <div className="mb-8">
+              <PlanBonusCard
+                studentId={user!.id}
+                bonusDeliveries={bonusDeliveries}
+                isManager={false}
+                onUpdate={loadBonusDeliveries}
+              />
+            </div>
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

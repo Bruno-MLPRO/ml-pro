@@ -41,15 +41,23 @@ Deno.serve(async (req) => {
 
     console.log('Authorization header present, validating user...');
 
-    // Create Supabase client with user's token to check their role
-    const supabaseClient = createClient(
+    // Extract JWT token from Authorization header
+    const jwt = authHeader.replace('Bearer ', '');
+
+    // Create Supabase Admin client for user verification
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
     );
 
-    // Verify the requesting user is a manager
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    // Verify the JWT token and get user
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(jwt);
     
     if (userError || !user) {
       console.error('Error getting user:', userError?.message || 'No user found');
@@ -62,7 +70,7 @@ Deno.serve(async (req) => {
     console.log('User authenticated:', user.id);
 
     // Check if user has manager role
-    const { data: roleData, error: roleError } = await supabaseClient
+    const { data: roleData, error: roleError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
@@ -100,19 +108,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create Supabase Admin client for user creation
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
-
-    // Create the user via Admin API
+    // Create the user via Admin API (reusing supabaseAdmin from above)
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: body.email,
       password: body.password,

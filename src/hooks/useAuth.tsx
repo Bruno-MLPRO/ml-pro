@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserRole = async (userId: string) => {
+  const fetchUserRole = async (userId: string, retryCount = 0) => {
     try {
       const { data, error } = await supabase
         .from('user_roles')
@@ -58,12 +58,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        // Se for erro de rede e ainda temos retries, tentar novamente
+        if (error.message?.includes('Failed to fetch') && retryCount < 3) {
+          console.log(`Retrying fetch user role... Attempt ${retryCount + 1}`);
+          setTimeout(() => {
+            fetchUserRole(userId, retryCount + 1);
+          }, Math.pow(2, retryCount) * 1000); // Exponential backoff
+          return;
+        }
+        throw error;
+      }
       setUserRole(data?.role as 'student' | 'manager');
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching user role:', error);
       setUserRole(null);
-    } finally {
       setLoading(false);
     }
   };

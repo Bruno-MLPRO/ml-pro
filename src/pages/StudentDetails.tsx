@@ -198,20 +198,27 @@ export default function StudentDetails() {
       // Buscar jornadas do aluno
       const { data: journeysData, error: journeyError } = await supabase
         .from('student_journeys')
-        .select('id, current_phase, overall_progress, journey_templates(name)')
+        .select('id, current_phase, overall_progress')
         .eq('student_id', studentId);
+
+      console.log('Journeys data:', journeysData, 'Error:', journeyError);
 
       if (!journeyError && journeysData && journeysData.length > 0) {
         setJourneys(journeysData);
         setSelectedJourneyId(journeysData[0].id);
         
-        const { data: milestonesData } = await supabase
+        const { data: milestonesData, error: milestonesError } = await supabase
           .from('milestones')
           .select('*')
           .eq('journey_id', journeysData[0].id)
           .order('order_index');
 
+        console.log('Milestones data:', milestonesData, 'Error:', milestonesError);
         setMilestones(milestonesData || []);
+      } else {
+        console.log('No journeys found for student');
+        setJourneys([]);
+        setMilestones([]);
       }
 
       // Buscar apps disponíveis
@@ -965,7 +972,7 @@ export default function StudentDetails() {
                         <SelectContent>
                           {journeys.map(journey => (
                             <SelectItem key={journey.id} value={journey.id}>
-                              {(journey as any).journey_templates?.name || journey.current_phase || 'Jornada'}
+                              {journey.current_phase || 'Jornada'}
                             </SelectItem>
                           ))}
                         </SelectContent>

@@ -5,7 +5,8 @@ import { Sidebar } from '@/components/Sidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink, ShoppingCart } from 'lucide-react';
+import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink, ShoppingCart, MapPin, Truck, Warehouse } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -60,6 +61,15 @@ interface MLMetrics {
   mercado_lider_level: string | null;
 }
 
+interface ShippingStats {
+  flex: { count: number; percentage: number };
+  agencies: { count: number; percentage: number };
+  collection: { count: number; percentage: number };
+  full: { count: number; percentage: number };
+  own: { count: number; percentage: number };
+  total: number;
+}
+
 const StudentDashboard = () => {
   const { user, userRole, loading: authLoading } = useAuth();
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -67,11 +77,71 @@ const StudentDashboard = () => {
   const [importantLinks, setImportantLinks] = useState<ImportantLink[]>([]);
   const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
   const [consolidatedMetrics, setConsolidatedMetrics] = useState<MLMetrics | null>(null);
+  const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<7 | 15 | 30>(30);
   const [loading, setLoading] = useState(true);
   const [connectingML, setConnectingML] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Tratar parâmetros de retorno do OAuth do ML
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const mlError = urlParams.get('ml_error');
+    const mlConnected = urlParams.get('ml_connected');
+    const nickname = urlParams.get('nickname');
+    const mlAlreadyProcessed = urlParams.get('ml_already_processed');
+
+    if (mlError) {
+      // Detectar erro de callback URL não autorizada
+      if (mlError.includes('callback') || mlError.includes('requested path')) {
+        toast({
+          title: "URL de Callback não autorizada",
+          description: "Configure https://yxlxholcipprdozohwhn.supabase.co/functions/v1/ml-oauth-callback nas URLs de Redirecionamento do seu app ML.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "Erro ao conectar Mercado Livre",
+          description: decodeURIComponent(mlError),
+          variant: "destructive",
+        });
+      }
+      // Limpar parâmetro da URL
+      window.history.replaceState({}, '', '/aluno/dashboard');
+    }
+
+    if (mlAlreadyProcessed === 'true') {
+      toast({
+        title: "Já processado",
+        description: "Esta autorização já foi processada anteriormente.",
+        variant: "default",
+      });
+      window.history.replaceState({}, '', '/aluno/dashboard');
+    }
+
+    if (mlConnected === 'true') {
+      const accountName = nickname ? decodeURIComponent(nickname) : 'Sua conta';
+      toast({
+        title: "✅ Conta conectada!",
+        description: `${accountName} do Mercado Livre foi conectada. Sincronizando dados...`,
+        duration: 5000,
+      });
+      
+      // Limpar parâmetros da URL
+      window.history.replaceState({}, '', '/aluno/dashboard');
+      
+      // Recarregar dados imediatamente
+      if (user) {
+        loadMLAccounts();
+        // Auto-refresh após 2 segundos para garantir que os dados foram salvos
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!authLoading && (!user || userRole !== 'student')) {
@@ -199,6 +269,43 @@ const StudentDashboard = () => {
     }
   };
 
+  const calculateShippingStats = async (studentId: string): Promise<ShippingStats> => {
+    const { data: products } = await supabase
+      .from('mercado_livre_products')
+      .select('shipping_mode, logistic_type')
+      .eq('student_id', studentId)
+      .eq('status', 'active');
+    
+    const total = products?.length || 0;
+    
+    const flex = products?.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+    ).length || 0;
+    
+    const agencies = products?.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
+    ).length || 0;
+    
+    const collection = products?.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
+    ).length || 0;
+    
+    const full = products?.filter(p => 
+      p.shipping_mode === 'me2' && p.logistic_type === 'fulfillment'
+    ).length || 0;
+    
+    const own = total - (flex + agencies + collection + full);
+    
+    return {
+      flex: { count: flex, percentage: total > 0 ? (flex / total) * 100 : 0 },
+      agencies: { count: agencies, percentage: total > 0 ? (agencies / total) * 100 : 0 },
+      collection: { count: collection, percentage: total > 0 ? (collection / total) * 100 : 0 },
+      full: { count: full, percentage: total > 0 ? (full / total) * 100 : 0 },
+      own: { count: own, percentage: total > 0 ? (own / total) * 100 : 0 },
+      total
+    };
+  };
+
   const loadMLAccounts = async () => {
     try {
       if (!user) return
@@ -257,29 +364,83 @@ const StudentDashboard = () => {
           is_mercado_lider: firstAccountMetrics?.is_mercado_lider || false,
           mercado_lider_level: firstAccountMetrics?.mercado_lider_level || null
         })
+        
+        // Carregar estatísticas de envio
+        const stats = await calculateShippingStats(user.id);
+        setShippingStats(stats);
       }
     } catch (error) {
       console.error('Error loading ML accounts:', error)
     }
   }
 
-  const handleConnectML = async () => {
-    setConnectingML(true)
+  const testMLConnection = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('ml-auth-start')
+      const { data, error } = await supabase.functions.invoke('ml-test-connection');
       
       if (error) {
-        console.error('Error starting ML auth:', error)
-        return
+        console.error('Test error:', error);
+        toast({
+          title: "Erro ao testar conexão",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('ML Connection Test:', data);
+      
+      if (!data.app_id_configured || !data.secret_key_configured) {
+        toast({
+          title: "Configuração incompleta",
+          description: "As credenciais do Mercado Livre não estão configuradas corretamente.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Configuração OK",
+          description: `APP_ID: ${data.app_id_preview}\nCallback: ${data.callback_url}`,
+        });
+      }
+    } catch (error) {
+      console.error('Test error:', error);
+    }
+  };
+
+  const handleConnectML = async () => {
+    setConnectingML(true);
+    toast({
+      title: "Redirecionando...",
+      description: "Você será redirecionado para o Mercado Livre para autorizar a conexão.",
+    });
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('ml-auth-start');
+      
+      if (error) {
+        console.error('Error starting ML auth:', error);
+        toast({
+          title: "Erro ao iniciar conexão",
+          description: "Não foi possível iniciar o processo de conexão. Tente novamente.",
+          variant: "destructive",
+        });
+        setConnectingML(false);
+        return;
       }
 
       if (data?.authorization_url) {
-        window.location.href = data.authorization_url
+        window.location.href = data.authorization_url;
+      } else {
+        throw new Error('No authorization URL received');
       }
     } catch (error) {
-      console.error('Error connecting to ML:', error)
-    } finally {
-      setConnectingML(false)
+      console.error('Error in handleConnectML:', error);
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro ao conectar com o Mercado Livre.",
+        variant: "destructive",
+      });
+      setConnectingML(false);
     }
   }
 
@@ -483,6 +644,158 @@ const StudentDashboard = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Badges de Tipo de Envio */}
+          {mlAccounts.length > 0 && shippingStats && (
+            <Card className="mb-6">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-primary" />
+                  <CardTitle>Tipos de Envio</CardTitle>
+                </div>
+                <CardDescription>
+                  Distribuição de anúncios por modalidade de envio Mercado Livre
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* FLEX Badge */}
+                  {shippingStats.flex.count > 0 ? (
+                    <div className="p-4 rounded-lg border border-blue-500/50 bg-blue-500/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-5 h-5 text-blue-400" />
+                          <span className="font-semibold">FLEX</span>
+                        </div>
+                        <Badge className="bg-blue-500">
+                          {shippingStats.flex.count} produto{shippingStats.flex.count !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.flex.percentage} className="h-1 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.flex.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-muted-foreground">FLEX</span>
+                        </div>
+                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                      </div>
+                      
+                    </div>
+                  )}
+
+                  {/* Agências Badge */}
+                  {shippingStats.agencies.count > 0 ? (
+                    <div className="p-4 rounded-lg border border-purple-500/50 bg-purple-500/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-5 h-5 text-purple-400" />
+                          <span className="font-semibold">Agências</span>
+                        </div>
+                        <Badge className="bg-purple-500">
+                          {shippingStats.agencies.count} produto{shippingStats.agencies.count !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.agencies.percentage} className="h-1 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.agencies.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-muted-foreground">Agências</span>
+                        </div>
+                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                      </div>
+                      
+                    </div>
+                  )}
+
+                  {/* Coleta Badge */}
+                  {shippingStats.collection.count > 0 ? (
+                    <div className="p-4 rounded-lg border border-green-500/50 bg-green-500/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Truck className="w-5 h-5 text-green-400" />
+                          <span className="font-semibold">Coleta</span>
+                        </div>
+                        <Badge className="bg-green-500">
+                          {shippingStats.collection.count} produto{shippingStats.collection.count !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.collection.percentage} className="h-1 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.collection.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Truck className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-muted-foreground">Coleta</span>
+                        </div>
+                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                      </div>
+                      
+                    </div>
+                  )}
+
+                  {/* FULL Badge */}
+                  {shippingStats.full.count > 0 ? (
+                    <div className="p-4 rounded-lg border border-orange-500/50 bg-orange-500/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Warehouse className="w-5 h-5 text-orange-400" />
+                          <span className="font-semibold">FULL</span>
+                        </div>
+                        <Badge className="bg-orange-500">
+                          {shippingStats.full.count} produto{shippingStats.full.count !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.full.percentage} className="h-1 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.full.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Warehouse className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-muted-foreground">FULL</span>
+                        </div>
+                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                      </div>
+                      
+                    </div>
+                  )}
+                </div>
+                
+                {/* Resumo Total */}
+                <div className="mt-4 pt-4 border-t">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Total de anúncios ativos</span>
+                    <span className="font-semibold">{shippingStats.total}</span>
+                  </div>
+                  {shippingStats.own.count > 0 && (
+                    <div className="flex items-center justify-between text-sm mt-2">
+                      <span className="text-muted-foreground">Envio próprio</span>
+                      <span>{shippingStats.own.count} ({shippingStats.own.percentage.toFixed(0)}%)</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             {/* Avisos */}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,30 +15,50 @@ const Auth = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  if (user) {
-    navigate('/');
-    return null;
-  }
+  useEffect(() => {
+    if (user) {
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await signIn(email, password);
+    try {
+      const { error } = await signIn(email, password);
 
-    if (error) {
+      if (error) {
+        let errorMessage = error.message;
+        
+        // Traduzir erros comuns
+        if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'Email ou senha incorretos';
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Por favor, confirme seu email antes de fazer login';
+        } else if (error.message.includes('Failed to fetch')) {
+          errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
+        }
+
+        toast({
+          title: 'Erro ao fazer login',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Login realizado com sucesso!',
+        });
+      }
+    } catch (error) {
       toast({
         title: 'Erro ao fazer login',
-        description: error.message,
+        description: 'Ocorreu um erro inesperado. Tente novamente.',
         variant: 'destructive',
       });
-    } else {
-      toast({
-        title: 'Login realizado com sucesso!',
-      });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (

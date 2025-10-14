@@ -29,7 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus, Pencil, Trash2, ExternalLink, X } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, ExternalLink, X, CheckCircle2, XCircle, User, Rocket, Package, Warehouse } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Sidebar } from "@/components/Sidebar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,6 +43,8 @@ interface Student {
   email: string;
   phone: string;
   turma: string;
+  cpf: string | null;
+  cnpj: string | null;
   estrutura_vendedor: string;
   tipo_pj: string | null;
   possui_contador: boolean;
@@ -51,6 +54,10 @@ interface Student {
   mentoria_status: string;
   current_phase?: string;
   overall_progress?: number;
+  has_ml_decola?: boolean;
+  has_ml_flex?: boolean;
+  has_ml_full?: boolean;
+  manager_id?: string | null;
 }
 
 interface Plan {
@@ -82,7 +89,7 @@ export default function StudentsManagement() {
   const [journeyTemplates, setJourneyTemplates] = useState<JourneyTemplate[]>([]);
   const [selectedJourneyId, setSelectedJourneyId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("Ativo");
+  const [statusFilter, setStatusFilter] = useState("Todos");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDetailsDialogOpen, setIsViewDetailsDialogOpen] = useState(false);
@@ -91,6 +98,8 @@ export default function StudentsManagement() {
   const [dialogJourneyId, setDialogJourneyId] = useState<string>("");
   const [studentApps, setStudentApps] = useState<any[]>([]);
   const [availableApps, setAvailableApps] = useState<any[]>([]);
+  const [managers, setManagers] = useState<Array<{ id: string; full_name: string }>>([]);
+  const [selectedManagerId, setSelectedManagerId] = useState<string>("current");
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -123,8 +132,14 @@ export default function StudentsManagement() {
 
     if (user && userRole === 'manager') {
       fetchJourneyTemplates();
+      fetchManagers();
       fetchStudents();
       fetchPlans();
+
+      // Set default manager to logged-in user
+      if (user) {
+        setSelectedManagerId(user.id);
+      }
 
       // Set up realtime subscription for profile updates
       const channel = supabase
@@ -193,6 +208,34 @@ export default function StudentsManagement() {
     setPlans(data || []);
   };
 
+  const fetchManagers = async () => {
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "manager");
+
+    if (!rolesData) return;
+
+    const managerIds = rolesData.map((r) => r.user_id);
+
+    const { data: managersData, error } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", managerIds)
+      .order("full_name");
+
+    if (error) {
+      toast({
+        title: "Erro ao carregar gestores",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setManagers(managersData || []);
+  };
+
   const fetchStudents = async () => {
     const { data: rolesData } = await supabase
       .from("user_roles")
@@ -220,7 +263,7 @@ export default function StudentsManagement() {
     // Fetch journey data for each student
     const { data: journeysData } = await supabase
       .from("student_journeys")
-      .select("id, student_id, current_phase")
+      .select("id, student_id, current_phase, manager_id")
       .in("student_id", studentIds);
 
     // Fetch all milestones for these students
@@ -230,6 +273,18 @@ export default function StudentsManagement() {
     const { data: studentAppsData } = await supabase
       .from("student_apps")
       .select("student_id, apps_extensions(id, name, color)")
+      .in("student_id", studentIds);
+
+    // Fetch Mercado Livre metrics for all students
+    const { data: mlMetricsData } = await supabase
+      .from("mercado_livre_metrics")
+      .select("student_id, has_decola, has_full")
+      .in("student_id", studentIds);
+
+    // Fetch Mercado Livre products to check for FLEX
+    const { data: mlProductsData } = await supabase
+      .from("mercado_livre_products")
+      .select("student_id, shipping_mode, logistic_type")
       .in("student_id", studentIds);
 
     if (journeyIds.length === 0) {
@@ -308,13 +363,28 @@ export default function StudentsManagement() {
         .flat()
         .filter(Boolean) || [];
 
+      // Calculate ML indicators
+      const studentMetrics = mlMetricsData?.filter(m => m.student_id === profile.id) || [];
+      const has_ml_decola = studentMetrics.some(m => m.has_decola === true);
+      const has_ml_full = studentMetrics.some(m => m.has_full === true);
+      
+      // FLEX: shipping_mode = 'me2' AND logistic_type = 'drop_off'
+      const studentProducts = mlProductsData?.filter(p => p.student_id === profile.id) || [];
+      const has_ml_flex = studentProducts.some(p => 
+        p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+      );
+
       return {
         ...profile,
         current_phase: journey?.current_phase || "Onboarding",
+        manager_id: journey?.manager_id || null,
         journey_progress: progressByTemplate,
         in_progress_milestones: inProgressByTemplate,
         milestones_status: statusByTemplate,
-        student_apps: studentApps
+        student_apps: studentApps,
+        has_ml_decola,
+        has_ml_flex,
+        has_ml_full,
       };
     }) || [];
 
@@ -322,63 +392,125 @@ export default function StudentsManagement() {
   };
 
   const handleCreateStudent = async () => {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: formData.email,
-      password: DEFAULT_PASSWORD,
-      options: {
-        data: {
-          full_name: formData.full_name,
-          role: "student",
-        },
-        emailRedirectTo: `${window.location.origin}/`,
-      },
-    });
-
-    if (authError) {
+    // Validação dos campos obrigatórios
+    if (!formData.email || !formData.full_name) {
       toast({
-        title: "Erro ao criar aluno",
-        description: authError.message,
+        title: "Erro",
+        description: "Por favor, preencha todos os campos obrigatórios",
         variant: "destructive",
       });
       return;
     }
 
-    if (authData.user) {
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({
-          phone: formData.phone,
-          turma: formData.turma,
-          estado: formData.estado,
-          estrutura_vendedor: formData.estrutura_vendedor,
-          tipo_pj: formData.estrutura_vendedor === "PJ" ? formData.tipo_pj : null,
-          cnpj: formData.estrutura_vendedor === "PJ" ? formData.cnpj : null,
-          possui_contador: formData.possui_contador,
-          caixa: formData.caixa ? parseFloat(formData.caixa) : null,
-          hub_logistico: formData.hub_logistico,
-          sistemas_externos: formData.sistemas_externos,
-          mentoria_status: formData.mentoria_status,
-        })
-        .eq("id", authData.user.id);
+    // Validação adicional para estrutura PJ
+    if (formData.estrutura_vendedor === 'PJ' && !formData.tipo_pj) {
+      toast({
+        title: "Erro",
+        description: "Tipo de PJ é obrigatório quando a estrutura é PJ",
+        variant: "destructive",
+      });
+      return;
+    }
 
-      if (profileError) {
+    // Validação de formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast({
+        title: "Erro",
+        description: "Por favor, insira um email válido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Preparar dados para envio
+      const studentData: any = {
+        email: formData.email,
+        password: DEFAULT_PASSWORD,
+        full_name: formData.full_name,
+        phone: formData.phone,
+        turma: formData.turma,
+        estado: formData.estado,
+        estrutura_vendedor: formData.estrutura_vendedor,
+        possui_contador: formData.possui_contador,
+        caixa: formData.caixa ? parseFloat(formData.caixa) : null,
+        hub_logistico: formData.hub_logistico,
+        sistemas_externos: formData.sistemas_externos,
+        mentoria_status: formData.mentoria_status,
+      };
+
+      // Só enviar tipo_pj e cnpj se estrutura for PJ
+      if (formData.estrutura_vendedor === 'PJ') {
+        studentData.tipo_pj = formData.tipo_pj;
+        studentData.cnpj = formData.cnpj;
+      }
+
+      console.log('Sending student data to edge function:', studentData);
+
+      const { data, error } = await supabase.functions.invoke('create-student', {
+        body: studentData,
+      });
+
+      if (error) {
+        console.error('Error calling create-student function:', error);
+        
+        let errorMessage = "Erro ao criar aluno";
+        if (error.message?.includes('Edge Function')) {
+          errorMessage = "Erro ao processar a solicitação. Verifique sua conexão e tente novamente.";
+        } else if (error.message?.includes('autorizado')) {
+          errorMessage = "Você não tem permissão para criar alunos. Faça login novamente.";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+
         toast({
-          title: "Erro ao atualizar perfil",
-          description: profileError.message,
+          title: "Erro ao criar aluno",
+          description: errorMessage,
           variant: "destructive",
         });
         return;
       }
+
+      if (data?.error) {
+        let errorMessage = data.error;
+        
+        if (errorMessage.includes('already registered') || errorMessage.includes('já está cadastrado')) {
+          errorMessage = "Este email já está cadastrado";
+        } else if (errorMessage.includes('tipo_pj')) {
+          errorMessage = "Erro na validação do tipo de PJ. Verifique os dados.";
+        }
+
+        toast({
+          title: "Erro ao criar aluno",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Aluno criado com sucesso",
+        description: `Senha padrão: ${DEFAULT_PASSWORD}`,
+      });
+
+      setIsCreateDialogOpen(false);
+      resetForm();
+      fetchStudents();
+    } catch (err: any) {
+      console.error('Unexpected error:', err);
+      
+      let errorMessage = "Erro inesperado ao criar aluno";
+      if (err.message) {
+        errorMessage = err.message;
+      }
+
+      toast({
+        title: "Erro ao criar aluno",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
-
-    toast({
-      title: "Aluno criado com sucesso",
-      description: `Senha padrão: ${DEFAULT_PASSWORD}`,
-    });
-
-    setIsCreateDialogOpen(false);
-    resetForm();
-    fetchStudents();
   };
 
   const handleUpdateStudent = async () => {
@@ -716,7 +848,11 @@ export default function StudentsManagement() {
       (statusFilter === "Ativo" && student.mentoria_status === "Ativo") ||
       (statusFilter === "Inativo" && student.mentoria_status === "Inativo");
     
-    return matchesSearch && matchesStatus;
+    const matchesManager = 
+      selectedManagerId === "all" ||
+      student.manager_id === selectedManagerId;
+    
+    return matchesSearch && matchesStatus && matchesManager;
   });
 
   const StudentForm = () => (
@@ -926,9 +1062,26 @@ export default function StudentsManagement() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-4 mb-4 flex-wrap">
               <div className="flex items-center gap-2">
-                <Label htmlFor="status-filter" className="text-sm">Filtrar por:</Label>
+                <Label htmlFor="manager-filter" className="text-sm">Gestor:</Label>
+                <Select value={selectedManagerId} onValueChange={setSelectedManagerId}>
+                  <SelectTrigger id="manager-filter" className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Ver todos</SelectItem>
+                    {managers.map((manager) => (
+                      <SelectItem key={manager.id} value={manager.id}>
+                        {manager.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Label htmlFor="status-filter" className="text-sm">Status:</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger id="status-filter" className="w-[180px]">
                     <SelectValue />
@@ -1084,6 +1237,39 @@ export default function StudentsManagement() {
           </TabsContent>
 
           <TabsContent value="list" className="space-y-6">
+            <div className="flex items-center gap-4 mb-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="manager-filter-list" className="text-sm">Gestor:</Label>
+                <Select value={selectedManagerId} onValueChange={setSelectedManagerId}>
+                  <SelectTrigger id="manager-filter-list" className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Ver todos</SelectItem>
+                    {managers.map((manager) => (
+                      <SelectItem key={manager.id} value={manager.id}>
+                        {manager.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Label htmlFor="status-filter-list" className="text-sm">Status:</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger id="status-filter-list" className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Ativo">Apenas ativos</SelectItem>
+                    <SelectItem value="Inativo">Apenas inativos</SelectItem>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="flex justify-between items-center mb-6">
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -1118,56 +1304,111 @@ export default function StudentsManagement() {
               </Dialog>
             </div>
 
-            <div className="border rounded-lg">
+            <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Turma</TableHead>
-                    <TableHead>Fase</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Nome</TableHead>
+                    <TableHead className="font-semibold">Email</TableHead>
+                    <TableHead className="font-semibold">Plano</TableHead>
+                    <TableHead className="font-semibold">CPF/CNPJ</TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <User className="h-4 w-4" />
+                        <span>Contador</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Rocket className="h-4 w-4" />
+                        <span>Decola</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Package className="h-4 w-4" />
+                        <span>Flex</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Warehouse className="h-4 w-4" />
+                        <span>Full</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right font-semibold">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredStudents.map((student) => (
-                    <TableRow key={student.id}>
-                      <TableCell className="font-medium">{student.full_name}</TableCell>
-                      <TableCell>{student.email}</TableCell>
-                      <TableCell>{student.phone || "-"}</TableCell>
-                      <TableCell>{student.turma || "-"}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPhaseColor(
-                            student.current_phase || "Onboarding"
-                          )}`}
-                        >
-                          {student.current_phase || "Onboarding"}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            student.mentoria_status === "Ativo"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                              : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
-                          }`}
-                        >
-                          {student.mentoria_status || "Ativo"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(student)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteStudent(student.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredStudents.map((student) => {
+                    const documentType = student.cnpj 
+                      ? student.tipo_pj || 'PJ' 
+                      : 'CPF';
+                    const documentNumber = student.cnpj || student.cpf || '-';
+                    
+                    return (
+                      <TableRow 
+                        key={student.id} 
+                        className="hover:bg-muted/30 cursor-pointer transition-colors"
+                        onClick={() => openViewDetailsDialog(student)}
+                      >
+                        <TableCell className="font-medium">
+                          {student.full_name}
+                          {student.mentoria_status !== "Ativo" && (
+                            <span className="text-muted-foreground italic ml-2">(Inativo)</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{student.email}</TableCell>
+                        <TableCell>
+                          <span className="font-medium">{student.turma || "-"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={documentType === 'CPF' ? 'secondary' : documentType === 'MEI' ? 'default' : 'outline'}>
+                              {documentType}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">{documentNumber}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.possui_contador ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_ml_decola ? (
+                            <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_ml_flex ? (
+                            <CheckCircle2 className="h-5 w-5 text-purple-600 dark:text-purple-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_ml_full ? (
+                            <CheckCircle2 className="h-5 w-5 text-orange-600 dark:text-orange-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(student)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteStudent(student.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

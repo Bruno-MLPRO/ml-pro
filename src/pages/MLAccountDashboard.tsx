@@ -635,10 +635,10 @@ export default function MLAccountDashboard() {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {/* Badge FLEX */}
                         {shippingStats.flex > 0 ? (
-                          <div className="p-4 rounded-lg border border-blue-500 bg-blue-50 dark:bg-blue-950">
+                          <div className="p-4 rounded-lg border border-blue-500/50 bg-blue-500/10">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                <Package className="w-5 h-5 text-blue-500" />
+                                <Package className="w-5 h-5 text-blue-400" />
                                 <span className="font-semibold">FLEX</span>
                               </div>
                               <Badge className="bg-blue-500">
@@ -666,10 +666,10 @@ export default function MLAccountDashboard() {
                         
                         {/* Badge Agências */}
                         {shippingStats.agencies > 0 ? (
-                          <div className="p-4 rounded-lg border border-purple-500 bg-purple-50 dark:bg-purple-950">
+                          <div className="p-4 rounded-lg border border-purple-500/50 bg-purple-500/10">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                <MapPin className="w-5 h-5 text-purple-500" />
+                                <MapPin className="w-5 h-5 text-purple-400" />
                                 <span className="font-semibold">Agências</span>
                               </div>
                               <Badge className="bg-purple-500">
@@ -697,10 +697,10 @@ export default function MLAccountDashboard() {
                         
                         {/* Badge Coleta */}
                         {shippingStats.collection > 0 ? (
-                          <div className="p-4 rounded-lg border border-green-500 bg-green-50 dark:bg-green-950">
+                          <div className="p-4 rounded-lg border border-green-500/50 bg-green-500/10">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                <Truck className="w-5 h-5 text-green-500" />
+                                <Truck className="w-5 h-5 text-green-400" />
                                 <span className="font-semibold">Coleta</span>
                               </div>
                               <Badge className="bg-green-500">
@@ -728,10 +728,10 @@ export default function MLAccountDashboard() {
                         
                         {/* Badge FULL */}
                         {shippingStats.full > 0 ? (
-                          <div className="p-4 rounded-lg border border-orange-500 bg-orange-50 dark:bg-orange-950">
+                          <div className="p-4 rounded-lg border border-orange-500/50 bg-orange-500/10">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                <Warehouse className="w-5 h-5 text-orange-500" />
+                                <Warehouse className="w-5 h-5 text-orange-400" />
                                 <span className="font-semibold">FULL</span>
                               </div>
                               <Badge className="bg-orange-500">

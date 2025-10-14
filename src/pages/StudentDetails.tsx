@@ -198,7 +198,7 @@ export default function StudentDetails() {
       // Buscar jornadas do aluno
       const { data: journeysData, error: journeyError } = await supabase
         .from('student_journeys')
-        .select('id, current_phase, overall_progress')
+        .select('id, current_phase, overall_progress, journey_templates(name)')
         .eq('student_id', studentId);
 
       if (!journeyError && journeysData && journeysData.length > 0) {
@@ -377,6 +377,17 @@ export default function StudentDetails() {
     } catch (error: any) {
       console.error('Error loading milestones:', error);
     }
+  };
+
+  const getColorNameInPortuguese = (colorCode: string): string => {
+    const colorMap: { [key: string]: string } = {
+      'green': 'Verde',
+      'yellow': 'Amarelo',
+      'orange': 'Laranja',
+      'red': 'Vermelho',
+      'light_green': 'Verde Claro',
+    };
+    return colorMap[colorCode] || colorCode;
   };
 
   if (loading) {
@@ -768,7 +779,7 @@ export default function StudentDetails() {
                                       <Badge variant="default">Ativo</Badge>
                                       {metrics.real_reputation_level && (
                                         <Badge variant="outline" className="text-xs">
-                                          Reputação Real: {metrics.real_reputation_level}
+                                          Reputação Real: {getColorNameInPortuguese(metrics.real_reputation_level)}
                                         </Badge>
                                       )}
                                     </div>
@@ -954,7 +965,7 @@ export default function StudentDetails() {
                         <SelectContent>
                           {journeys.map(journey => (
                             <SelectItem key={journey.id} value={journey.id}>
-                              {journey.current_phase || 'Jornada'}
+                              {(journey as any).journey_templates?.name || journey.current_phase || 'Jornada'}
                             </SelectItem>
                           ))}
                         </SelectContent>

@@ -188,7 +188,7 @@ export default function StudentDetails() {
 
       // Buscar contas ML do aluno
       const { data: accountsData, error: accountsError } = await supabase
-        .from('mercado_livre_accounts_safe')
+        .from('mercado_livre_accounts')
         .select('*')
         .eq('student_id', studentId)
         .eq('is_active', true)

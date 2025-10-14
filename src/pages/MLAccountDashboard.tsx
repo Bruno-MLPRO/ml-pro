@@ -189,7 +189,7 @@ export default function MLAccountDashboard() {
   const loadMLAccounts = async () => {
     try {
       const { data, error } = await supabase
-        .from('mercado_livre_accounts')
+        .from('mercado_livre_accounts_safe')
         .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at')
         .eq('student_id', user?.id)
         .eq('is_active', true)

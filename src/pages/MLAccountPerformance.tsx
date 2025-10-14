@@ -55,7 +55,7 @@ export default function MLAccountPerformance() {
     setLoading(true);
     try {
       const { data: accountData, error: accountError } = await supabase
-        .from('mercado_livre_accounts')
+        .from('mercado_livre_accounts_safe')
         .select('*')
         .eq('id', accountId)
         .single();

@@ -271,6 +271,13 @@ export type Database = {
             referencedRelation: "mercado_livre_accounts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "mercado_livre_full_stock_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       mercado_livre_metrics: {
@@ -391,6 +398,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "mercado_livre_metrics_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: true
+            referencedRelation: "mercado_livre_accounts_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "mercado_livre_metrics_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -451,6 +465,13 @@ export type Database = {
             columns: ["ml_account_id"]
             isOneToOne: false
             referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_orders_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts_safe"
             referencedColumns: ["id"]
           },
           {
@@ -544,6 +565,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "mercado_livre_products_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "mercado_livre_products_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -633,6 +661,13 @@ export type Database = {
             columns: ["ml_account_id"]
             isOneToOne: false
             referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_webhooks_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -1086,9 +1121,90 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      mercado_livre_accounts_safe: {
+        Row: {
+          connected_at: string | null
+          created_at: string | null
+          id: string | null
+          is_active: boolean | null
+          is_primary: boolean | null
+          last_sync_at: string | null
+          ml_nickname: string | null
+          ml_user_id: string | null
+          student_id: string | null
+          token_expires_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          last_sync_at?: string | null
+          ml_nickname?: string | null
+          ml_user_id?: string | null
+          student_id?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          last_sync_at?: string | null
+          ml_nickname?: string | null
+          ml_user_id?: string | null
+          student_id?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_accounts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      get_all_ml_accounts_safe: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          connected_at: string | null
+          created_at: string | null
+          id: string | null
+          is_active: boolean | null
+          is_primary: boolean | null
+          last_sync_at: string | null
+          ml_nickname: string | null
+          ml_user_id: string | null
+          student_id: string | null
+          token_expires_at: string | null
+          updated_at: string | null
+        }[]
+      }
+      get_student_ml_accounts_safe: {
+        Args: { student_uuid: string }
+        Returns: {
+          connected_at: string | null
+          created_at: string | null
+          id: string | null
+          is_active: boolean | null
+          is_primary: boolean | null
+          last_sync_at: string | null
+          ml_nickname: string | null
+          ml_user_id: string | null
+          student_id: string | null
+          token_expires_at: string | null
+          updated_at: string | null
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

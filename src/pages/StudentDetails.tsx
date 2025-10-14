@@ -132,8 +132,10 @@ export default function StudentDetails() {
   const [availableApps, setAvailableApps] = useState<any[]>([]);
   const [isAddingApp, setIsAddingApp] = useState(false);
   const [selectedAppId, setSelectedAppId] = useState<string>("");
-  const [journeys, setJourneys] = useState<any[]>([]);
-  const [selectedJourneyId, setSelectedJourneyId] = useState<string>("");
+  const [journeys, setJourneys] = useState<any[]>([]); // student_journeys rows (likely 1)
+  const [selectedJourneyId, setSelectedJourneyId] = useState<string>(""); // student journey id
+  const [journeyTemplates, setJourneyTemplates] = useState<any[]>([]); // templates list
+  const [selectedJourneyTemplateId, setSelectedJourneyTemplateId] = useState<string>("");
 
   useEffect(() => {
     if (userRole !== 'manager') {
@@ -195,28 +197,34 @@ export default function StudentDetails() {
       })).filter(Boolean) || [];
       setStudentApps(apps as any);
 
-      // Buscar jornadas do aluno
+      // Buscar jornada (id) do aluno e templates disponíveis
       const { data: journeysData, error: journeyError } = await supabase
         .from('student_journeys')
         .select('id, current_phase, overall_progress')
         .eq('student_id', studentId);
 
-      console.log('Journeys data:', journeysData, 'Error:', journeyError);
+      const { data: templatesData, error: templatesError } = await supabase
+        .from('journey_templates')
+        .select('id, name, is_default')
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: true });
+
+      if (templatesError) throw templatesError;
+      setJourneyTemplates(templatesData || []);
 
       if (!journeyError && journeysData && journeysData.length > 0) {
         setJourneys(journeysData);
         setSelectedJourneyId(journeysData[0].id);
-        
-        const { data: milestonesData, error: milestonesError } = await supabase
-          .from('milestones')
-          .select('*')
-          .eq('journey_id', journeysData[0].id)
-          .order('order_index');
 
-        console.log('Milestones data:', milestonesData, 'Error:', milestonesError);
-        setMilestones(milestonesData || []);
+        // Seleciona template padrão ou o primeiro
+        const defaultTemplate = (templatesData || []).find(t => t.is_default) || (templatesData || [])[0];
+        if (defaultTemplate) {
+          setSelectedJourneyTemplateId(defaultTemplate.id);
+          await loadMilestonesByTemplate(journeysData[0].id, defaultTemplate.id);
+        } else {
+          setMilestones([]);
+        }
       } else {
-        console.log('No journeys found for student');
         setJourneys([]);
         setMilestones([]);
       }
@@ -395,6 +403,35 @@ export default function StudentDetails() {
       'light_green': 'Verde Claro',
     };
     return colorMap[colorCode] || colorCode;
+  };
+
+  const loadMilestonesByTemplate = async (journeyId: string, templateId: string) => {
+    try {
+      const { data: mtemps, error: mtError } = await supabase
+        .from('milestone_templates')
+        .select('id')
+        .eq('journey_template_id', templateId);
+
+      if (mtError) throw mtError;
+      const templateIds = (mtemps || []).map(t => t.id);
+      if (templateIds.length === 0) {
+        setMilestones([]);
+        return;
+      }
+
+      const { data: milestonesData, error: mError } = await supabase
+        .from('milestones')
+        .select('*')
+        .eq('journey_id', journeyId)
+        .in('template_id', templateIds)
+        .order('order_index');
+
+      if (mError) throw mError;
+      setMilestones(milestonesData || []);
+    } catch (error: any) {
+      console.error('Error loading milestones by template:', error);
+      setMilestones([]);
+    }
   };
 
   if (loading) {
@@ -961,18 +998,18 @@ export default function StudentDetails() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>Jornada do Aluno</CardTitle>
-                    {journeys.length > 0 && (
-                      <Select value={selectedJourneyId} onValueChange={(value) => {
-                        setSelectedJourneyId(value);
-                        loadJourneyMilestones(value);
+                    {journeyTemplates.length > 0 && selectedJourneyId && (
+                      <Select value={selectedJourneyTemplateId} onValueChange={(value) => {
+                        setSelectedJourneyTemplateId(value);
+                        loadMilestonesByTemplate(selectedJourneyId, value);
                       }}>
-                        <SelectTrigger className="w-48">
+                        <SelectTrigger className="w-64">
                           <SelectValue placeholder="Selecione a jornada" />
                         </SelectTrigger>
                         <SelectContent>
-                          {journeys.map(journey => (
-                            <SelectItem key={journey.id} value={journey.id}>
-                              {journey.current_phase || 'Jornada'}
+                          {journeyTemplates.map(tpl => (
+                            <SelectItem key={tpl.id} value={tpl.id}>
+                              {tpl.name}
                             </SelectItem>
                           ))}
                         </SelectContent>

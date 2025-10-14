@@ -855,6 +855,7 @@ export type Database = {
           id: string
           mentoria_status: string | null
           phone: string | null
+          plan_id: string | null
           possui_contador: boolean | null
           sistemas_externos: string | null
           tipo_pj: string | null
@@ -878,6 +879,7 @@ export type Database = {
           id: string
           mentoria_status?: string | null
           phone?: string | null
+          plan_id?: string | null
           possui_contador?: boolean | null
           sistemas_externos?: string | null
           tipo_pj?: string | null
@@ -901,13 +903,22 @@ export type Database = {
           id?: string
           mentoria_status?: string | null
           phone?: string | null
+          plan_id?: string | null
           possui_contador?: boolean | null
           sistemas_externos?: string | null
           tipo_pj?: string | null
           turma?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       student_apps: {
         Row: {
@@ -934,6 +945,64 @@ export type Database = {
             columns: ["app_id"]
             isOneToOne: false
             referencedRelation: "apps_extensions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_bonus_delivery: {
+        Row: {
+          bonus_id: string
+          created_at: string | null
+          delivered: boolean | null
+          delivered_at: string | null
+          delivered_by: string | null
+          id: string
+          notes: string | null
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          bonus_id: string
+          created_at?: string | null
+          delivered?: boolean | null
+          delivered_at?: string | null
+          delivered_by?: string | null
+          id?: string
+          notes?: string | null
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          bonus_id?: string
+          created_at?: string | null
+          delivered?: boolean | null
+          delivered_at?: string | null
+          delivered_by?: string | null
+          id?: string
+          notes?: string | null
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_bonus_delivery_bonus_id_fkey"
+            columns: ["bonus_id"]
+            isOneToOne: false
+            referencedRelation: "bonus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_bonus_delivery_delivered_by_fkey"
+            columns: ["delivered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_bonus_delivery_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

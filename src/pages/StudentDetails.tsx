@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
+import { PlanBonusCard } from "@/components/PlanBonusCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -103,6 +104,23 @@ interface StudentApp {
   student_app_id?: string;
 }
 
+interface BonusDelivery {
+  id: string;
+  bonus_id: string;
+  delivered: boolean;
+  delivered_at: string | null;
+  delivered_by: string | null;
+  notes: string | null;
+  bonus: {
+    name: string;
+    description: string | null;
+    cost: number;
+  };
+  deliveredByProfile?: {
+    full_name: string;
+  };
+}
+
 interface Milestone {
   id: string;
   title: string;
@@ -136,6 +154,7 @@ export default function StudentDetails() {
   const [selectedJourneyId, setSelectedJourneyId] = useState<string>(""); // student journey id
   const [journeyTemplates, setJourneyTemplates] = useState<any[]>([]); // templates list
   const [selectedJourneyTemplateId, setSelectedJourneyTemplateId] = useState<string>("");
+  const [bonusDeliveries, setBonusDeliveries] = useState<BonusDelivery[]>([]);
 
   useEffect(() => {
     if (userRole !== 'manager') {
@@ -231,6 +250,9 @@ export default function StudentDetails() {
 
       // Buscar apps disponíveis
       await loadAvailableApps();
+      
+      // Buscar bônus do aluno
+      await loadBonusDeliveries();
     } catch (error: any) {
       console.error('Error loading student data:', error);
       toast({
@@ -403,6 +425,38 @@ export default function StudentDetails() {
       'light_green': 'Verde Claro',
     };
     return colorMap[colorCode] || colorCode;
+  };
+
+  const loadBonusDeliveries = async () => {
+    if (!studentId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('student_bonus_delivery')
+        .select(`
+          id,
+          bonus_id,
+          delivered,
+          delivered_at,
+          delivered_by,
+          notes,
+          bonus:bonus_id (
+            name,
+            description,
+            cost
+          ),
+          deliveredByProfile:profiles!delivered_by (
+            full_name
+          )
+        `)
+        .eq('student_id', studentId)
+        .order('delivered', { ascending: true });
+
+      if (error) throw error;
+      setBonusDeliveries(data as BonusDelivery[]);
+    } catch (error: any) {
+      console.error('Error loading bonus deliveries:', error);
+    }
   };
 
   const loadMilestonesByTemplate = async (journeyId: string, templateId: string) => {
@@ -601,6 +655,14 @@ export default function StudentDetails() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Bônus do Plano */}
+              <PlanBonusCard
+                studentId={studentId}
+                bonusDeliveries={bonusDeliveries}
+                isManager={true}
+                onUpdate={loadBonusDeliveries}
+              />
 
               {/* Resumo de Performance ML */}
               {consolidatedMetrics && (

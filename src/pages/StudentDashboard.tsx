@@ -89,25 +89,57 @@ const StudentDashboard = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const mlError = urlParams.get('ml_error');
     const mlConnected = urlParams.get('ml_connected');
+    const nickname = urlParams.get('nickname');
+    const mlAlreadyProcessed = urlParams.get('ml_already_processed');
 
     if (mlError) {
-      toast({
-        title: "Erro ao conectar Mercado Livre",
-        description: decodeURIComponent(mlError),
-        variant: "destructive",
-      });
+      // Detectar erro de callback URL não autorizada
+      if (mlError.includes('callback') || mlError.includes('requested path')) {
+        toast({
+          title: "URL de Callback não autorizada",
+          description: "Configure https://yxlxholcipprdozohwhn.supabase.co/functions/v1/ml-oauth-callback nas URLs de Redirecionamento do seu app ML.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "Erro ao conectar Mercado Livre",
+          description: decodeURIComponent(mlError),
+          variant: "destructive",
+        });
+      }
       // Limpar parâmetro da URL
       window.history.replaceState({}, '', '/aluno/dashboard');
     }
 
-    if (mlConnected === 'true') {
+    if (mlAlreadyProcessed === 'true') {
       toast({
-        title: "Conta conectada com sucesso!",
-        description: "Sua conta do Mercado Livre foi conectada. Os dados serão sincronizados em breve.",
+        title: "Já processado",
+        description: "Esta autorização já foi processada anteriormente.",
+        variant: "default",
       });
-      // Limpar parâmetro da URL e recarregar dados
       window.history.replaceState({}, '', '/aluno/dashboard');
-      if (user) loadMLAccounts();
+    }
+
+    if (mlConnected === 'true') {
+      const accountName = nickname ? decodeURIComponent(nickname) : 'Sua conta';
+      toast({
+        title: "✅ Conta conectada!",
+        description: `${accountName} do Mercado Livre foi conectada. Sincronizando dados...`,
+        duration: 5000,
+      });
+      
+      // Limpar parâmetros da URL
+      window.history.replaceState({}, '', '/aluno/dashboard');
+      
+      // Recarregar dados imediatamente
+      if (user) {
+        loadMLAccounts();
+        // Auto-refresh após 2 segundos para garantir que os dados foram salvos
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
     }
   }, [user]);
 

@@ -91,7 +91,26 @@ Deno.serve(async (req) => {
     const mlUser = await userResponse.json()
     console.log('ML user info:', mlUser.id, mlUser.nickname)
 
-    // Deletar entrada temporária
+    // Verificar se este state já foi processado (prevenir duplicatas)
+    const { data: stateCheck } = await supabase
+      .from('mercado_livre_accounts')
+      .select('id')
+      .eq('ml_user_id', stateId)
+      .maybeSingle()
+    
+    if (!stateCheck) {
+      console.log('State already processed, preventing duplicate')
+      const dashboardUrl = `${url.origin}/aluno/dashboard?ml_already_processed=true`
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Location': dashboardUrl,
+          ...corsHeaders
+        }
+      })
+    }
+    
+    // Deletar entrada temporária após verificação
     await supabase
       .from('mercado_livre_accounts')
       .delete()
@@ -169,8 +188,10 @@ Deno.serve(async (req) => {
       console.log('Account reconnected, updating metrics only')
     }
 
-    // Redirecionar para o dashboard
-    const dashboardUrl = `${url.origin}/aluno/dashboard?ml_connected=true`
+    // Redirecionar para o dashboard com informações adicionais
+    const dashboardUrl = `${url.origin}/aluno/dashboard?ml_connected=true&nickname=${encodeURIComponent(mlUser.nickname)}&timestamp=${Date.now()}`
+    
+    console.log('Redirecting to:', dashboardUrl)
     
     return new Response(null, {
       status: 302,

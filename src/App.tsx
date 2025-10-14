@@ -13,6 +13,7 @@ import StudentProfile from "./pages/StudentProfile";
 import JourneyManagement from "./pages/JourneyManagement";
 import TeamManagement from "./pages/TeamManagement";
 import StudentsManagement from "./pages/StudentsManagement";
+import StudentDetails from "./pages/StudentDetails";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import MLAccountPerformance from "./pages/MLAccountPerformance";
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/gestor/dashboard" element={<GestorDashboard />} />
             <Route path="/gestor/jornada" element={<JourneyManagement />} />
             <Route path="/gestor/alunos" element={<StudentsManagement />} />
+            <Route path="/gestor/aluno/:studentId" element={<StudentDetails />} />
             <Route path="/gestor/equipe" element={<TeamManagement />} />
             <Route path="/aluno/dashboard" element={<StudentDashboard />} />
             <Route path="/aluno/jornadas" element={<StudentJourney />} />

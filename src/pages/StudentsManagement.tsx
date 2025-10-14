@@ -617,7 +617,11 @@ export default function StudentsManagement() {
     setSelectedStudentMilestones(filteredMilestones);
   };
 
-  const openViewDetailsDialog = async (student: Student) => {
+  const openViewDetailsDialog = (student: Student) => {
+    navigate(`/gestor/aluno/${student.id}`);
+  };
+
+  const openViewDetailsDialogOld = async (student: Student) => {
     setSelectedStudent(student);
     setDialogJourneyId(selectedJourneyId);
     

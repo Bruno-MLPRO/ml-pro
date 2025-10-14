@@ -656,14 +656,6 @@ export default function StudentDetails() {
                 </Card>
               </div>
 
-              {/* Bônus do Plano */}
-              <PlanBonusCard
-                studentId={studentId}
-                bonusDeliveries={bonusDeliveries}
-                isManager={true}
-                onUpdate={loadBonusDeliveries}
-              />
-
               {/* Resumo de Performance ML */}
               {consolidatedMetrics && (
                 <div>
@@ -713,6 +705,14 @@ export default function StudentDetails() {
                   </div>
                 </div>
               )}
+
+              {/* Bônus do Plano */}
+              <PlanBonusCard
+                studentId={studentId}
+                bonusDeliveries={bonusDeliveries}
+                isManager={true}
+                onUpdate={loadBonusDeliveries}
+              />
             </TabsContent>
 
             {/* TAB: CONTAS MERCADO LIVRE */}

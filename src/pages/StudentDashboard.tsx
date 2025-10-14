@@ -342,6 +342,39 @@ const StudentDashboard = () => {
     }
   }
 
+  const testMLConnection = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('ml-test-connection');
+      
+      if (error) {
+        console.error('Test error:', error);
+        toast({
+          title: "Erro ao testar conexão",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('ML Connection Test:', data);
+      
+      if (!data.app_id_configured || !data.secret_key_configured) {
+        toast({
+          title: "Configuração incompleta",
+          description: "As credenciais do Mercado Livre não estão configuradas corretamente.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Configuração OK",
+          description: `APP_ID: ${data.app_id_preview}\nCallback: ${data.callback_url}`,
+        });
+      }
+    } catch (error) {
+      console.error('Test error:', error);
+    }
+  };
+
   const handleConnectML = async () => {
     setConnectingML(true);
     toast({

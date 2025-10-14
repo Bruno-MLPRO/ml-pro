@@ -27,13 +27,31 @@ Deno.serve(async (req) => {
     const secretKey = Deno.env.get('MERCADO_LIVRE_SECRET_KEY')!
     const callbackUrl = `${supabaseUrl}/functions/v1/ml-oauth-callback`
 
+    console.log('=== ML OAuth Callback Started ===')
+    console.log('Code received:', code ? 'YES' : 'NO')
+    console.log('State received:', state ? 'YES' : 'NO')
+    console.log('Callback URL:', callbackUrl)
+    console.log('APP_ID configured:', appId ? 'YES' : 'NO')
+    console.log('SECRET_KEY configured:', secretKey ? 'YES' : 'NO')
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Trocar código por tokens
     console.log('Exchanging code for tokens...')
+    
+    console.log('Token request params:', {
+      grant_type: 'authorization_code',
+      client_id: appId,
+      redirect_uri: callbackUrl,
+      code_length: code.length
+    })
+    
     const tokenResponse = await fetch('https://api.mercadolibre.com/oauth/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: appId,
@@ -45,8 +63,17 @@ Deno.serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
-      console.error('Token exchange failed:', errorText)
-      throw new Error('Failed to exchange code for tokens')
+      console.error('=== Token Exchange Failed ===')
+      console.error('Status:', tokenResponse.status)
+      console.error('Error:', errorText)
+      
+      let mlError = 'Failed to exchange code for tokens'
+      try {
+        const errorJson = JSON.parse(errorText)
+        mlError = errorJson.message || errorJson.error || mlError
+      } catch {}
+      
+      throw new Error(`ML API Error: ${mlError} (Status: ${tokenResponse.status})`)
     }
 
     const tokens = await tokenResponse.json()
@@ -157,18 +184,20 @@ Deno.serve(async (req) => {
     
     let errorMessage = 'Erro desconhecido ao conectar conta do Mercado Livre'
     
-    if (error instanceof Error) {
-      // Tratar erros específicos
-      if (error.message.includes('duplicate key')) {
-        errorMessage = 'Esta conta do Mercado Livre já está conectada. Tente desconectar primeiro.'
-      } else if (error.message.includes('Failed to exchange code')) {
-        errorMessage = 'Falha ao validar autorização do Mercado Livre. Por favor, tente novamente.'
-      } else if (error.message.includes('Failed to fetch user info')) {
-        errorMessage = 'Não foi possível obter informações da conta do Mercado Livre.'
-      } else {
-        errorMessage = error.message
-      }
+  if (error instanceof Error) {
+    // Tratar erros específicos
+    if (error.message.includes('requested path is invalid')) {
+      errorMessage = 'URL de callback não autorizada no Mercado Livre. Verifique as configurações do app.'
+    } else if (error.message.includes('duplicate key')) {
+      errorMessage = 'Esta conta do Mercado Livre já está conectada. Tente desconectar primeiro.'
+    } else if (error.message.includes('Failed to exchange code') || error.message.includes('ML API Error')) {
+      errorMessage = 'Credenciais do Mercado Livre inválidas. Verifique APP_ID e SECRET_KEY.'
+    } else if (error.message.includes('Failed to fetch user info')) {
+      errorMessage = 'Não foi possível obter informações da conta do Mercado Livre.'
+    } else {
+      errorMessage = error.message
     }
+  }
     
     const errorUrl = `${new URL(req.url).origin}/aluno/dashboard?ml_error=${encodeURIComponent(errorMessage)}`
     return new Response(null, {

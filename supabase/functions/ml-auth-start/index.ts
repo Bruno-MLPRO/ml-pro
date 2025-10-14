@@ -15,6 +15,14 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const appId = Deno.env.get('MERCADO_LIVRE_APP_ID')!
     const callbackUrl = `${supabaseUrl}/functions/v1/ml-oauth-callback`
+    
+    // Validar secrets
+    if (!appId || appId === 'undefined' || appId === 'null') {
+      throw new Error('MERCADO_LIVRE_APP_ID não está configurado corretamente')
+    }
+
+    console.log('Auth start - APP_ID configured:', appId.substring(0, 8) + '...')
+    console.log('Auth start - Callback URL:', callbackUrl)
 
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {

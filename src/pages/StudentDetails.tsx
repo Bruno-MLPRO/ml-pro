@@ -100,6 +100,7 @@ interface StudentApp {
   id: string;
   name: string;
   color: string;
+  student_app_id?: string;
 }
 
 interface Milestone {
@@ -184,12 +185,15 @@ export default function StudentDetails() {
       // Buscar apps do aluno
       const { data: appsData, error: appsError } = await supabase
         .from('student_apps')
-        .select('apps_extensions(id, name, color)')
+        .select('id, apps_extensions(id, name, color)')
         .eq('student_id', studentId);
 
       if (appsError) throw appsError;
-      const apps = appsData?.map(sa => sa.apps_extensions).flat().filter(Boolean) || [];
-      setStudentApps(apps as StudentApp[]);
+      const apps = appsData?.map(sa => ({
+        student_app_id: sa.id,
+        ...(sa.apps_extensions as any)
+      })).filter(Boolean) || [];
+      setStudentApps(apps as any);
 
       // Buscar jornadas do aluno
       const { data: journeysData, error: journeyError } = await supabase
@@ -315,6 +319,25 @@ export default function StudentDetails() {
     loadStudentData();
     setIsAddingApp(false);
     setSelectedAppId("");
+  };
+
+  const removeAppFromStudent = async (studentAppId: string) => {
+    const { error } = await supabase
+      .from('student_apps')
+      .delete()
+      .eq('id', studentAppId);
+    
+    if (error) {
+      toast({ 
+        title: "Erro ao remover app", 
+        description: error.message,
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    toast({ title: "App removido com sucesso!" });
+    loadStudentData();
   };
 
   const updateMilestoneStatus = async (milestoneId: string, newStatus: string) => {
@@ -741,7 +764,14 @@ export default function StudentDetails() {
                               <CardContent>
                                 {metrics.has_decola ? (
                                   <div className="space-y-3">
-                                    <Badge variant="default" className="mb-2">Ativo</Badge>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="default">Ativo</Badge>
+                                      {metrics.real_reputation_level && (
+                                        <Badge variant="outline" className="text-xs">
+                                          Reputação Real: {metrics.real_reputation_level}
+                                        </Badge>
+                                      )}
+                                    </div>
                                     <div>
                                       <div className="flex items-center justify-between mb-2">
                                         <span className="text-sm">Problemas</span>
@@ -881,7 +911,7 @@ export default function StudentDetails() {
                       {studentApps.map(app => (
                         <div
                           key={app.id}
-                          className="p-4 border rounded-lg"
+                          className="p-4 border rounded-lg flex items-center justify-between"
                           style={{ borderColor: app.color }}
                         >
                           <div className="flex items-center gap-3">
@@ -891,6 +921,14 @@ export default function StudentDetails() {
                             />
                             <span className="font-medium">{app.name}</span>
                           </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => app.student_app_id && removeAppFromStudent(app.student_app_id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -905,7 +943,7 @@ export default function StudentDetails() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>Jornada do Aluno</CardTitle>
-                    {journeys.length > 1 && (
+                    {journeys.length > 0 && (
                       <Select value={selectedJourneyId} onValueChange={(value) => {
                         setSelectedJourneyId(value);
                         loadJourneyMilestones(value);

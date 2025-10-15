@@ -8,10 +8,14 @@ const corsHeaders = {
 
 interface ActionItem {
   id: string
+  name: string
+  description: string
+  progress: number
+  progress_max: number
+  apply: boolean
+  status: 'pending' | 'completed'
   type: string
-  status: 'completed' | 'pending' | 'in_progress'
-  name?: string
-  description?: string
+  completed?: string
 }
 
 interface PerformanceResponse {

@@ -878,6 +878,42 @@ export type Database = {
           },
         ]
       }
+      ml_auto_sync_logs: {
+        Row: {
+          created_at: string
+          error_details: Json | null
+          failed_syncs: number | null
+          finished_at: string | null
+          id: string
+          started_at: string
+          successful_syncs: number | null
+          tokens_renewed: number | null
+          total_accounts: number | null
+        }
+        Insert: {
+          created_at?: string
+          error_details?: Json | null
+          failed_syncs?: number | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          successful_syncs?: number | null
+          tokens_renewed?: number | null
+          total_accounts?: number | null
+        }
+        Update: {
+          created_at?: string
+          error_details?: Json | null
+          failed_syncs?: number | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          successful_syncs?: number | null
+          tokens_renewed?: number | null
+          total_accounts?: number | null
+        }
+        Relationships: []
+      }
       notices: {
         Row: {
           content: string

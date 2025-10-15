@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
           account_id: account.id,
           ml_nickname: account.ml_nickname,
           success: true,
-          token_renewed: wasRenewed
+          token_renewed: wasRenewed || undefined
         });
 
         successCount++;
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
           account_id: account.id,
           ml_nickname: account.ml_nickname,
           success: false,
-          error: error.message
+          error: error instanceof Error ? error.message : String(error)
         });
 
         failCount++;
@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error.message 
+        error: error instanceof Error ? error.message : String(error)
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

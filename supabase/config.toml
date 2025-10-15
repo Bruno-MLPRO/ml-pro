@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.ml-get-item-health]
 verify_jwt = true
+
+[functions.ml-auto-sync-all]
+verify_jwt = false

@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.ml-webhook-receiver]
 verify_jwt = false
+
+[functions.ml-get-item-health]
+verify_jwt = true

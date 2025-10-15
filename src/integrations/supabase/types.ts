@@ -280,6 +280,105 @@ export type Database = {
           },
         ]
       }
+      mercado_livre_health_history: {
+        Row: {
+          health_level: string
+          health_score: number
+          id: string
+          ml_account_id: string
+          ml_item_id: string
+          recorded_at: string | null
+          student_id: string
+        }
+        Insert: {
+          health_level: string
+          health_score: number
+          id?: string
+          ml_account_id: string
+          ml_item_id: string
+          recorded_at?: string | null
+          student_id: string
+        }
+        Update: {
+          health_level?: string
+          health_score?: number
+          id?: string
+          ml_account_id?: string
+          ml_item_id?: string
+          recorded_at?: string | null
+          student_id?: string
+        }
+        Relationships: []
+      }
+      mercado_livre_item_health: {
+        Row: {
+          completion_percentage: number | null
+          created_at: string | null
+          goals: Json
+          goals_applicable: number | null
+          goals_completed: number | null
+          health_level: string
+          health_score: number
+          id: string
+          ml_account_id: string
+          ml_item_id: string
+          previous_score: number | null
+          score_trend: string | null
+          student_id: string
+          synced_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          completion_percentage?: number | null
+          created_at?: string | null
+          goals?: Json
+          goals_applicable?: number | null
+          goals_completed?: number | null
+          health_level: string
+          health_score: number
+          id?: string
+          ml_account_id: string
+          ml_item_id: string
+          previous_score?: number | null
+          score_trend?: string | null
+          student_id: string
+          synced_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          completion_percentage?: number | null
+          created_at?: string | null
+          goals?: Json
+          goals_applicable?: number | null
+          goals_completed?: number | null
+          health_level?: string
+          health_score?: number
+          id?: string
+          ml_account_id?: string
+          ml_item_id?: string
+          previous_score?: number | null
+          score_trend?: string | null
+          student_id?: string
+          synced_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_item_health_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_item_health_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mercado_livre_metrics: {
         Row: {
           active_listings: number | null

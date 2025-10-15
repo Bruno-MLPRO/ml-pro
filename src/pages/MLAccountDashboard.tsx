@@ -12,6 +12,8 @@ import { Progress } from "@/components/ui/progress";
 import { ReputationBadge } from "@/components/ReputationBadge";
 import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HealthDashboard } from "@/components/ml-health/HealthDashboard";
+import { HealthIndividual } from "@/components/ml-health/HealthIndividual";
 
 interface MLAccount {
   id: string;
@@ -50,8 +52,28 @@ interface MLMetrics {
   neutral_ratings_rate: number;
 }
 
+interface HealthGoal {
+  id: string;
+  name: string;
+  progress: number;
+  progress_max: number;
+  apply: boolean;
+  completed?: string;
+}
+
+interface ItemHealth {
+  health_score: number;
+  health_level: string;
+  goals: HealthGoal[];
+  goals_completed: number;
+  goals_applicable: number;
+  score_trend: string;
+  previous_score?: number;
+}
+
 interface MLProduct {
   id: string;
+  ml_item_id: string;
   title: string;
   thumbnail: string;
   status: string;
@@ -63,6 +85,7 @@ interface MLProduct {
   permalink: string;
   shipping_mode: string | null;
   logistic_type: string | null;
+  health?: ItemHealth;
 }
 
 interface MLFullStock {
@@ -102,6 +125,10 @@ export default function MLAccountDashboard() {
   const [loading, setLoading] = useState(true);
   const [adsFilter, setAdsFilter] = useState<'low_quality_photos' | 'no_description' | 'no_tax_data'>('low_quality_photos');
   const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
+  const [healthSubTab, setHealthSubTab] = useState<'dashboard' | 'individual'>('dashboard');
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [healthHistory, setHealthHistory] = useState<any[]>([]);
+  const [itemHistory, setItemHistory] = useState<any[]>([]);
 
   useEffect(() => {
     if (user) {
@@ -154,10 +181,44 @@ export default function MLAccountDashboard() {
       })
       .subscribe();
 
+    const healthChannel = supabase
+      .channel('ml-health-changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'mercado_livre_item_health',
+        filter: `ml_account_id=eq.${selectedAccountId}`
+      }, (payload) => {
+        const newData = payload.new as any;
+        const oldData = payload.old as any;
+        
+        if (newData.health_score < 0.5 && oldData.health_score >= 0.5) {
+          toast.error('⚠️ Atenção! Qualidade Crítica', {
+            description: `Um anúncio caiu para score crítico (${(newData.health_score * 100).toFixed(0)}%)`,
+          });
+        }
+        
+        if (newData.health_score - oldData.health_score >= 0.1) {
+          toast.success('🎉 Parabéns! Melhoria Detectada', {
+            description: `O score aumentou ${((newData.health_score - oldData.health_score) * 100).toFixed(0)}%!`
+          });
+        }
+        
+        if (newData.goals_completed > oldData.goals_completed) {
+          toast.success('✅ Objetivo Completado!', {
+            description: 'Você completou mais um objetivo de qualidade'
+          });
+        }
+        
+        loadAccountData(selectedAccountId);
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(metricsChannel);
       supabase.removeChannel(productsChannel);
       supabase.removeChannel(stockChannel);
+      supabase.removeChannel(healthChannel);
     };
   }, [selectedAccountId]);
 
@@ -213,7 +274,7 @@ export default function MLAccountDashboard() {
   const loadAccountData = async (accountId: string) => {
     setLoading(true);
     try {
-      const [metricsResult, productsResult, stockResult] = await Promise.all([
+      const [metricsResult, productsResult, stockResult, healthResult, historyResult] = await Promise.all([
         supabase
           .from('mercado_livre_metrics')
           .select('*')
@@ -232,10 +293,21 @@ export default function MLAccountDashboard() {
           .from('mercado_livre_full_stock')
           .select('*')
           .eq('ml_account_id', accountId)
-          .order('ml_item_id')
+          .order('ml_item_id'),
+        
+        supabase
+          .from('mercado_livre_item_health')
+          .select('*')
+          .eq('ml_account_id', accountId),
+        
+        supabase
+          .from('mercado_livre_health_history')
+          .select('*')
+          .eq('ml_account_id', accountId)
+          .gte('recorded_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+          .order('recorded_at', { ascending: true })
       ]);
 
-      // Enriquecer dados do estoque com informações dos produtos
       const enrichedStock = await Promise.all(
         (stockResult.data || []).map(async (stock) => {
           const { data: product } = await supabase
@@ -256,19 +328,86 @@ export default function MLAccountDashboard() {
       if (productsResult.error) throw productsResult.error;
       if (stockResult.error) throw stockResult.error;
 
+      const healthMap = new Map((healthResult.data || []).map(h => [h.ml_item_id, h]));
+      
+      const productsWithHealth = (productsResult.data || []).map(product => ({
+        ...product,
+        health: healthMap.get(product.ml_item_id) ? {
+          health_score: healthMap.get(product.ml_item_id)!.health_score,
+          health_level: healthMap.get(product.ml_item_id)!.health_level,
+          goals: healthMap.get(product.ml_item_id)!.goals as unknown as HealthGoal[],
+          goals_completed: healthMap.get(product.ml_item_id)!.goals_completed,
+          goals_applicable: healthMap.get(product.ml_item_id)!.goals_applicable,
+          score_trend: healthMap.get(product.ml_item_id)!.score_trend,
+          previous_score: healthMap.get(product.ml_item_id)!.previous_score,
+        } : undefined
+      }));
+
       setMetrics(metricsResult.data);
-      setProducts(productsResult.data || []);
+      setProducts(productsWithHealth);
       setFullStock(enrichedStock);
       
-      // Calculate shipping statistics
-      const stats = calculateShippingStats(productsResult.data || []);
+      const stats = calculateShippingStats(productsWithHealth);
       setShippingStats(stats);
+      
+      const historyByDate = new Map<string, number[]>();
+      (historyResult.data || []).forEach(record => {
+        const date = new Date(record.recorded_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        if (!historyByDate.has(date)) {
+          historyByDate.set(date, []);
+        }
+        historyByDate.get(date)!.push(record.health_score);
+      });
+      
+      const aggregatedHistory = Array.from(historyByDate.entries()).map(([date, scores]) => ({
+        date,
+        averageScore: (scores.reduce((sum, s) => sum + s, 0) / scores.length) * 100
+      }));
+      
+      setHealthHistory(aggregatedHistory);
+      
+      if (selectedItemId) {
+        const itemHistoryData = (historyResult.data || [])
+          .filter(h => h.ml_item_id === selectedItemId)
+          .map(h => ({
+            date: new Date(h.recorded_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            score: h.health_score * 100
+          }));
+        setItemHistory(itemHistoryData);
+      }
     } catch (error: any) {
       console.error('Error loading account data:', error);
       toast.error('Erro ao carregar dados da conta');
     } finally {
       setLoading(false);
     }
+  };
+
+  const syncItemHealth = async (itemId?: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ml-get-item-health', {
+        body: { 
+          ml_account_id: selectedAccountId,
+          item_id: itemId
+        }
+      });
+      
+      if (error) throw error;
+      
+      toast.success(`Health sincronizado com sucesso! ${data.synced_count} itens atualizados`);
+      await loadAccountData(selectedAccountId);
+    } catch (error: any) {
+      console.error('Error syncing health:', error);
+      toast.error('Erro ao sincronizar health');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectItem = (itemId: string) => {
+    setSelectedItemId(itemId);
+    setHealthSubTab('individual');
   };
 
   const totalStockUnits = fullStock.reduce((sum, item) => 
@@ -777,67 +916,49 @@ export default function MLAccountDashboard() {
               )}
             </TabsContent>
 
-            {/* ABA ANÚNCIOS */}
+            {/* ABA PERFORMANCE DE ANÚNCIOS */}
             <TabsContent value="anuncios" className="space-y-6">
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
               ) : (
-                <>
-                  {/* Subnavegação de Anúncios */}
-                  <Tabs value={adsFilter} onValueChange={(v) => setAdsFilter(v as any)} className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="low_quality_photos" className="flex items-center gap-2">
-                        <Image className="w-4 h-4" />
-                        <span className="hidden sm:inline">Fotos &lt; 1200x1200</span>
-                        <span className="sm:hidden">Fotos</span>
-                        <Badge variant={lowQualityProducts.length > 0 ? "destructive" : "secondary"} className="ml-1">
-                          {lowQualityProducts.length}
-                        </Badge>
-                      </TabsTrigger>
-                      
-                      <TabsTrigger value="no_description" className="flex items-center gap-2">
-                        <FileText className="w-4 h-4" />
-                        <span className="hidden sm:inline">Sem Descrição</span>
-                        <span className="sm:hidden">Descrição</span>
-                        <Badge variant={noDescriptionProducts.length > 0 ? "destructive" : "secondary"} className="ml-1">
-                          {noDescriptionProducts.length}
-                        </Badge>
-                      </TabsTrigger>
-                      
-                      <TabsTrigger value="no_tax_data" className="flex items-center gap-2">
-                        <Receipt className="w-4 h-4" />
-                        <span className="hidden sm:inline">Sem Dados Fiscais</span>
-                        <span className="sm:hidden">Fiscais</span>
-                        <Badge variant={noTaxDataProducts.length > 0 ? "destructive" : "secondary"} className="ml-1">
-                          {noTaxDataProducts.length}
-                        </Badge>
-                      </TabsTrigger>
-                    </TabsList>
+                <Tabs value={healthSubTab} onValueChange={(v) => setHealthSubTab(v as any)} className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="dashboard">
+                      <TrendingUp className="w-4 h-4 mr-2" />
+                      Dashboard Geral
+                    </TabsTrigger>
+                    <TabsTrigger value="individual">
+                      <Image className="w-4 h-4 mr-2" />
+                      Análise Individual
+                    </TabsTrigger>
+                  </TabsList>
 
-                     <TabsContent value="low_quality_photos" className="mt-4">
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
+                  <TabsContent value="dashboard" className="mt-6">
+                    <HealthDashboard 
+                      products={products}
+                      historyData={healthHistory}
+                      onSelectItem={handleSelectItem}
+                      onSync={() => syncItemHealth()}
+                      loading={loading}
+                    />
+                    
+                    {/* Seção existente de fotos baixa qualidade */}
+                    {lowQualityProducts.length > 0 && (
+                      <div className="mt-8">
+                        <div className="flex items-center justify-between mb-4">
                           <h3 className="text-lg font-semibold flex items-center gap-2">
                             <AlertTriangle className="w-5 h-5 text-orange-500" />
                             Produtos com Fotos de Baixa Qualidade
                           </h3>
-                          {lowQualityProducts.length > 0 && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled
-                              className="gap-2"
-                            >
-                              <Image className="w-4 h-4" />
-                              Correção Automática (em breve)
-                            </Button>
-                          )}
+                          <Button variant="outline" size="sm" disabled className="gap-2">
+                            <Image className="w-4 h-4" />
+                            Correção Automática (em breve)
+                          </Button>
                         </div>
                         <p className="text-sm text-muted-foreground mb-4">
                           Fotos menores que 1200x1200px podem prejudicar a visibilidade dos seus anúncios.
-                          Recomendamos usar um editor de imagens para redimensionar as fotos manualmente.
                         </p>
                         {renderProductList(
                           lowQualityProducts,
@@ -845,37 +966,18 @@ export default function MLAccountDashboard() {
                           (product) => `${product.photo_count} fotos • Menor dimensão: ${product.min_photo_dimension || 'N/A'}px`
                         )}
                       </div>
-                    </TabsContent>
+                    )}
+                  </TabsContent>
 
-                    <TabsContent value="no_description" className="mt-4">
-                      <div>
-                        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                          <FileText className="w-5 h-5 text-orange-500" />
-                          Produtos sem Descrição
-                        </h3>
-                        {renderProductList(
-                          noDescriptionProducts,
-                          "Todos os seus anúncios possuem descrição completa",
-                          () => "Descrição não preenchida ou muito curta (< 50 caracteres)"
-                        )}
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value="no_tax_data" className="mt-4">
-                      <div>
-                        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                          <Receipt className="w-5 h-5 text-orange-500" />
-                          Produtos sem Dados Fiscais
-                        </h3>
-                        {renderProductList(
-                          noTaxDataProducts,
-                          "Todos os seus anúncios possuem dados fiscais completos (NCM)",
-                          () => "Falta cadastrar o NCM (Nomenclatura Comum do Mercosul)"
-                        )}
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </>
+                  <TabsContent value="individual" className="mt-6">
+                    <HealthIndividual 
+                      products={products}
+                      selectedItemId={selectedItemId}
+                      onSelectItem={setSelectedItemId}
+                      itemHistory={itemHistory}
+                    />
+                  </TabsContent>
+                </Tabs>
               )}
             </TabsContent>
 

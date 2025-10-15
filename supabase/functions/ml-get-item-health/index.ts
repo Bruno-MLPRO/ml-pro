@@ -31,14 +31,16 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
   
   // Fotos: +15% se tem 5+ fotos de boa qualidade
   const photoCount = product.photo_count || 0
-  const photosCompleted = !product.has_low_quality_photos && photoCount >= 5
+  const photosMissing = Math.max(0, 5 - photoCount)
+  const hasLowQuality = product.has_low_quality_photos
+  const photosCompleted = !hasLowQuality && photoCount >= 5
   
   if (photosCompleted) {
     score += 0.15
     actions.push({
       id: 'photos_ok',
       name: 'Fotos de Qualidade',
-      description: 'Produto tem fotos de boa qualidade (5+ fotos)',
+      description: `✅ Produto tem ${photoCount} fotos de boa qualidade`,
       progress: photoCount,
       progress_max: 5,
       apply: true,
@@ -47,10 +49,20 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
       completed: new Date().toISOString()
     })
   } else {
+    let photoDescription = ''
+    
+    if (photoCount === 0) {
+      photoDescription = '📸 Nenhuma foto adicionada. Adicione 5 fotos de alta qualidade (mínimo 1200x1200px) mostrando diferentes ângulos do produto.'
+    } else if (photoCount < 5) {
+      photoDescription = `📸 Você tem ${photoCount} foto${photoCount > 1 ? 's' : ''}. Adicione mais ${photosMissing} foto${photosMissing > 1 ? 's' : ''} de alta qualidade (mínimo 1200x1200px).`
+    } else if (hasLowQuality) {
+      photoDescription = `📸 Você tem ${photoCount} fotos mas algumas estão com baixa qualidade (menos de 1200px). Substitua por fotos maiores e mais nítidas.`
+    }
+    
     actions.push({
       id: 'improve_photos',
       name: 'Melhorar Fotos',
-      description: `Adicione mais fotos de alta qualidade (atualmente ${photoCount}/5)`,
+      description: photoDescription,
       progress: photoCount,
       progress_max: 5,
       apply: true,
@@ -66,7 +78,7 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
     actions.push({
       id: 'description_ok',
       name: 'Descrição Completa',
-      description: 'Produto tem descrição detalhada',
+      description: '✅ Produto tem descrição detalhada',
       progress: 1,
       progress_max: 1,
       apply: true,
@@ -78,7 +90,7 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
     actions.push({
       id: 'add_description',
       name: 'Adicionar Descrição',
-      description: 'Complete a descrição do produto com detalhes importantes',
+      description: '📝 Adicione uma descrição completa com:\n• Características do produto\n• Benefícios e diferenciais\n• Modo de uso ou instalação\n• Dimensões e especificações técnicas\n• Conteúdo da embalagem\n\nMínimo recomendado: 150 caracteres',
       progress: 0,
       progress_max: 1,
       apply: true,
@@ -94,7 +106,7 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
     actions.push({
       id: 'tax_data_ok',
       name: 'Dados Fiscais OK',
-      description: 'Dados fiscais configurados corretamente',
+      description: '✅ Dados fiscais configurados corretamente',
       progress: 1,
       progress_max: 1,
       apply: true,
@@ -106,7 +118,7 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
     actions.push({
       id: 'add_tax_data',
       name: 'Adicionar Dados Fiscais',
-      description: 'Configure os dados fiscais do produto (NCM, origem)',
+      description: '🏦 Configure os dados fiscais obrigatórios:\n• EAN/GTIN: Código de barras do produto\n• NCM: Nomenclatura Comum do Mercosul\n• SELLER_SKU: Código interno do seu estoque\n\nPelo menos um desses códigos é necessário para emissão de nota fiscal e envio FULL.',
       progress: 0,
       progress_max: 1,
       apply: true,
@@ -122,7 +134,7 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
     actions.push({
       id: 'status_active',
       name: 'Anúncio Ativo',
-      description: 'Produto está ativo e visível no marketplace',
+      description: '✅ Produto está ativo e visível no marketplace',
       progress: 1,
       progress_max: 1,
       apply: true,
@@ -131,10 +143,17 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
       completed: new Date().toISOString()
     })
   } else {
+    const statusTexts: Record<string, string> = {
+      'paused': '⏸️ Seu anúncio está pausado. Ative-o para que compradores possam encontrar e comprar seu produto.',
+      'closed': '🔒 Seu anúncio está fechado. Reative-o para voltar a vender.',
+      'under_review': '🔍 Seu anúncio está em revisão pelo Mercado Livre. Aguarde aprovação.',
+      'inactive': '💤 Seu anúncio está inativo. Ative-o nas configurações do anúncio.'
+    }
+    
     actions.push({
       id: 'activate_listing',
       name: 'Ativar Anúncio',
-      description: 'Ative o anúncio para começar a vender',
+      description: statusTexts[product.status] || `⚠️ Status: ${product.status}. Ative seu anúncio para começar a vender.`,
       progress: 0,
       progress_max: 1,
       apply: true,
@@ -292,6 +311,8 @@ serve(async (req) => {
     }
 
     console.log(`[ML-HEALTH] Found ${itemsToSync.length} items to sync`)
+    console.log(`[ML-HEALTH] Processing health for ${itemsToSync.length} traditional (non-catalog) active items`)
+    console.log(`[ML-HEALTH] Catalog listings are excluded from health analysis`)
     
     if (itemsToSync.length === 0) {
       console.log('[ML-HEALTH] No active items found for this account')

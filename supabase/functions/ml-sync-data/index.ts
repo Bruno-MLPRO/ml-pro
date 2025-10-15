@@ -114,7 +114,7 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
   
   while (hasMore) {
     const activeResponse = await fetch(
-      `https://api.mercadolibre.com/users/${account.ml_user_id}/items/search?status=active&limit=${limit}&offset=${offset}`,
+      `https://api.mercadolibre.com/users/${account.ml_user_id}/items/search?status=active&catalog_listing=false&limit=${limit}&offset=${offset}`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     )
 
@@ -238,7 +238,12 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
     if (offset >= 500) break
   }
 
-  console.log(`Synced ${products.length} total products`)
+  console.log(`[ML-SYNC] Successfully synced ${products.length} traditional (non-catalog) products`);
+  console.log(`[ML-SYNC] Summary:`)
+  console.log(`  ✅ Total synced: ${products.length}`)
+  console.log(`  📊 Active: ${products.filter(p => p.status === 'active').length}`)
+  console.log(`  ⏸️  Paused: ${products.filter(p => p.status === 'paused').length}`)
+  console.log(`  🚫 Catalog items: excluded (catalog_listing=false filter applied)`)
   return products
 }
 

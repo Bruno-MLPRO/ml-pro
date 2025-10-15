@@ -10,6 +10,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 interface HealthGoal {
   id: string;
   name: string;
+  description?: string;
   progress: number;
   progress_max: number;
   apply: boolean;
@@ -45,19 +46,25 @@ interface HealthIndividualProps {
   itemHistory: ItemHistoryData[];
 }
 
-const getGoalSuggestion = (goalId: string, missing: number): string => {
+const getGoalSuggestion = (goal: HealthGoal, description?: string): string => {
+  // Se o objetivo tem uma descrição customizada do backend, usar ela
+  if (description) {
+    return description;
+  }
+  
+  // Fallback para sugestões genéricas baseadas no tipo
+  const missing = goal.progress_max - goal.progress;
   const suggestions: Record<string, string> = {
-    'technical_specification': `Adicione ${missing} atributos técnicos para melhorar a descoberta do produto`,
-    'picture': 'Adicione mais fotos de alta qualidade (mínimo 1200x1200px)',
-    'product_identifiers': 'Adicione códigos de barras (EAN/UPC) para melhor rastreabilidade',
-    'variations': 'Crie variações do produto (cores, tamanhos) se aplicável',
-    'free_shipping': 'Ative o frete grátis para aumentar a competitividade',
-    'flex': 'Ative o envio FLEX para agilizar entregas',
-    'installments_free': 'Ofereça parcelamento sem juros',
-    'size_chart': 'Adicione tabela de medidas (importante para roupas)',
+    'improve_photos': `Adicione ${missing} foto${missing > 1 ? 's' : ''} de alta qualidade (mínimo 1200x1200px)`,
+    'add_description': 'Adicione uma descrição completa com características, benefícios e especificações do produto',
+    'add_tax_data': 'Configure EAN/GTIN, NCM ou SELLER_SKU para emissão de nota fiscal',
+    'activate_listing': 'Ative seu anúncio para começar a vender',
+    'technical_specification': `Adicione ${missing} atributos técnicos`,
+    'picture': 'Adicione mais fotos de alta qualidade',
+    'product_identifiers': 'Adicione códigos de barras (EAN/UPC)',
   };
   
-  return suggestions[goalId] || 'Complete este objetivo para melhorar o score';
+  return suggestions[goal.id] || 'Complete este objetivo para melhorar o score';
 };
 
 const getActionTitle = (goalId: string): string => {
@@ -229,8 +236,8 @@ export function HealthIndividual({ products, selectedItemId, onSelectItem, itemH
                     <Progress value={percentage} className="h-2 mb-2" />
                     
                     {!isCompleted && (
-                      <p className="text-sm text-muted-foreground">
-                        {getGoalSuggestion(goal.id, goal.progress_max - goal.progress)}
+                      <p className="text-sm text-muted-foreground whitespace-pre-line">
+                        {getGoalSuggestion(goal, goal.description)}
                       </p>
                     )}
                     

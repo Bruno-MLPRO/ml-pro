@@ -57,6 +57,47 @@ export function HealthDashboard({ products, historyData, onSelectItem, onSync, l
     return 'text-green-600';
   };
 
+  // Check if there's no health data at all
+  const hasHealthData = products.some(p => p.health?.health_score !== undefined && p.health?.health_score !== null);
+  
+  if (!hasHealthData) {
+    return (
+      <div className="space-y-6">
+        <Card className="p-8 text-center">
+          <div className="flex flex-col items-center gap-4">
+            <AlertTriangle className="h-12 w-12 text-yellow-500" />
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Dados de Performance Não Disponíveis</h3>
+              <p className="text-muted-foreground mb-4">
+                Os dados de performance dos seus anúncios ainda não foram sincronizados com o Mercado Livre.
+              </p>
+              <p className="text-sm text-muted-foreground mb-6">
+                Clique no botão abaixo para buscar os dados de performance de todos os seus anúncios ativos.
+              </p>
+            </div>
+            <Button 
+              onClick={onSync}
+              disabled={loading}
+              size="lg"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Sincronizando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Sincronizar Performance Agora
+                </>
+              )}
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header com botão de sync */}
@@ -64,7 +105,7 @@ export function HealthDashboard({ products, historyData, onSelectItem, onSync, l
         <h2 className="text-2xl font-bold">Dashboard de Performance</h2>
         <Button onClick={onSync} disabled={loading} size="sm">
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Sincronizando...' : 'Sincronizar Health'}
+          {loading ? 'Sincronizando...' : 'Sincronizar Performance'}
         </Button>
       </div>
 

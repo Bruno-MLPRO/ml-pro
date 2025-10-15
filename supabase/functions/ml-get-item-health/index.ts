@@ -6,19 +6,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-interface HealthGoal {
+interface ActionItem {
   id: string
-  name: string
-  progress: number
-  progress_max: number
-  apply: boolean
-  completed?: string
+  type: string
+  status: 'completed' | 'pending' | 'in_progress'
+  name?: string
+  description?: string
 }
 
-interface HealthResponse {
-  health: number
+interface PerformanceResponse {
+  score: number
   level: 'basic' | 'standard' | 'professional'
-  goals: HealthGoal[]
+  actions: ActionItem[]
 }
 
 serve(async (req) => {
@@ -52,7 +51,7 @@ serve(async (req) => {
 
     const { ml_account_id, item_id } = await req.json()
 
-    console.log('Syncing health for account:', ml_account_id, 'item:', item_id || 'all')
+    console.log('[ML-HEALTH] Starting sync for account:', ml_account_id, 'item:', item_id || 'all items')
 
     const { data: account, error: accountError } = await supabaseAdmin
       .from('mercado_livre_accounts')
@@ -63,7 +62,16 @@ serve(async (req) => {
     if (accountError) throw accountError
     if (!account) throw new Error('ML account not found')
 
+    // Check if token is expired
+    const tokenExpiresAt = new Date(account.token_expires_at)
+    const now = new Date()
+    if (tokenExpiresAt <= now) {
+      console.error('[ML-HEALTH] Token expired for account:', ml_account_id)
+      throw new Error('Token expirado. Reconecte sua conta do Mercado Livre.')
+    }
+
     const accessToken = account.access_token
+    console.log('[ML-HEALTH] Token expires at:', tokenExpiresAt.toISOString())
 
     let itemsToSync: string[] = []
     
@@ -79,14 +87,31 @@ serve(async (req) => {
       itemsToSync = products?.map(p => p.ml_item_id) || []
     }
 
-    console.log(`Syncing health for ${itemsToSync.length} items`)
+    console.log(`[ML-HEALTH] Found ${itemsToSync.length} items to sync`)
+    
+    if (itemsToSync.length === 0) {
+      console.log('[ML-HEALTH] No active items found for this account')
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          synced_count: 0,
+          message: 'Nenhum anúncio ativo encontrado'
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200 
+        }
+      )
+    }
 
     const results = []
 
     for (const mlItemId of itemsToSync) {
       try {
-        const healthResponse = await fetch(
-          `https://api.mercadolibre.com/items/${mlItemId}/health`,
+        console.log(`[ML-HEALTH] Fetching performance for item: ${mlItemId}`)
+        
+        const performanceResponse = await fetch(
+          `https://api.mercadolibre.com/items/${mlItemId}/performance`,
           {
             headers: {
               'Authorization': `Bearer ${accessToken}`,
@@ -94,22 +119,36 @@ serve(async (req) => {
           }
         )
 
-        if (!healthResponse.ok) {
-          console.error(`Failed to fetch health for ${mlItemId}:`, healthResponse.status)
+        if (!performanceResponse.ok) {
+          const errorText = await performanceResponse.text()
+          console.error(`[ML-HEALTH] Failed to fetch performance for ${mlItemId}:`, {
+            status: performanceResponse.status,
+            statusText: performanceResponse.statusText,
+            body: errorText.substring(0, 200)
+          })
           continue
         }
 
-        const healthData: HealthResponse = await healthResponse.json()
+        const performanceData: PerformanceResponse = await performanceResponse.json()
+        console.log(`[ML-HEALTH] Performance data for ${mlItemId}:`, {
+          score: performanceData.score,
+          level: performanceData.level,
+          actionsCount: performanceData.actions?.length || 0
+        })
 
-        const goalsCompleted = healthData.goals.filter(
-          g => g.apply && g.progress === g.progress_max
-        ).length
-        
-        const goalsApplicable = healthData.goals.filter(g => g.apply).length
-        
+        // Map actions to goals format for compatibility
+        const actions = performanceData.actions || []
+        const goalsCompleted = actions.filter(a => a.status === 'completed').length
+        const goalsApplicable = actions.length
         const completionPercentage = goalsApplicable > 0 
           ? (goalsCompleted / goalsApplicable) 
           : 0
+
+        console.log(`[ML-HEALTH] Item ${mlItemId} metrics:`, {
+          goalsCompleted,
+          goalsApplicable,
+          completionPercentage: (completionPercentage * 100).toFixed(1) + '%'
+        })
 
         const { data: existingHealth } = await supabaseAdmin
           .from('mercado_livre_item_health')
@@ -120,7 +159,7 @@ serve(async (req) => {
 
         let scoreTrend = 'stable'
         if (existingHealth) {
-          const scoreDiff = healthData.health - existingHealth.health_score
+          const scoreDiff = performanceData.score - existingHealth.health_score
           if (scoreDiff > 0.05) scoreTrend = 'improving'
           else if (scoreDiff < -0.05) scoreTrend = 'declining'
         }
@@ -131,9 +170,9 @@ serve(async (req) => {
             ml_account_id,
             student_id: account.student_id,
             ml_item_id: mlItemId,
-            health_score: healthData.health,
-            health_level: healthData.level,
-            goals: healthData.goals,
+            health_score: performanceData.score,
+            health_level: performanceData.level,
+            goals: actions, // Store actions in goals field for compatibility
             goals_completed: goalsCompleted,
             goals_applicable: goalsApplicable,
             completion_percentage: completionPercentage,
@@ -146,9 +185,11 @@ serve(async (req) => {
           })
 
         if (upsertError) {
-          console.error('Error upserting health:', upsertError)
+          console.error('[ML-HEALTH] Error upserting health:', upsertError)
           continue
         }
+
+        console.log(`[ML-HEALTH] Successfully saved health data for ${mlItemId}`)
 
         await supabaseAdmin
           .from('mercado_livre_health_history')
@@ -156,30 +197,33 @@ serve(async (req) => {
             ml_item_id: mlItemId,
             ml_account_id,
             student_id: account.student_id,
-            health_score: healthData.health,
-            health_level: healthData.level,
+            health_score: performanceData.score,
+            health_level: performanceData.level,
             recorded_at: new Date().toISOString(),
           })
 
         results.push({
           item_id: mlItemId,
-          health_score: healthData.health,
-          health_level: healthData.level,
+          health_score: performanceData.score,
+          health_level: performanceData.level,
           goals_completed: goalsCompleted,
           goals_applicable: goalsApplicable,
         })
 
       } catch (error) {
-        console.error(`Error processing item ${mlItemId}:`, error)
+        console.error(`[ML-HEALTH] Error processing item ${mlItemId}:`, error)
       }
     }
 
-    console.log(`Successfully synced ${results.length} items`)
+    const failedCount = itemsToSync.length - results.length
+    console.log(`[ML-HEALTH] Sync complete: ${results.length} successful, ${failedCount} failed`)
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         synced_count: results.length,
+        failed_count: itemsToSync.length - results.length,
+        total_count: itemsToSync.length,
         results 
       }),
       { 
@@ -189,9 +233,12 @@ serve(async (req) => {
     )
 
   } catch (error: any) {
-    console.error('Error in ml-get-item-health:', error)
+    console.error('[ML-HEALTH] Fatal error in ml-get-item-health:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: error.toString()
+      }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400 

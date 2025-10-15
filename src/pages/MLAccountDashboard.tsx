@@ -394,12 +394,27 @@ export default function MLAccountDashboard() {
       });
       
       if (error) throw error;
+
+      const failedCount = data.failed_count || 0;
+      const successCount = data.synced_count || 0;
       
-      toast.success(`Health sincronizado com sucesso! ${data.synced_count} itens atualizados`);
+      if (successCount === 0 && failedCount > 0) {
+        toast.error(`Falha ao sincronizar ${failedCount} anúncios. Verifique os logs para mais detalhes.`);
+      } else if (failedCount > 0) {
+        toast.warning(`${successCount} anúncios sincronizados, ${failedCount} falharam.`);
+      } else {
+        toast.success(
+          itemId 
+            ? 'Performance do anúncio sincronizada!' 
+            : `${successCount} anúncios sincronizados com sucesso!`
+        );
+      }
+      
       await loadAccountData(selectedAccountId);
     } catch (error: any) {
       console.error('Error syncing health:', error);
-      toast.error('Erro ao sincronizar health');
+      const errorMessage = error.message || 'Erro ao sincronizar performance dos anúncios';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

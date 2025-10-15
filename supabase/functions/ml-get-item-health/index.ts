@@ -20,6 +20,46 @@ interface PerformanceResponse {
   actions: ActionItem[]
 }
 
+async function refreshToken(account: any, supabaseAdmin: any): Promise<string> {
+  console.log('[ML-HEALTH] Refreshing access token for account:', account.id)
+  
+  const appId = Deno.env.get('MERCADO_LIVRE_APP_ID')!
+  const secretKey = Deno.env.get('MERCADO_LIVRE_SECRET_KEY')!
+
+  const response = await fetch('https://api.mercadolibre.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: appId,
+      client_secret: secretKey,
+      refresh_token: account.refresh_token
+    })
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('[ML-HEALTH] Token refresh failed:', errorText)
+    throw new Error('Falha ao renovar token. Reconecte sua conta.')
+  }
+
+  const tokens = await response.json()
+  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+
+  await supabaseAdmin
+    .from('mercado_livre_accounts')
+    .update({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      token_expires_at: expiresAt,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', account.id)
+
+  console.log('[ML-HEALTH] Token refreshed successfully, expires at:', expiresAt)
+  return tokens.access_token
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -62,16 +102,33 @@ serve(async (req) => {
     if (accountError) throw accountError
     if (!account) throw new Error('ML account not found')
 
-    // Check if token is expired
+    console.log('[ML-HEALTH] Account info:', {
+      id: ml_account_id,
+      nickname: account.ml_nickname,
+      token_expires_at: account.token_expires_at,
+      is_active: account.is_active
+    })
+
+    // Check if token needs refresh (expires in less than 5 minutes)
     const tokenExpiresAt = new Date(account.token_expires_at)
     const now = new Date()
-    if (tokenExpiresAt <= now) {
-      console.error('[ML-HEALTH] Token expired for account:', ml_account_id)
-      throw new Error('Token expirado. Reconecte sua conta do Mercado Livre.')
+    const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000)
+    
+    let accessToken = account.access_token
+    const needsRefresh = tokenExpiresAt <= fiveMinutesFromNow
+    
+    if (needsRefresh) {
+      console.log('[ML-HEALTH] Token needs refresh (expires at:', tokenExpiresAt.toISOString(), ')')
+      try {
+        accessToken = await refreshToken(account, supabaseAdmin)
+        console.log('[ML-HEALTH] Using refreshed token (first 20 chars):', accessToken.substring(0, 20))
+      } catch (error) {
+        console.error('[ML-HEALTH] Failed to refresh token:', error)
+        throw new Error('Token expirado e não foi possível renovar. Reconecte sua conta do Mercado Livre.')
+      }
+    } else {
+      console.log('[ML-HEALTH] Token is valid, expires at:', tokenExpiresAt.toISOString())
     }
-
-    const accessToken = account.access_token
-    console.log('[ML-HEALTH] Token expires at:', tokenExpiresAt.toISOString())
 
     let itemsToSync: string[] = []
     
@@ -126,6 +183,15 @@ serve(async (req) => {
             statusText: performanceResponse.statusText,
             body: errorText.substring(0, 200)
           })
+          
+          // Specific error handling
+          if (performanceResponse.status === 401) {
+            console.error('[ML-HEALTH] Unauthorized even after token refresh - account may need reconnection')
+          }
+          if (performanceResponse.status === 404) {
+            console.log(`[ML-HEALTH] Item ${mlItemId} not found - may have been deleted`)
+          }
+          
           continue
         }
 
@@ -216,7 +282,12 @@ serve(async (req) => {
     }
 
     const failedCount = itemsToSync.length - results.length
-    console.log(`[ML-HEALTH] Sync complete: ${results.length} successful, ${failedCount} failed`)
+    console.log('[ML-HEALTH] Sync summary:', {
+      total: itemsToSync.length,
+      success: results.length,
+      failed: failedCount,
+      account: account.ml_nickname
+    })
 
     return new Response(
       JSON.stringify({ 

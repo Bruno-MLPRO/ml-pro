@@ -22,6 +22,7 @@ interface MLAccount {
   is_active: boolean;
   connected_at: string;
   last_sync_at: string | null;
+  token_expires_at: string;
 }
 
 interface MLMetrics {
@@ -251,7 +252,7 @@ export default function MLAccountDashboard() {
     try {
       const { data, error } = await supabase
         .from('mercado_livre_accounts')
-        .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at')
+        .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at, token_expires_at')
         .eq('student_id', user?.id)
         .eq('is_active', true)
         .order('is_primary', { ascending: false });
@@ -393,28 +394,52 @@ export default function MLAccountDashboard() {
         }
       });
       
-      if (error) throw error;
-
-      const failedCount = data.failed_count || 0;
-      const successCount = data.synced_count || 0;
+      if (error) {
+        console.error('Error syncing health:', error);
+        
+        // Mensagens específicas baseadas no erro
+        if (error.message?.includes('Token expirado')) {
+          toast.error('Token do Mercado Livre Expirado', {
+            description: 'Reconecte sua conta para continuar sincronizando dados.',
+          });
+        } else if (error.message?.includes('renovar')) {
+          toast.error('Erro na Renovação do Token', {
+            description: 'Não foi possível renovar automaticamente. Tente reconectar sua conta.',
+          });
+        } else {
+          toast.error('Erro ao Sincronizar', {
+            description: error.message || 'Ocorreu um erro desconhecido'
+          });
+        }
+        return;
+      }
       
-      if (successCount === 0 && failedCount > 0) {
-        toast.error(`Falha ao sincronizar ${failedCount} anúncios. Verifique os logs para mais detalhes.`);
+      // Processar resposta de sucesso
+      const successCount = data?.synced_count || 0;
+      const failedCount = data?.failed_count || 0;
+      const totalCount = data?.total_count || 0;
+      
+      if (successCount === 0 && totalCount > 0) {
+        toast.error('Nenhum Anúncio Sincronizado', {
+          description: `${failedCount} de ${totalCount} anúncios falharam. Verifique os logs.`
+        });
       } else if (failedCount > 0) {
-        toast.warning(`${successCount} anúncios sincronizados, ${failedCount} falharam.`);
+        toast.warning('Sincronização Parcial', {
+          description: `${successCount} de ${totalCount} anúncios sincronizados. ${failedCount} falharam.`
+        });
       } else {
-        toast.success(
-          itemId 
-            ? 'Performance do anúncio sincronizada!' 
-            : `${successCount} anúncios sincronizados com sucesso!`
-        );
+        toast.success('✅ Performance Atualizada!', {
+          description: `${successCount} anúncios sincronizados com sucesso.`
+        });
       }
       
       await loadAccountData(selectedAccountId);
+      
     } catch (error: any) {
       console.error('Error syncing health:', error);
-      const errorMessage = error.message || 'Erro ao sincronizar performance dos anúncios';
-      toast.error(errorMessage);
+      toast.error('Erro Fatal', {
+        description: 'Não foi possível completar a sincronização.'
+      });
     } finally {
       setLoading(false);
     }
@@ -957,6 +982,7 @@ export default function MLAccountDashboard() {
                       onSelectItem={handleSelectItem}
                       onSync={() => syncItemHealth()}
                       loading={loading}
+                      selectedAccount={mlAccounts.find(a => a.id === selectedAccountId)}
                     />
                     
                     {/* Seção existente de fotos baixa qualidade */}

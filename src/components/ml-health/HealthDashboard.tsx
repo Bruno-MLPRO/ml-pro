@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { TrendingUp, AlertTriangle, CheckCircle2, ExternalLink, RefreshCw } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -31,9 +32,12 @@ interface HealthDashboardProps {
   onSelectItem: (itemId: string) => void;
   onSync: () => void;
   loading: boolean;
+  selectedAccount?: {
+    token_expires_at: string;
+  };
 }
 
-export function HealthDashboard({ products, historyData, onSelectItem, onSync, loading }: HealthDashboardProps) {
+export function HealthDashboard({ products, historyData, onSelectItem, onSync, loading, selectedAccount }: HealthDashboardProps) {
   const productsWithHealth = products.filter(p => p.health);
   const totalItems = productsWithHealth.length;
   
@@ -59,6 +63,47 @@ export function HealthDashboard({ products, historyData, onSelectItem, onSync, l
 
   // Check if there's no health data at all
   const hasHealthData = products.some(p => p.health?.health_score !== undefined && p.health?.health_score !== null);
+  
+  // Verificar se token está expirado
+  const isTokenExpired = selectedAccount && 
+    new Date(selectedAccount.token_expires_at) <= new Date();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center space-y-3">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            Carregando dados de performance...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isTokenExpired) {
+    return (
+      <Alert variant="destructive" className="mb-6">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Token do Mercado Livre Expirado</AlertTitle>
+        <AlertDescription className="flex flex-col gap-3">
+          <p>
+            Sua conexão com o Mercado Livre expirou. Reconecte sua conta para 
+            continuar sincronizando dados de performance.
+          </p>
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="w-fit"
+            onClick={onSync}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Tentar Renovar Token
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
   
   if (!hasHealthData) {
     return (

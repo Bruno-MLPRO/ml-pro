@@ -138,6 +138,42 @@ export default function MLAccountDashboard() {
   }, [user]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    
+    if (params.get('ml_connected') === 'true') {
+      const nickname = params.get('nickname');
+      const isNew = params.get('is_new') === 'true';
+      
+      toast.success('✅ Conta Conectada!', {
+        description: `${nickname} foi ${isNew ? 'conectada' : 'reconectada'} com sucesso. Sincronizando dados...`,
+      });
+      
+      window.history.replaceState({}, '', window.location.pathname);
+      
+      setTimeout(() => {
+        loadMLAccounts();
+      }, 1000);
+    }
+    
+    if (params.get('ml_error')) {
+      const error = params.get('ml_error');
+      toast.error('❌ Erro ao Conectar', {
+        description: error || 'Ocorreu um erro desconhecido',
+      });
+      
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    
+    if (params.get('ml_already_processed') === 'true') {
+      toast.warning('⚠️ Conta Já Processada', {
+        description: 'Esta conexão já foi processada anteriormente.',
+      });
+      
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     if (selectedAccountId) {
       loadAccountData(selectedAccountId);
     }

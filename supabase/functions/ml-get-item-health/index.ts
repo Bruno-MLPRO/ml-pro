@@ -20,6 +20,103 @@ interface PerformanceResponse {
   actions: ActionItem[]
 }
 
+// Função para calcular score estimado baseado em dados do produto
+function calculateEstimatedHealth(product: any): PerformanceResponse {
+  let score = 0.5 // Base score
+  const actions: ActionItem[] = []
+  
+  // +15% se tem fotos de boa qualidade
+  if (!product.has_low_quality_photos && product.photo_count >= 5) {
+    score += 0.15
+    actions.push({
+      id: 'photos_ok',
+      type: 'photos',
+      status: 'completed',
+      name: 'Fotos de Qualidade',
+      description: 'Produto tem fotos de boa qualidade'
+    })
+  } else {
+    actions.push({
+      id: 'improve_photos',
+      type: 'photos',
+      status: 'pending',
+      name: 'Melhorar Fotos',
+      description: 'Adicione mais fotos de alta qualidade (mínimo 5 fotos)'
+    })
+  }
+  
+  // +15% se tem descrição
+  if (product.has_description) {
+    score += 0.15
+    actions.push({
+      id: 'description_ok',
+      type: 'description',
+      status: 'completed',
+      name: 'Descrição Completa',
+      description: 'Produto tem descrição detalhada'
+    })
+  } else {
+    actions.push({
+      id: 'add_description',
+      type: 'description',
+      status: 'pending',
+      name: 'Adicionar Descrição',
+      description: 'Complete a descrição do produto com detalhes importantes'
+    })
+  }
+  
+  // +10% se tem dados fiscais
+  if (product.has_tax_data) {
+    score += 0.10
+    actions.push({
+      id: 'tax_data_ok',
+      type: 'tax',
+      status: 'completed',
+      name: 'Dados Fiscais OK',
+      description: 'Dados fiscais configurados'
+    })
+  } else {
+    actions.push({
+      id: 'add_tax_data',
+      type: 'tax',
+      status: 'pending',
+      name: 'Adicionar Dados Fiscais',
+      description: 'Configure os dados fiscais do produto'
+    })
+  }
+  
+  // +10% se está ativo
+  if (product.status === 'active') {
+    score += 0.10
+    actions.push({
+      id: 'status_active',
+      type: 'status',
+      status: 'completed',
+      name: 'Anúncio Ativo',
+      description: 'Produto está ativo no marketplace'
+    })
+  } else {
+    actions.push({
+      id: 'activate_listing',
+      type: 'status',
+      status: 'pending',
+      name: 'Ativar Anúncio',
+      description: 'Ative o anúncio para começar a vender'
+    })
+  }
+  
+  // Determinar nível
+  let level: 'basic' | 'standard' | 'professional' = 'basic'
+  if (score >= 0.7) level = 'professional'
+  else if (score >= 0.5) level = 'standard'
+  
+  return {
+    score: Math.min(score, 1.0),
+    level,
+    actions
+  }
+}
+
 async function refreshToken(account: any, supabaseAdmin: any): Promise<string> {
   console.log('[ML-HEALTH] Refreshing access token for account:', account.id)
   
@@ -167,35 +264,95 @@ serve(async (req) => {
       try {
         console.log(`[ML-HEALTH] Fetching performance for item: ${mlItemId}`)
         
-        const performanceResponse = await fetch(
-          `https://api.mercadolibre.com/items/${mlItemId}/performance`,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-            },
-          }
-        )
-
-        if (!performanceResponse.ok) {
-          const errorText = await performanceResponse.text()
-          console.error(`[ML-HEALTH] Failed to fetch performance for ${mlItemId}:`, {
-            status: performanceResponse.status,
-            statusText: performanceResponse.statusText,
-            body: errorText.substring(0, 200)
-          })
+        // Implementar fallback multi-endpoint
+        let performanceData: PerformanceResponse | null = null
+        let dataSource = 'unknown'
+        let confidence = 0
+        let lastError = ''
+        
+        // TENTATIVA 1: Endpoint /performance (atual)
+        try {
+          console.log(`[ML-HEALTH-DIAGNOSTIC] Attempt 1: /performance for ${mlItemId}`)
+          const performanceResponse = await fetch(
+            `https://api.mercadolibre.com/items/${mlItemId}/performance`,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+              },
+            }
+          )
           
-          // Specific error handling
-          if (performanceResponse.status === 401) {
-            console.error('[ML-HEALTH] Unauthorized even after token refresh - account may need reconnection')
+          if (performanceResponse.ok) {
+            performanceData = await performanceResponse.json()
+            dataSource = 'api_performance'
+            confidence = 1.0
+            console.log(`[ML-HEALTH-DIAGNOSTIC] ✅ Got data from /performance`)
+          } else {
+            lastError = `Performance API: ${performanceResponse.status} - ${performanceResponse.statusText}`
+            console.log(`[ML-HEALTH-DIAGNOSTIC] ❌ /performance failed: ${performanceResponse.status}`)
           }
-          if (performanceResponse.status === 404) {
-            console.log(`[ML-HEALTH] Item ${mlItemId} not found - may have been deleted`)
+        } catch (e: any) {
+          lastError = `Performance API error: ${e.message}`
+          console.log(`[ML-HEALTH-DIAGNOSTIC] ❌ /performance exception:`, e.message)
+        }
+        
+        // TENTATIVA 2: Endpoint /health (antigo)
+        if (!performanceData) {
+          try {
+            console.log(`[ML-HEALTH-DIAGNOSTIC] Attempt 2: /health for ${mlItemId}`)
+            const healthResponse = await fetch(
+              `https://api.mercadolibre.com/items/${mlItemId}/health`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                },
+              }
+            )
+            
+            if (healthResponse.ok) {
+              performanceData = await healthResponse.json()
+              dataSource = 'api_health'
+              confidence = 0.9
+              console.log(`[ML-HEALTH-DIAGNOSTIC] ✅ Got data from /health`)
+            } else {
+              lastError += ` | Health API: ${healthResponse.status}`
+              console.log(`[ML-HEALTH-DIAGNOSTIC] ❌ /health failed: ${healthResponse.status}`)
+            }
+          } catch (e: any) {
+            lastError += ` | Health API error: ${e.message}`
+            console.log(`[ML-HEALTH-DIAGNOSTIC] ❌ /health exception:`, e.message)
           }
+        }
+        
+        // TENTATIVA 3: Calcular score estimado baseado em dados do produto
+        if (!performanceData) {
+          console.log(`[ML-HEALTH-DIAGNOSTIC] Attempt 3: Calculating estimated score for ${mlItemId}`)
           
+          const { data: productData } = await supabaseAdmin
+            .from('mercado_livre_products')
+            .select('*')
+            .eq('ml_item_id', mlItemId)
+            .maybeSingle()
+          
+          if (productData) {
+            performanceData = calculateEstimatedHealth(productData)
+            dataSource = 'estimated'
+            confidence = 0.6
+            console.log(`[ML-HEALTH-DIAGNOSTIC] ✅ Using estimated score: ${performanceData.score}`)
+          } else {
+            lastError += ' | Product data not found'
+            console.log(`[ML-HEALTH-DIAGNOSTIC] ❌ Product not found in database`)
+          }
+        }
+        
+        // Se ainda não temos dados, pular este item
+        if (!performanceData) {
+          console.log(`[ML-HEALTH-DIAGNOSTIC] ❌ No data available for ${mlItemId} - skipping`)
+          console.log(`[ML-HEALTH-DIAGNOSTIC] Final error chain: ${lastError}`)
           continue
         }
-
-        const performanceData: PerformanceResponse = await performanceResponse.json()
+        
+        console.log(`[ML-HEALTH-DIAGNOSTIC] Final result for ${mlItemId}: source=${dataSource}, confidence=${confidence}, score=${performanceData.score}`)
         console.log(`[ML-HEALTH] Performance data for ${mlItemId}:`, {
           score: performanceData.score,
           level: performanceData.level,
@@ -238,12 +395,15 @@ serve(async (req) => {
             ml_item_id: mlItemId,
             health_score: performanceData.score,
             health_level: performanceData.level,
-            goals: actions, // Store actions in goals field for compatibility
+            goals: actions,
             goals_completed: goalsCompleted,
             goals_applicable: goalsApplicable,
             completion_percentage: completionPercentage,
             previous_score: existingHealth?.health_score || null,
             score_trend: scoreTrend,
+            data_source: dataSource,
+            confidence: confidence,
+            last_error: lastError || null,
             synced_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }, {

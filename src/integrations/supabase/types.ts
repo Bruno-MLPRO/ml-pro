@@ -313,13 +313,16 @@ export type Database = {
       mercado_livre_item_health: {
         Row: {
           completion_percentage: number | null
+          confidence: number | null
           created_at: string | null
+          data_source: string | null
           goals: Json
           goals_applicable: number | null
           goals_completed: number | null
           health_level: string
           health_score: number
           id: string
+          last_error: string | null
           ml_account_id: string
           ml_item_id: string
           previous_score: number | null
@@ -330,13 +333,16 @@ export type Database = {
         }
         Insert: {
           completion_percentage?: number | null
+          confidence?: number | null
           created_at?: string | null
+          data_source?: string | null
           goals?: Json
           goals_applicable?: number | null
           goals_completed?: number | null
           health_level: string
           health_score: number
           id?: string
+          last_error?: string | null
           ml_account_id: string
           ml_item_id: string
           previous_score?: number | null
@@ -347,13 +353,16 @@ export type Database = {
         }
         Update: {
           completion_percentage?: number | null
+          confidence?: number | null
           created_at?: string | null
+          data_source?: string | null
           goals?: Json
           goals_applicable?: number | null
           goals_completed?: number | null
           health_level?: string
           health_score?: number
           id?: string
+          last_error?: string | null
           ml_account_id?: string
           ml_item_id?: string
           previous_score?: number | null

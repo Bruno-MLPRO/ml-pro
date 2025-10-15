@@ -112,13 +112,22 @@ export function HealthDashboard({ products, historyData, onSelectItem, onSync, l
           <div className="flex flex-col items-center gap-4">
             <AlertTriangle className="h-12 w-12 text-yellow-500" />
             <div>
-              <h3 className="text-lg font-semibold mb-2">Dados de Performance Não Disponíveis</h3>
-              <p className="text-muted-foreground mb-4">
-                Os dados de performance dos seus anúncios ainda não foram sincronizados com o Mercado Livre.
+              <h3 className="text-lg font-semibold mb-2">
+                Dados de Performance Não Disponíveis
+              </h3>
+              <p className="text-muted-foreground mb-2">
+                A API do Mercado Livre não retornou dados de performance para seus anúncios.
               </p>
-              <p className="text-sm text-muted-foreground mb-6">
-                Clique no botão abaixo para buscar os dados de performance de todos os seus anúncios ativos.
+              <p className="text-sm text-muted-foreground mb-4">
+                Não se preocupe! Vamos calcular um score estimado baseado nas características 
+                dos seus produtos (fotos, descrição, dados fiscais, etc).
               </p>
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6 max-w-2xl mx-auto">
+                <p className="text-sm text-blue-900 dark:text-blue-100">
+                  💡 <strong>Nota:</strong> O score estimado tem precisão de ~60% e serve 
+                  como guia para melhorias. Estamos trabalhando para obter dados oficiais da API.
+                </p>
+              </div>
             </div>
             <Button 
               onClick={onSync}
@@ -127,13 +136,13 @@ export function HealthDashboard({ products, historyData, onSelectItem, onSync, l
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Sincronizando...
+                  <RefreshCw className="animate-spin h-4 w-4 mr-2" />
+                  Calculando Scores...
                 </>
               ) : (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Sincronizar Performance Agora
+                  Calcular Score Estimado Agora
                 </>
               )}
             </Button>

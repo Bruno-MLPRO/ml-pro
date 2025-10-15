@@ -25,83 +25,117 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
   let score = 0.5 // Base score
   const actions: ActionItem[] = []
   
-  // +15% se tem fotos de boa qualidade
-  if (!product.has_low_quality_photos && product.photo_count >= 5) {
+  // Fotos: +15% se tem 5+ fotos de boa qualidade
+  const photoCount = product.photo_count || 0
+  const photosCompleted = !product.has_low_quality_photos && photoCount >= 5
+  
+  if (photosCompleted) {
     score += 0.15
     actions.push({
       id: 'photos_ok',
-      type: 'photos',
-      status: 'completed',
       name: 'Fotos de Qualidade',
-      description: 'Produto tem fotos de boa qualidade'
+      description: 'Produto tem fotos de boa qualidade (5+ fotos)',
+      progress: photoCount,
+      progress_max: 5,
+      apply: true,
+      status: 'completed',
+      type: 'photos',
+      completed: new Date().toISOString()
     })
   } else {
     actions.push({
       id: 'improve_photos',
-      type: 'photos',
-      status: 'pending',
       name: 'Melhorar Fotos',
-      description: 'Adicione mais fotos de alta qualidade (mínimo 5 fotos)'
+      description: `Adicione mais fotos de alta qualidade (atualmente ${photoCount}/5)`,
+      progress: photoCount,
+      progress_max: 5,
+      apply: true,
+      status: 'pending',
+      type: 'photos'
     })
   }
   
-  // +15% se tem descrição
-  if (product.has_description) {
+  // Descrição: +15% se tem descrição
+  const hasDescription = product.has_description
+  if (hasDescription) {
     score += 0.15
     actions.push({
       id: 'description_ok',
-      type: 'description',
-      status: 'completed',
       name: 'Descrição Completa',
-      description: 'Produto tem descrição detalhada'
+      description: 'Produto tem descrição detalhada',
+      progress: 1,
+      progress_max: 1,
+      apply: true,
+      status: 'completed',
+      type: 'description',
+      completed: new Date().toISOString()
     })
   } else {
     actions.push({
       id: 'add_description',
-      type: 'description',
-      status: 'pending',
       name: 'Adicionar Descrição',
-      description: 'Complete a descrição do produto com detalhes importantes'
+      description: 'Complete a descrição do produto com detalhes importantes',
+      progress: 0,
+      progress_max: 1,
+      apply: true,
+      status: 'pending',
+      type: 'description'
     })
   }
   
-  // +10% se tem dados fiscais
-  if (product.has_tax_data) {
+  // Dados Fiscais: +10% se tem dados fiscais
+  const hasTaxData = product.has_tax_data
+  if (hasTaxData) {
     score += 0.10
     actions.push({
       id: 'tax_data_ok',
-      type: 'tax',
-      status: 'completed',
       name: 'Dados Fiscais OK',
-      description: 'Dados fiscais configurados'
+      description: 'Dados fiscais configurados corretamente',
+      progress: 1,
+      progress_max: 1,
+      apply: true,
+      status: 'completed',
+      type: 'tax',
+      completed: new Date().toISOString()
     })
   } else {
     actions.push({
       id: 'add_tax_data',
-      type: 'tax',
-      status: 'pending',
       name: 'Adicionar Dados Fiscais',
-      description: 'Configure os dados fiscais do produto'
+      description: 'Configure os dados fiscais do produto (NCM, origem)',
+      progress: 0,
+      progress_max: 1,
+      apply: true,
+      status: 'pending',
+      type: 'tax'
     })
   }
   
-  // +10% se está ativo
-  if (product.status === 'active') {
+  // Status Ativo: +10% se está ativo
+  const isActive = product.status === 'active'
+  if (isActive) {
     score += 0.10
     actions.push({
       id: 'status_active',
-      type: 'status',
-      status: 'completed',
       name: 'Anúncio Ativo',
-      description: 'Produto está ativo no marketplace'
+      description: 'Produto está ativo e visível no marketplace',
+      progress: 1,
+      progress_max: 1,
+      apply: true,
+      status: 'completed',
+      type: 'status',
+      completed: new Date().toISOString()
     })
   } else {
     actions.push({
       id: 'activate_listing',
-      type: 'status',
-      status: 'pending',
       name: 'Ativar Anúncio',
-      description: 'Ative o anúncio para começar a vender'
+      description: 'Ative o anúncio para começar a vender',
+      progress: 0,
+      progress_max: 1,
+      apply: true,
+      status: 'pending',
+      type: 'status'
     })
   }
   
@@ -109,6 +143,18 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
   let level: 'basic' | 'standard' | 'professional' = 'basic'
   if (score >= 0.7) level = 'professional'
   else if (score >= 0.5) level = 'standard'
+  
+  // Log estrutura para debug
+  console.log('[ML-HEALTH] Goals structure:', {
+    totalGoals: actions.length,
+    sample: actions[0],
+    photoProgress: `${photoCount}/5`,
+    validStructure: actions.every(a => 
+      typeof a.progress === 'number' && 
+      typeof a.progress_max === 'number' && 
+      typeof a.apply === 'boolean'
+    )
+  })
   
   return {
     score: Math.min(score, 1.0),

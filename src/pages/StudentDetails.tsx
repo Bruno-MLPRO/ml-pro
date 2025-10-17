@@ -39,6 +39,7 @@ interface StudentProfile {
 interface MLAccount {
   id: string;
   ml_nickname: string;
+  ml_user_id: string;
   is_primary: boolean;
   is_active: boolean;
   connected_at: string;
@@ -189,7 +190,7 @@ export default function StudentDetails() {
       // Buscar contas ML do aluno
       const { data: accountsData, error: accountsError } = await supabase
         .from('mercado_livre_accounts')
-        .select('*')
+        .select('id, ml_nickname, ml_user_id, is_primary, is_active, connected_at, last_sync_at')
         .eq('student_id', studentId)
         .eq('is_active', true)
         .order('is_primary', { ascending: false });
@@ -425,6 +426,10 @@ export default function StudentDetails() {
       'light_green': 'Verde Claro',
     };
     return colorMap[colorCode] || colorCode;
+  };
+
+  const getMercadoLivreStoreUrl = (nickname: string): string => {
+    return `https://www.mercadolivre.com.br/perfil/${nickname}`;
   };
 
   const loadBonusDeliveries = async () => {
@@ -760,12 +765,20 @@ export default function StudentDetails() {
                             {(() => {
                               const account = mlAccounts.find(a => a.id === selectedAccountId);
                               return account ? (
-                                <>
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-sm text-muted-foreground">Nome da Conta</span>
-                                      <span className="font-medium">@{account.ml_nickname}</span>
-                                    </div>
+                                  <>
+                                   <div className="space-y-2">
+                                     <div className="flex items-center justify-between">
+                                       <span className="text-sm text-muted-foreground">Nome da Conta</span>
+                                       <a 
+                                         href={getMercadoLivreStoreUrl(account.ml_nickname)}
+                                         target="_blank"
+                                         rel="noopener noreferrer"
+                                         className="font-medium text-primary hover:underline flex items-center gap-1"
+                                       >
+                                         @{account.ml_nickname}
+                                         <ExternalLink className="h-3 w-3" />
+                                       </a>
+                                     </div>
                                     <div className="flex items-center justify-between">
                                       <span className="text-sm text-muted-foreground">Status</span>
                                       <Badge variant={account.is_active ? "default" : "secondary"}>

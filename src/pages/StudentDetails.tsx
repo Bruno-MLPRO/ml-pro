@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { 
   ArrowLeft, User, Phone, Mail, MapPin, Building2, DollarSign, Package, 
   TrendingUp, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle,
-  ExternalLink, Home, Image, Plus
+  ExternalLink, Home, Image, Plus, RefreshCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -156,6 +156,7 @@ export default function StudentDetails() {
   const [journeyTemplates, setJourneyTemplates] = useState<any[]>([]); // templates list
   const [selectedJourneyTemplateId, setSelectedJourneyTemplateId] = useState<string>("");
   const [bonusDeliveries, setBonusDeliveries] = useState<BonusDelivery[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     if (userRole !== 'manager') {
@@ -430,6 +431,37 @@ export default function StudentDetails() {
 
   const getMercadoLivreStoreUrl = (nickname: string): string => {
     return `https://www.mercadolivre.com.br/perfil/${nickname}`;
+  };
+
+  const syncMLAccount = async () => {
+    if (!selectedAccountId) return;
+    
+    setIsSyncing(true);
+    try {
+      const { error } = await supabase.functions.invoke('ml-sync-data', {
+        body: { ml_account_id: selectedAccountId }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Sincronização concluída!",
+        description: "Os dados da conta foram atualizados com sucesso.",
+      });
+
+      // Recarregar dados da conta
+      await loadAccountData(selectedAccountId);
+      await loadStudentData();
+    } catch (error: any) {
+      console.error('Error syncing ML account:', error);
+      toast({
+        title: "Erro ao sincronizar",
+        description: error.message || "Não foi possível sincronizar a conta.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const loadBonusDeliveries = async () => {
@@ -758,8 +790,18 @@ export default function StudentDetails() {
                       <div className="grid md:grid-cols-2 gap-4">
                         {/* Coluna 1: Status da Conta */}
                         <Card>
-                          <CardHeader>
+                          <CardHeader className="flex flex-row items-center justify-between pb-2">
                             <CardTitle className="text-sm font-medium">Status da Conta</CardTitle>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={syncMLAccount}
+                              disabled={isSyncing}
+                              className="h-8 gap-1"
+                            >
+                              <RefreshCw className={`h-3 w-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                              {isSyncing ? 'Sincronizando...' : 'Sincronizar'}
+                            </Button>
                           </CardHeader>
                           <CardContent className="space-y-4">
                             {(() => {

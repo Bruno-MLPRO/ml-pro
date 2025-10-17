@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus, Pencil, Trash2, ExternalLink, X, CheckCircle2, XCircle, User, Rocket, Package, Warehouse } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, ExternalLink, X, CheckCircle2, XCircle, User, Rocket, Package, Warehouse, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Sidebar } from "@/components/Sidebar";
@@ -100,6 +100,7 @@ export default function StudentsManagement() {
   const [availableApps, setAvailableApps] = useState<any[]>([]);
   const [managers, setManagers] = useState<Array<{ id: string; full_name: string }>>([]);
   const [selectedManagerId, setSelectedManagerId] = useState<string>("current");
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -904,6 +905,40 @@ export default function StudentsManagement() {
     });
   };
 
+  const handleSyncAllAccounts = async () => {
+    setIsSyncingAll(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ml-auto-sync-all');
+
+      if (error) {
+        toast({
+          title: "Erro ao sincronizar",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Sincronização iniciada",
+        description: `Sincronizando ${data.total_synced || 0} contas do Mercado Livre`,
+      });
+
+      // Refresh students data after sync
+      setTimeout(() => {
+        fetchStudents();
+      }, 2000);
+    } catch (err: any) {
+      toast({
+        title: "Erro ao sincronizar",
+        description: err.message || "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       full_name: "",
@@ -1366,13 +1401,23 @@ export default function StudentsManagement() {
                 />
               </div>
 
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={resetForm}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Novo Aluno
-                  </Button>
-                </DialogTrigger>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={handleSyncAllAccounts}
+                  disabled={isSyncingAll}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
+                  {isSyncingAll ? 'Sincronizando...' : 'Sincronizar ML'}
+                </Button>
+                
+                <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={resetForm}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Novo Aluno
+                    </Button>
+                  </DialogTrigger>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Criar Novo Aluno</DialogTitle>
@@ -1388,6 +1433,7 @@ export default function StudentsManagement() {
                 </DialogContent>
               </Dialog>
             </div>
+          </div>
 
             <div className="border rounded-lg overflow-hidden">
               <Table>

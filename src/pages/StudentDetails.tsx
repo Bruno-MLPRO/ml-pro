@@ -851,16 +851,6 @@ export default function StudentDetails() {
                                         positiveRate={metrics.positive_ratings_rate}
                                         totalTransactions={metrics.reputation_transactions_total}
                                       />
-                                      <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div>
-                                          <p className="text-muted-foreground text-xs">Avaliações Positivas</p>
-                                          <p className="text-lg font-bold">{metrics.positive_ratings_rate.toFixed(1)}%</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-muted-foreground text-xs">Total de Transações</p>
-                                          <p className="text-lg font-bold">{metrics.reputation_transactions_total}</p>
-                                        </div>
-                                      </div>
                                     </div>
                                   )}
                                 </>

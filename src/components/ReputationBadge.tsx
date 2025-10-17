@@ -58,13 +58,19 @@ export function ReputationBadge({ color, levelId, positiveRate, totalTransaction
   const Icon = config.icon;
   
   return (
-    <div className={`flex items-center gap-3 p-4 rounded-lg border ${config.bg}`}>
-      <Icon className={`w-6 h-6 ${config.text}`} />
-      <div>
-        <div className="flex items-center gap-2">
-          <span className={`font-semibold ${config.text}`}>{config.label}</span>
-          <Badge variant="outline" className={config.text}>{config.description}</Badge>
+    <div className={`flex items-center justify-between p-4 rounded-lg border ${config.bg}`}>
+      <div className="flex items-center gap-3">
+        <Icon className={`w-6 h-6 ${config.text}`} />
+        <div>
+          <div className="flex items-center gap-2">
+            <span className={`font-semibold ${config.text}`}>{config.label}</span>
+            <Badge variant="outline" className={config.text}>{config.description}</Badge>
+          </div>
         </div>
+      </div>
+      <div className="text-right">
+        <p className="text-xs text-muted-foreground">Total de Transações</p>
+        <p className={`text-lg font-bold ${config.text}`}>{totalTransactions}</p>
       </div>
     </div>
   );

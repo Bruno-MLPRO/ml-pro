@@ -49,7 +49,8 @@ interface HealthIndividualProps {
 const getGoalSuggestion = (goal: HealthGoal, description?: string): string => {
   // Se o objetivo tem uma descrição customizada do backend, usar ela
   if (description) {
-    return description;
+    // Remove texto específico que não deve mais ser exibido
+    return description.replace(/\n*Pelo menos um desses códigos é necessário para emissão de nota fiscal e envio FULL\./g, '').trim();
   }
   
   // Fallback para sugestões genéricas baseadas no tipo

@@ -118,7 +118,7 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
     actions.push({
       id: 'add_tax_data',
       name: 'Adicionar Dados Fiscais',
-      description: '🏦 Configure os dados fiscais obrigatórios:\n• EAN/GTIN: Código de barras do produto\n• NCM: Nomenclatura Comum do Mercosul\n• SELLER_SKU: Código interno do seu estoque\n\nPelo menos um desses códigos é necessário para emissão de nota fiscal e envio FULL.',
+      description: '🏦 Configure os dados fiscais obrigatórios:\n• EAN/GTIN: Código de barras do produto\n• NCM: Nomenclatura Comum do Mercosul\n• SELLER_SKU: Código interno do seu estoque',
       progress: 0,
       progress_max: 1,
       apply: true,

@@ -33,14 +33,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('Auth state changed:', event, 'User:', session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
 
         if (session?.user) {
+          console.log('Fetching user role for:', session.user.id);
           setTimeout(() => {
             fetchUserRole(session.user.id);
           }, 0);
         } else {
+          console.log('No session, setting userRole to null');
           setUserRole(null);
           setLoading(false);
         }
@@ -64,6 +67,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const fetchUserRole = async (userId: string, retryCount = 0) => {
+    console.log(`Fetching user role for ${userId}, attempt ${retryCount + 1}`);
     try {
       const { data, error } = await supabase
         .from('user_roles')
@@ -82,6 +86,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
         // Se esgotou os retries ou é outro tipo de erro, setar null e parar loading
+        console.error('Failed to fetch user role after retries');
         setUserRole(null);
         setLoading(false);
         return;
@@ -89,9 +94,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       // Se data é null ou não tem role, setar null
       if (!data || !data.role) {
-        console.warn('User has no role in user_roles table');
+        console.warn('User has no role in user_roles table for userId:', userId);
         setUserRole(null);
       } else {
+        console.log('User role fetched successfully:', data.role);
         setUserRole(data.role as 'student' | 'manager');
       }
       setLoading(false);

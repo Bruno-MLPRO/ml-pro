@@ -3,32 +3,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
 import logo from "@/assets/logo.jpeg";
-import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, userRole, loading, signOut } = useAuth();
-  const { toast } = useToast();
+  const { user, userRole, loading } = useAuth();
 
   useEffect(() => {
     if (!loading && user && userRole) {
+      console.log('Redirecting user with role:', userRole);
       if (userRole === 'manager') {
         navigate('/gestor/dashboard');
       } else if (userRole === 'student') {
         navigate('/aluno/dashboard');
       }
     }
-    
-    // Se user existe mas não tem role após loading terminar, fazer logout
-    if (!loading && user && !userRole) {
-      toast({
-        variant: "destructive",
-        title: "Erro de Autenticação",
-        description: "Sua conta não está configurada corretamente. Entre em contato com o suporte.",
-      });
-      signOut();
-    }
-  }, [user, userRole, loading, navigate, signOut, toast]);
+  }, [user, userRole, loading, navigate]);
 
   // Show loading if checking auth
   if (loading) {

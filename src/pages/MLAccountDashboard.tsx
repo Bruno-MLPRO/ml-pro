@@ -61,6 +61,38 @@ interface MLMetrics {
   cancellations_value: number;
   negative_ratings_rate: number;
   neutral_ratings_rate: number;
+  has_recovery_benefit: boolean;
+  recovery_program_type: string | null;
+  recovery_program_status: string | null;
+}
+
+interface MLSellerRecovery {
+  id: string;
+  ml_account_id: string;
+  program_type: 'NEWBIE_GRNTEE' | 'RECOVERY_GRNTEE';
+  status: string;
+  current_level: string;
+  site_id: string;
+  max_issues_allowed: number;
+  protection_days_limit: number;
+  guarantee_price: number | null;
+  advertising_amount: number | null;
+  guarantee_status: string | null;
+  is_renewal: boolean;
+  warning: string | null;
+  init_date: string | null;
+  end_date: string | null;
+  protection_days: number | null;
+  start_level: string | null;
+  end_level: string | null;
+  orders_qty: number;
+  total_issues: number;
+  claims_qty: number;
+  cancel_qty: number;
+  delay_qty: number;
+  last_checked_at: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface HealthGoal {

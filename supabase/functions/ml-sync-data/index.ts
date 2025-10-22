@@ -65,6 +65,9 @@ Deno.serve(async (req) => {
     // Verificar e sincronizar Product Ads automaticamente
     const productAdsResult = await checkAndSyncProductAds(account, accessToken, supabase)
 
+    // Verificar e sincronizar Seller Recovery Status (Decola/Benefício de Reputação)
+    const recoveryResult = await checkSellerRecoveryStatus(account, supabase)
+
     // Validar milestones
     await validateMilestones(account.student_id, supabase)
 
@@ -81,7 +84,8 @@ Deno.serve(async (req) => {
         orders_synced: orders.length,
         metrics_updated: true,
         product_ads_enabled: productAdsResult.enabled,
-        product_ads_synced: productAdsResult.synced
+        product_ads_synced: productAdsResult.synced,
+        seller_recovery_checked: recoveryResult.checked
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
@@ -477,6 +481,31 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
     console.error('Error updating metrics:', error)
   } else {
     console.log('Metrics updated:', { hasFull, hasDecola, isMercadoLider, reputationColor })
+  }
+}
+
+async function checkSellerRecoveryStatus(account: any, supabase: any) {
+  try {
+    console.log('Checking seller recovery status...');
+    
+    // Call the ml-get-seller-recovery-status edge function
+    const { data: functionData, error: functionError } = await supabase.functions.invoke(
+      'ml-get-seller-recovery-status',
+      {
+        body: { ml_account_id: account.id }
+      }
+    );
+
+    if (functionError) {
+      console.error('Error checking seller recovery:', functionError);
+      return { checked: false, error: functionError.message };
+    }
+
+    console.log('Seller recovery status checked:', functionData);
+    return { checked: true, has_program: functionData.has_program };
+  } catch (error: any) {
+    console.error('Error in checkSellerRecoveryStatus:', error);
+    return { checked: false, error: error?.message || 'Unknown error' };
   }
 }
 

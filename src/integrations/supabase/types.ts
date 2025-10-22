@@ -520,6 +520,7 @@ export type Database = {
           delayed_handling_value: number | null
           has_decola: boolean | null
           has_full: boolean | null
+          has_recovery_benefit: boolean | null
           id: string
           is_mercado_lider: boolean | null
           last_updated: string | null
@@ -533,6 +534,8 @@ export type Database = {
           positive_ratings_rate: number | null
           protection_end_date: string | null
           real_reputation_level: string | null
+          recovery_program_status: string | null
+          recovery_program_type: string | null
           reputation_color: string | null
           reputation_level: string | null
           reputation_score: number | null
@@ -556,6 +559,7 @@ export type Database = {
           delayed_handling_value?: number | null
           has_decola?: boolean | null
           has_full?: boolean | null
+          has_recovery_benefit?: boolean | null
           id?: string
           is_mercado_lider?: boolean | null
           last_updated?: string | null
@@ -569,6 +573,8 @@ export type Database = {
           positive_ratings_rate?: number | null
           protection_end_date?: string | null
           real_reputation_level?: string | null
+          recovery_program_status?: string | null
+          recovery_program_type?: string | null
           reputation_color?: string | null
           reputation_level?: string | null
           reputation_score?: number | null
@@ -592,6 +598,7 @@ export type Database = {
           delayed_handling_value?: number | null
           has_decola?: boolean | null
           has_full?: boolean | null
+          has_recovery_benefit?: boolean | null
           id?: string
           is_mercado_lider?: boolean | null
           last_updated?: string | null
@@ -605,6 +612,8 @@ export type Database = {
           positive_ratings_rate?: number | null
           protection_end_date?: string | null
           real_reputation_level?: string | null
+          recovery_program_status?: string | null
+          recovery_program_type?: string | null
           reputation_color?: string | null
           reputation_level?: string | null
           reputation_score?: number | null
@@ -874,6 +883,108 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mercado_livre_seller_recovery: {
+        Row: {
+          advertising_amount: number | null
+          cancel_qty: number | null
+          claims_qty: number | null
+          created_at: string | null
+          current_level: string | null
+          delay_qty: number | null
+          end_date: string | null
+          end_level: string | null
+          guarantee_price: number | null
+          guarantee_status: string | null
+          id: string
+          init_date: string | null
+          is_renewal: boolean | null
+          last_checked_at: string | null
+          max_issues_allowed: number | null
+          ml_account_id: string
+          orders_qty: number | null
+          program_type: string | null
+          protection_days: number | null
+          protection_days_limit: number | null
+          site_id: string | null
+          start_level: string | null
+          status: string | null
+          total_issues: number | null
+          updated_at: string | null
+          warning: string | null
+        }
+        Insert: {
+          advertising_amount?: number | null
+          cancel_qty?: number | null
+          claims_qty?: number | null
+          created_at?: string | null
+          current_level?: string | null
+          delay_qty?: number | null
+          end_date?: string | null
+          end_level?: string | null
+          guarantee_price?: number | null
+          guarantee_status?: string | null
+          id?: string
+          init_date?: string | null
+          is_renewal?: boolean | null
+          last_checked_at?: string | null
+          max_issues_allowed?: number | null
+          ml_account_id: string
+          orders_qty?: number | null
+          program_type?: string | null
+          protection_days?: number | null
+          protection_days_limit?: number | null
+          site_id?: string | null
+          start_level?: string | null
+          status?: string | null
+          total_issues?: number | null
+          updated_at?: string | null
+          warning?: string | null
+        }
+        Update: {
+          advertising_amount?: number | null
+          cancel_qty?: number | null
+          claims_qty?: number | null
+          created_at?: string | null
+          current_level?: string | null
+          delay_qty?: number | null
+          end_date?: string | null
+          end_level?: string | null
+          guarantee_price?: number | null
+          guarantee_status?: string | null
+          id?: string
+          init_date?: string | null
+          is_renewal?: boolean | null
+          last_checked_at?: string | null
+          max_issues_allowed?: number | null
+          ml_account_id?: string
+          orders_qty?: number | null
+          program_type?: string | null
+          protection_days?: number | null
+          protection_days_limit?: number | null
+          site_id?: string | null
+          start_level?: string | null
+          status?: string | null
+          total_issues?: number | null
+          updated_at?: string | null
+          warning?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_seller_recovery_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: true
+            referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_seller_recovery_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: true
+            referencedRelation: "mercado_livre_accounts_safe"
             referencedColumns: ["id"]
           },
         ]

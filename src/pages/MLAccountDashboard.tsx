@@ -31,6 +31,7 @@ interface MLAccount {
   has_product_ads_enabled: boolean | null;
   advertiser_id: string | null;
   has_active_campaigns: boolean | null;
+  site_id: string | null;
 }
 
 interface MLMetrics {
@@ -343,7 +344,7 @@ export default function MLAccountDashboard() {
     try {
       const { data, error } = await supabase
         .from('mercado_livre_accounts')
-        .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at, token_expires_at, has_product_ads_enabled, advertiser_id, has_active_campaigns')
+        .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at, token_expires_at, has_product_ads_enabled, advertiser_id, has_active_campaigns, site_id')
         .eq('student_id', user?.id)
         .eq('is_active', true)
         .order('is_primary', { ascending: false });

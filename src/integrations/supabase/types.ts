@@ -173,6 +173,7 @@ export type Database = {
           ml_nickname: string
           ml_user_id: string
           refresh_token: string
+          site_id: string | null
           student_id: string
           token_expires_at: string
           updated_at: string | null
@@ -191,6 +192,7 @@ export type Database = {
           ml_nickname: string
           ml_user_id: string
           refresh_token: string
+          site_id?: string | null
           student_id: string
           token_expires_at: string
           updated_at?: string | null
@@ -209,6 +211,7 @@ export type Database = {
           ml_nickname?: string
           ml_user_id?: string
           refresh_token?: string
+          site_id?: string | null
           student_id?: string
           token_expires_at?: string
           updated_at?: string | null

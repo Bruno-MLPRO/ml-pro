@@ -38,6 +38,7 @@ serve(async (req) => {
     console.log('[DEBUG] Conta encontrada:', {
       nickname: account.ml_nickname,
       advertiser_id: account.advertiser_id,
+      site_id: account.site_id,
       has_product_ads: account.has_product_ads_enabled,
       has_campaigns: account.has_active_campaigns
     });
@@ -55,38 +56,51 @@ serve(async (req) => {
       account_info: {
         ml_nickname: account.ml_nickname,
         advertiser_id: account.advertiser_id,
+        site_id: account.site_id,
         has_product_ads_enabled: account.has_product_ads_enabled,
         has_active_campaigns: account.has_active_campaigns
       },
       endpoints_tested: {}
     };
 
-    // TEST 1: Buscar campanhas com métricas
-    console.log('[DEBUG] TEST 1: Buscando campanhas com métricas...');
+    // TEST 1: Buscar campanhas com métricas (ENDPOINT CORRETO v2)
+    console.log('[DEBUG] TEST 1: Buscando campanhas com métricas (API v2)...');
     try {
-      const campaignsUrl = `https://api.mercadolibre.com/advertising/advertisers/${account.advertiser_id}/product_ads/campaigns?metrics=true`;
+      const today = new Date();
+      const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const dateFrom = thirtyDaysAgo.toISOString().split('T')[0];
+      const dateTo = today.toISOString().split('T')[0];
+      
+      const metrics = 'clicks,prints,ctr,cost,cpc,acos,organic_units_quantity,organic_units_amount,direct_items_quantity,indirect_items_quantity,advertising_items_quantity,cvr,roas,direct_units_quantity,indirect_units_quantity,units_quantity,direct_amount,indirect_amount,total_amount';
+      
+      const campaignsUrl = `https://api.mercadolibre.com/advertising/advertisers/${account.advertiser_id}/product_ads/campaigns?date_from=${dateFrom}&date_to=${dateTo}&metrics=${metrics}&limit=50`;
       const campaignsResponse = await fetch(campaignsUrl, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
+        headers: { 
+          'Authorization': `Bearer ${accessToken}`,
+          'api-version': '2'
+        }
       });
       
       const campaignsData = await campaignsResponse.json();
       
-      results.endpoints_tested.campaigns_with_metrics = {
+      results.endpoints_tested.campaigns_with_metrics_v2 = {
         url: campaignsUrl,
+        date_from: dateFrom,
+        date_to: dateTo,
         status: campaignsResponse.status,
         response: campaignsData,
-        notes: 'Este endpoint deve retornar métricas agregadas por campanha'
+        notes: '✅ ENDPOINT CORRETO: /advertising/advertisers/{ID}/product_ads/campaigns com api-version: 2'
       };
       
-      console.log('[DEBUG] Campanhas response:', JSON.stringify(campaignsData, null, 2));
+      console.log('[DEBUG] Campanhas v2 response:', JSON.stringify(campaignsData, null, 2));
     } catch (error: any) {
-      results.endpoints_tested.campaigns_with_metrics = {
+      results.endpoints_tested.campaigns_with_metrics_v2 = {
         error: error.message
       };
     }
 
-    // TEST 2: Buscar um produto específico
-    console.log('[DEBUG] TEST 2: Buscando produto específico...');
+    // TEST 2: Buscar detalhes de um produto específico (API v2)
+    console.log('[DEBUG] TEST 2: Buscando detalhes de produto (API v2)...');
     try {
       const { data: sampleProduct } = await supabase
         .from('mercado_livre_products')
@@ -98,94 +112,127 @@ serve(async (req) => {
       if (sampleProduct) {
         const itemUrl = `https://api.mercadolibre.com/advertising/product_ads/items/${sampleProduct.ml_item_id}`;
         const itemResponse = await fetch(itemUrl, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
+          headers: { 
+            'Authorization': `Bearer ${accessToken}`,
+            'api-version': '2'
+          }
         });
         
         const itemData = await itemResponse.json();
         
-        results.endpoints_tested.product_ads_item = {
+        results.endpoints_tested.product_ads_item_v2 = {
           url: itemUrl,
           item_id: sampleProduct.ml_item_id,
           status: itemResponse.status,
           response: itemData,
-          notes: 'Este endpoint deveria retornar métricas do item, mas parece não retornar'
+          notes: '✅ ENDPOINT CORRETO: /advertising/product_ads/items/{ITEM_ID} com api-version: 2'
         };
         
-        console.log('[DEBUG] Product Ads Item response:', JSON.stringify(itemData, null, 2));
+        console.log('[DEBUG] Product Ads Item v2 response:', JSON.stringify(itemData, null, 2));
       }
     } catch (error: any) {
-      results.endpoints_tested.product_ads_item = {
+      results.endpoints_tested.product_ads_item_v2 = {
         error: error.message
       };
     }
 
-    // TEST 3: Buscar anúncios (ads) ativos
-    console.log('[DEBUG] TEST 3: Buscando ads ativos com search...');
+    // TEST 3: Buscar anúncios (ads) ativos (ENDPOINT CORRETO v2)
+    console.log('[DEBUG] TEST 3: Buscando ads ativos (API v2)...');
     try {
-      const today = new Date();
-      const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-      
-      const dateFrom = thirtyDaysAgo.toISOString().split('T')[0];
-      const dateTo = today.toISOString().split('T')[0];
-      
-      const adsSearchUrl = `https://api.mercadolibre.com/marketplace/advertising/MLB/advertisers/${account.advertiser_id}/product_ads/ads/search?date_from=${dateFrom}&date_to=${dateTo}&status=active&limit=50`;
+      const siteId = account.site_id || 'MLB';
+      const adsSearchUrl = `https://api.mercadolibre.com/marketplace/advertising/${siteId}/advertisers/${account.advertiser_id}/product_ads/ads/search?status=active&limit=50`;
       const adsResponse = await fetch(adsSearchUrl, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
+        headers: { 
+          'Authorization': `Bearer ${accessToken}`,
+          'api-version': '2'
+        }
       });
       
       const adsData = await adsResponse.json();
       
-      results.endpoints_tested.ads_search = {
+      results.endpoints_tested.ads_search_v2 = {
         url: adsSearchUrl,
-        date_from: dateFrom,
-        date_to: dateTo,
+        site_id: siteId,
         status: adsResponse.status,
         response: adsData,
-        notes: 'Este endpoint retorna anúncios ativos. Verificar se campo metrics vem populado'
+        notes: '✅ ENDPOINT CORRETO: /marketplace/advertising/{SITE_ID}/advertisers/{ID}/product_ads/ads/search com api-version: 2'
       };
       
-      console.log('[DEBUG] Ads Search response:', JSON.stringify(adsData, null, 2));
+      console.log('[DEBUG] Ads Search v2 response:', JSON.stringify(adsData, null, 2));
     } catch (error: any) {
-      results.endpoints_tested.ads_search = {
+      results.endpoints_tested.ads_search_v2 = {
         error: error.message
       };
     }
 
-    // TEST 4: Buscar ads de uma campanha específica
-    console.log('[DEBUG] TEST 4: Buscando ads de campanha específica...');
+    // TEST 4: Buscar ads de campanha específica (ENDPOINT CORRETO v2)
+    console.log('[DEBUG] TEST 4: Buscando ads de campanha específica (API v2)...');
     try {
       // Pegar primeira campanha ativa do TEST 1
-      const campaignsData = results.endpoints_tested.campaigns_with_metrics?.response;
+      const campaignsData = results.endpoints_tested.campaigns_with_metrics_v2?.response;
       if (campaignsData?.results?.[0]?.id) {
         const campaignId = campaignsData.results[0].id;
+        const siteId = account.site_id || 'MLB';
         
-        const today = new Date();
-        const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-        
-        const dateFrom = thirtyDaysAgo.toISOString().split('T')[0];
-        const dateTo = today.toISOString().split('T')[0];
-        
-        const campaignAdsUrl = `https://api.mercadolibre.com/marketplace/advertising/MLB/advertisers/${account.advertiser_id}/product_ads/ads/search?campaign_id=${campaignId}&date_from=${dateFrom}&date_to=${dateTo}&limit=50`;
+        const campaignAdsUrl = `https://api.mercadolibre.com/marketplace/advertising/${siteId}/advertisers/${account.advertiser_id}/product_ads/ads/search?campaign_id=${campaignId}&status=active&limit=50`;
         const campaignAdsResponse = await fetch(campaignAdsUrl, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
+          headers: { 
+            'Authorization': `Bearer ${accessToken}`,
+            'api-version': '2'
+          }
         });
         
         const campaignAdsData = await campaignAdsResponse.json();
         
-        results.endpoints_tested.campaign_ads = {
+        results.endpoints_tested.campaign_ads_v2 = {
           url: campaignAdsUrl,
+          site_id: siteId,
           campaign_id: campaignId,
-          date_from: dateFrom,
-          date_to: dateTo,
           status: campaignAdsResponse.status,
           response: campaignAdsData,
-          notes: 'Ads filtrados por campanha. Verificar se tem métricas por item'
+          notes: '✅ ENDPOINT CORRETO: Ads filtrados por campaign_id com api-version: 2'
         };
         
-        console.log('[DEBUG] Campaign Ads response:', JSON.stringify(campaignAdsData, null, 2));
+        console.log('[DEBUG] Campaign Ads v2 response:', JSON.stringify(campaignAdsData, null, 2));
       }
     } catch (error: any) {
-      results.endpoints_tested.campaign_ads = {
+      results.endpoints_tested.campaign_ads_v2 = {
+        error: error.message
+      };
+    }
+
+    // TEST 5: Buscar métricas sumarizadas (metrics_summary)
+    console.log('[DEBUG] TEST 5: Buscando métricas sumarizadas...');
+    try {
+      const today = new Date();
+      const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const dateFrom = thirtyDaysAgo.toISOString().split('T')[0];
+      const dateTo = today.toISOString().split('T')[0];
+      
+      const metrics = 'clicks,prints,ctr,cost,cpc,acos,organic_units_amount,direct_amount,indirect_amount,total_amount,roas';
+      
+      const summaryUrl = `https://api.mercadolibre.com/advertising/advertisers/${account.advertiser_id}/product_ads/campaigns?date_from=${dateFrom}&date_to=${dateTo}&metrics=${metrics}&metrics_summary=true&limit=50`;
+      const summaryResponse = await fetch(summaryUrl, {
+        headers: { 
+          'Authorization': `Bearer ${accessToken}`,
+          'api-version': '2'
+        }
+      });
+      
+      const summaryData = await summaryResponse.json();
+      
+      results.endpoints_tested.metrics_summary = {
+        url: summaryUrl,
+        date_from: dateFrom,
+        date_to: dateTo,
+        status: summaryResponse.status,
+        response: summaryData,
+        notes: '✅ Métricas sumarizadas de todas as campanhas - campo metrics_summary deve ter totais'
+      };
+      
+      console.log('[DEBUG] Metrics Summary response:', JSON.stringify(summaryData, null, 2));
+    } catch (error: any) {
+      results.endpoints_tested.metrics_summary = {
         error: error.message
       };
     }

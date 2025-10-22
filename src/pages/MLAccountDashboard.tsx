@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ReputationBadge } from "@/components/ReputationBadge";
-import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3, AlertCircle } from "lucide-react";
+import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3, AlertCircle, Code, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HealthDashboard } from "@/components/ml-health/HealthDashboard";
 import { HealthIndividual } from "@/components/ml-health/HealthIndividual";
@@ -1448,6 +1448,35 @@ export default function MLAccountDashboard() {
                 <>
                   {/* Botão de Sincronização */}
                   <div className="flex justify-end gap-2">
+                    <Button 
+                      onClick={async () => {
+                        if (!selectedAccountId) return;
+                        try {
+                          const { data, error } = await supabase.functions.invoke('ml-debug-product-ads-response', {
+                            body: { ml_account_id: selectedAccountId }
+                          });
+                          
+                          if (error) throw error;
+                          
+                          console.log('=== 🔍 DEBUG PRODUCT ADS API ===');
+                          console.log(JSON.stringify(data, null, 2));
+                          
+                          toast.success("Debug completo!", {
+                            description: "Verifique o console do navegador (F12) para ver as respostas da API"
+                          });
+                        } catch (error: any) {
+                          console.error('Erro no debug:', error);
+                          toast.error("Erro no debug", {
+                            description: error.message
+                          });
+                        }
+                      }}
+                      variant="outline"
+                      className="gap-2"
+                    >
+                      <Code className="h-4 w-4" />
+                      Debug API
+                    </Button>
                     <Button 
                       onClick={async () => {
                         if (!selectedAccountId) return;

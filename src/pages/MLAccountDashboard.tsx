@@ -27,6 +27,8 @@ interface MLAccount {
   connected_at: string;
   last_sync_at: string | null;
   token_expires_at: string;
+  has_product_ads_enabled: boolean | null;
+  advertiser_id: string | null;
 }
 
 interface MLMetrics {
@@ -158,6 +160,7 @@ export default function MLAccountDashboard() {
   const [productAds, setProductAds] = useState<ProductAd[]>([]);
   const [productAdsLoading, setProductAdsLoading] = useState(false);
   const [hasProductAds, setHasProductAds] = useState<boolean | null>(null);
+  const [checkingProductAds, setCheckingProductAds] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -205,8 +208,14 @@ export default function MLAccountDashboard() {
     if (selectedAccountId) {
       loadAccountData(selectedAccountId);
       loadProductAds(selectedAccountId);
+      
+      // Verify Product Ads status if not yet checked
+      const account = mlAccounts.find(acc => acc.id === selectedAccountId);
+      if (account && (account.has_product_ads_enabled === null || account.has_product_ads_enabled === false)) {
+        verifyProductAdsStatus(selectedAccountId);
+      }
     }
-  }, [selectedAccountId]);
+  }, [selectedAccountId, mlAccounts]);
 
   useEffect(() => {
     if (!selectedAccountId) return;
@@ -330,7 +339,7 @@ export default function MLAccountDashboard() {
     try {
       const { data, error } = await supabase
         .from('mercado_livre_accounts')
-        .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at, token_expires_at')
+        .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at, token_expires_at, has_product_ads_enabled, advertiser_id')
         .eq('student_id', user?.id)
         .eq('is_active', true)
         .order('is_primary', { ascending: false });
@@ -487,6 +496,31 @@ export default function MLAccountDashboard() {
       console.error('Error loading product ads:', error);
       setProductAds([]);
       setHasProductAds(null);
+    }
+  };
+
+  const verifyProductAdsStatus = async (accountId: string) => {
+    setCheckingProductAds(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ml-check-product-ads-status', {
+        body: { ml_account_id: accountId }
+      });
+
+      if (error) {
+        console.error('Error checking Product Ads status:', error);
+        return;
+      }
+
+      setHasProductAds(data.enabled);
+      
+      // If enabled, load the data automatically
+      if (data.enabled) {
+        await loadProductAds(accountId);
+      }
+    } catch (error) {
+      console.error('Error verifying Product Ads:', error);
+    } finally {
+      setCheckingProductAds(false);
     }
   };
 
@@ -1305,7 +1339,16 @@ export default function MLAccountDashboard() {
 
             {/* ABA PUBLICIDADE */}
             <TabsContent value="publicidade" className="space-y-6">
-              {loading || productAdsLoading ? (
+              {checkingProductAds ? (
+                <div className="space-y-4">
+                  <Card className="p-8">
+                    <div className="flex flex-col items-center justify-center space-y-4">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                      <p className="text-muted-foreground">Verificando status do Product Ads...</p>
+                    </div>
+                  </Card>
+                </div>
+              ) : loading || productAdsLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>

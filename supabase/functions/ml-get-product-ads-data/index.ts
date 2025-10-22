@@ -13,7 +13,7 @@ serve(async (req) => {
 
   try {
     const { ml_account_id } = await req.json();
-    console.log('Getting Product Ads data for account:', ml_account_id);
+    console.log('[PRODUCT ADS SYNC] Starting for account:', ml_account_id);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -27,6 +27,7 @@ serve(async (req) => {
       .single();
 
     if (accountError || !account) {
+      console.error('[PRODUCT ADS SYNC] Account not found:', accountError);
       throw new Error('Account not found');
     }
 
@@ -34,53 +35,67 @@ serve(async (req) => {
 
     // Check if token is expired and refresh if needed
     if (new Date(account.token_expires_at) <= new Date()) {
-      console.log('Token expired, refreshing...');
+      console.log('[PRODUCT ADS SYNC] Token expired, refreshing...');
       accessToken = await refreshToken(account, supabase);
     }
 
     // Step 1: Get advertiser_id
     let advertiserId = account.advertiser_id;
+    console.log('[PRODUCT ADS SYNC] Advertiser ID:', advertiserId || 'not set');
     
     if (!advertiserId) {
-      console.log('Fetching advertiser_id...');
-      const advertiserResponse = await fetch(
-        `https://api.mercadolibre.com/advertising/advertisers?product_id=PADS`,
-        {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        }
-      );
+      console.log('[PRODUCT ADS SYNC] Fetching advertiser_id from API...');
+      
+      try {
+        const advertiserResponse = await fetch(
+          `https://api.mercadolibre.com/advertising/advertisers?product_id=PADS`,
+          {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          }
+        );
 
-      if (!advertiserResponse.ok) {
-        if (advertiserResponse.status === 404) {
-          console.log('Product Ads not enabled for this account');
-          await supabase
-            .from('mercado_livre_accounts')
-            .update({ has_product_ads_enabled: false })
-            .eq('id', ml_account_id);
+        if (!advertiserResponse.ok) {
+          if (advertiserResponse.status === 404) {
+            console.log('[PRODUCT ADS SYNC] ❌ Product Ads not enabled (404)');
+            await supabase
+              .from('mercado_livre_accounts')
+              .update({ 
+                has_product_ads_enabled: false,
+                advertiser_id: null
+              })
+              .eq('id', ml_account_id);
+            
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                message: 'Product Ads não está habilitado nesta conta. Ative Product Ads no painel do Mercado Livre.',
+                has_product_ads: false
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          const errorText = await advertiserResponse.text();
+          console.error('[PRODUCT ADS SYNC] API error:', advertiserResponse.status, errorText);
+          throw new Error(`Failed to get advertiser (${advertiserResponse.status}): ${errorText}`);
+        }
+
+        const advertiserData = await advertiserResponse.json();
+        advertiserId = advertiserData.advertiser_id?.toString();
+        console.log('[PRODUCT ADS SYNC] ✅ Advertiser ID obtained:', advertiserId);
+
+        // Update account with advertiser_id
+        await supabase
+          .from('mercado_livre_accounts')
+          .update({ 
+            advertiser_id: advertiserId,
+            has_product_ads_enabled: true
+          })
+          .eq('id', ml_account_id);
           
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              message: 'Product Ads not enabled for this account',
-              has_product_ads: false
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        throw new Error(`Failed to get advertiser: ${advertiserResponse.status}`);
+      } catch (fetchError) {
+        console.error('[PRODUCT ADS SYNC] Error fetching advertiser:', fetchError);
+        throw fetchError;
       }
-
-      const advertiserData = await advertiserResponse.json();
-      advertiserId = advertiserData.advertiser_id?.toString();
-
-      // Update account with advertiser_id
-      await supabase
-        .from('mercado_livre_accounts')
-        .update({ 
-          advertiser_id: advertiserId,
-          has_product_ads_enabled: true
-        })
-        .eq('id', ml_account_id);
     }
 
     // Step 2: Get active products for this account
@@ -95,13 +110,33 @@ serve(async (req) => {
       throw new Error(`Failed to get products: ${productsError.message}`);
     }
 
-    console.log(`Processing ${products.length} products`);
+    console.log(`[PRODUCT ADS SYNC] Processing ${products.length} active products`);
+
+    if (products.length === 0) {
+      console.log('[PRODUCT ADS SYNC] ⚠️ No active products found');
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          items_synced: 0,
+          has_product_ads: true,
+          advertiser_id: advertiserId,
+          message: 'Nenhum produto ativo encontrado para sincronizar'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Step 3: Get Product Ads item details and metrics
     const productAdsData = [];
+    let processedCount = 0;
     
     for (const product of products) {
       try {
+        processedCount++;
+        if (processedCount % 10 === 0) {
+          console.log(`[PRODUCT ADS SYNC] Progress: ${processedCount}/${products.length}`);
+        }
+
         // Wait 100ms between requests to respect rate limits
         await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -122,6 +157,11 @@ serve(async (req) => {
           isRecommended = itemData.recommended === true;
           campaignId = itemData.campaign_id;
           adStatus = itemData.status || 'inactive';
+        } else if (itemResponse.status === 404) {
+          // Item not in Product Ads yet, that's ok
+          console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} not in Product Ads`);
+        } else {
+          console.error(`[PRODUCT ADS SYNC] Error fetching item ${product.ml_item_id}: ${itemResponse.status}`);
         }
 
         productAdsData.push({
@@ -135,7 +175,7 @@ serve(async (req) => {
         });
 
       } catch (err) {
-        console.error(`Error processing item ${product.ml_item_id}:`, err);
+        console.error(`[PRODUCT ADS SYNC] Error processing item ${product.ml_item_id}:`, err);
         // Continue with next item
       }
     }
@@ -238,22 +278,30 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Successfully synced ${upsertData.length} product ads items`);
+    console.log(`[PRODUCT ADS SYNC] ✅ Successfully synced ${upsertData.length} product ads items`);
+    console.log(`[PRODUCT ADS SYNC] Summary:`);
+    console.log(`  - Total products: ${products.length}`);
+    console.log(`  - Recommended: ${upsertData.filter(i => i.is_recommended).length}`);
+    console.log(`  - Active campaigns: ${upsertData.filter(i => i.campaign_id).length}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         items_synced: upsertData.length,
         has_product_ads: true,
-        advertiser_id: advertiserId
+        advertiser_id: advertiserId,
+        recommended_count: upsertData.filter(i => i.is_recommended).length
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: any) {
-    console.error('Error in ml-get-product-ads-data:', error);
+    console.error('[PRODUCT ADS SYNC] ❌ Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: error.stack
+      }),
       { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

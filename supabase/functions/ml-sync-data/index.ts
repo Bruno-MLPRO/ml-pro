@@ -62,6 +62,9 @@ Deno.serve(async (req) => {
     // Atualizar métricas
     await updateMetrics(account, userInfo, products, orders, supabase)
 
+    // Verificar e sincronizar Product Ads automaticamente
+    const productAdsResult = await checkAndSyncProductAds(account, accessToken, supabase)
+
     // Validar milestones
     await validateMilestones(account.student_id, supabase)
 
@@ -76,7 +79,9 @@ Deno.serve(async (req) => {
         success: true,
         products_synced: products.length,
         orders_synced: orders.length,
-        metrics_updated: true
+        metrics_updated: true,
+        product_ads_enabled: productAdsResult.enabled,
+        product_ads_synced: productAdsResult.synced
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
@@ -577,6 +582,72 @@ async function syncFullStock(account: any, item: any, accessToken: string, supab
     }
   } catch (error) {
     console.error('Error in syncFullStock:', error)
+  }
+}
+
+async function checkAndSyncProductAds(account: any, accessToken: string, supabase: any) {
+  console.log('Checking Product Ads status...')
+  
+  try {
+    // Try to get advertiser_id
+    const advertiserResponse = await fetch(
+      `https://api.mercadolibre.com/advertising/advertisers?product_id=PADS`,
+      {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }
+    )
+
+    if (!advertiserResponse.ok) {
+      if (advertiserResponse.status === 404) {
+        console.log('Product Ads not enabled for this account')
+        await supabase
+          .from('mercado_livre_accounts')
+          .update({ 
+            has_product_ads_enabled: false,
+            advertiser_id: null
+          })
+          .eq('id', account.id)
+        
+        return { enabled: false, synced: false }
+      }
+      throw new Error(`API error: ${advertiserResponse.status}`)
+    }
+
+    const advertiserData = await advertiserResponse.json()
+    const advertiserId = advertiserData.advertiser_id?.toString()
+
+    // Update account with Product Ads info
+    await supabase
+      .from('mercado_livre_accounts')
+      .update({ 
+        has_product_ads_enabled: true,
+        advertiser_id: advertiserId
+      })
+      .eq('id', account.id)
+
+    console.log('Product Ads enabled, synchronizing data...')
+
+    // Call the Product Ads sync function
+    try {
+      const { data, error } = await supabase.functions.invoke('ml-get-product-ads-data', {
+        body: { ml_account_id: account.id }
+      })
+
+      if (error) {
+        console.error('Error syncing Product Ads data:', error)
+        return { enabled: true, synced: false, error: error.message }
+      }
+
+      console.log('Product Ads data synced successfully')
+      return { enabled: true, synced: true }
+    } catch (syncError) {
+      console.error('Error calling Product Ads sync:', syncError)
+      return { enabled: true, synced: false }
+    }
+
+  } catch (error: any) {
+    console.error('Error in checkAndSyncProductAds:', error)
+    return { enabled: false, synced: false, error: error.message }
   }
 }
 

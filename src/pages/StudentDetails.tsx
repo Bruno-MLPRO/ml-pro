@@ -76,9 +76,11 @@ interface MLMetrics {
 
 interface MLProduct {
   id: string;
+  ml_item_id: string;
   title: string;
   thumbnail: string;
   status: string;
+  price: number;
   has_low_quality_photos: boolean;
   has_description: boolean;
   has_tax_data: boolean;
@@ -570,6 +572,31 @@ export default function StudentDetails() {
     sum + item.available_units + item.reserved_units + item.inbound_units, 0
   );
 
+  // Cálculos financeiros do FULL
+  const calculateFullStockFinancials = () => {
+    const totalUnits = fullStock.reduce((sum, item) => 
+      sum + (item.available_units || 0), 0
+    );
+    
+    const totalRevenue = fullStock.reduce((sum, item) => {
+      // Encontrar o produto correspondente pelo ml_item_id
+      const product = products.find(p => p.ml_item_id === item.ml_item_id);
+      const price = product?.price || 0;
+      const units = item.available_units || 0;
+      return sum + (units * price);
+    }, 0);
+    
+    const payout = totalRevenue * 0.78; // 22% de taxas (14% ML + 8% frete)
+    
+    return {
+      totalUnits,
+      totalRevenue,
+      payout
+    };
+  };
+
+  const fullFinancials = metrics?.has_full ? calculateFullStockFinancials() : null;
+
   return (
     <div className="flex min-h-screen bg-background w-full">
       <Sidebar />
@@ -985,19 +1012,44 @@ export default function StudentDetails() {
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
-                                {metrics.has_full ? (
+                                {metrics.has_full && fullFinancials ? (
                                   <div className="space-y-3">
                                     <Badge variant="default" className="mb-2">Ativo</Badge>
-                                    <div className="space-y-2">
+                                    
+                                    {/* Unidades */}
+                                    <div className="pb-3 border-b">
                                       <div className="flex items-center justify-between">
                                         <span className="text-sm text-muted-foreground">Estoque Total</span>
                                         <span className="font-bold">{totalStockUnits} un</span>
                                       </div>
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-sm text-muted-foreground">Disponível</span>
-                                        <span className="font-medium">
-                                          {fullStock.reduce((sum, item) => sum + item.available_units, 0)} un
-                                        </span>
+                                    </div>
+                                    
+                                    {/* Financeiro */}
+                                    <div className="space-y-3">
+                                      <div>
+                                        <div className="flex items-center gap-1 mb-1">
+                                          <DollarSign className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                          <span className="text-xs text-muted-foreground">Faturamento Previsto</span>
+                                        </div>
+                                        <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                                          {fullFinancials.totalRevenue.toLocaleString('pt-BR', { 
+                                            style: 'currency', 
+                                            currency: 'BRL' 
+                                          })}
+                                        </p>
+                                      </div>
+                                      
+                                      <div>
+                                        <div className="flex items-center gap-1 mb-1">
+                                          <TrendingUp className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                          <span className="text-xs text-muted-foreground">Payout Previsto</span>
+                                        </div>
+                                        <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                                          {fullFinancials.payout.toLocaleString('pt-BR', { 
+                                            style: 'currency', 
+                                            currency: 'BRL' 
+                                          })}
+                                        </p>
                                       </div>
                                     </div>
                                   </div>

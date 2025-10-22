@@ -502,7 +502,11 @@ export default function MLAccountDashboard() {
         .eq('ml_account_id', accountId)
         .order('total_spend', { ascending: false });
 
-      if (campaignsError) throw campaignsError;
+      if (campaignsError) {
+        console.error('Error loading campaigns:', campaignsError);
+        throw campaignsError;
+      }
+      
       setCampaigns(campaignsData || []);
 
       // Load products
@@ -510,9 +514,14 @@ export default function MLAccountDashboard() {
         .from('mercado_livre_product_ads')
         .select('*')
         .eq('ml_account_id', accountId)
-        .order('is_recommended', { ascending: false });
+        .order('is_recommended', { ascending: false })
+        .order('created_at', { ascending: false });
 
-      if (productsError) throw productsError;
+      if (productsError) {
+        console.error('Error loading products:', productsError);
+        throw productsError;
+      }
+      
       setProductAds(productsData || []);
       
       // Check if user has product ads enabled and active campaigns

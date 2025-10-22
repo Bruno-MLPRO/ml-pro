@@ -18,6 +18,16 @@ interface SimpleProductsTableProps {
 }
 
 export const SimpleProductsTable = ({ items }: SimpleProductsTableProps) => {
+  const translateStatus = (status: string) => {
+    const translations: Record<string, string> = {
+      'active': 'ativo',
+      'paused': 'pausado',
+      'idle': 'inativo',
+      'hold': 'retido'
+    };
+    return translations[status.toLowerCase()] || status;
+  };
+
   return (
     <div className="space-y-3">
       {items.length === 0 ? (
@@ -31,7 +41,7 @@ export const SimpleProductsTable = ({ items }: SimpleProductsTableProps) => {
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{item.title}</p>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Badge variant={item.status === 'active' ? 'default' : 'secondary'}>{item.status}</Badge>
+                <Badge variant={item.status === 'active' ? 'default' : 'secondary'}>{translateStatus(item.status)}</Badge>
                 {item.campaign_name && <Badge variant="outline" className="text-xs">{item.campaign_name}</Badge>}
                 {item.is_recommended && (
                   <Badge className="bg-yellow-500/10 text-yellow-700 border-yellow-200">

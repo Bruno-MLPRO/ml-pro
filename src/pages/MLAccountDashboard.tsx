@@ -1434,16 +1434,7 @@ export default function MLAccountDashboard() {
                 </Alert>
               ) : (
                 <>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      onClick={testProductAdsConnection}
-                      disabled={testingConnection}
-                      variant="outline"
-                      size="sm"
-                    >
-                      <RefreshCw className={`w-4 h-4 mr-2 ${testingConnection ? 'animate-spin' : ''}`} />
-                      Testar Conexão
-                    </Button>
+                  <div className="flex justify-end">
                     <Button onClick={syncProductAds} disabled={productAdsLoading} variant="outline" size="sm">
                       <RefreshCw className={`w-4 h-4 mr-2 ${productAdsLoading ? 'animate-spin' : ''}`} />
                       Sincronizar Dados
@@ -1524,55 +1515,6 @@ export default function MLAccountDashboard() {
                       </CardContent>
                     </Card>
                   )}
-
-                  {/* Todos os Produtos */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Package className="h-5 w-5" />
-                        Todos os Produtos ({productAds.length})
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {productAds.slice(0, 20).map(product => (
-                          <div key={product.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-accent/50 transition-colors">
-                            {product.thumbnail && (
-                              <img
-                                src={product.thumbnail}
-                                alt={product.title}
-                                className="w-16 h-16 object-cover rounded"
-                              />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{product.title}</p>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <Badge variant={product.status === 'active' ? 'default' : 'secondary'}>
-                                  {product.status}
-                                </Badge>
-                                {product.campaign_name && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {product.campaign_name}
-                                  </Badge>
-                                )}
-                                {product.is_recommended && (
-                                  <Badge className="bg-yellow-500/10 text-yellow-700 border-yellow-200">
-                                    <Zap className="w-3 h-3 mr-1" />
-                                    Recomendado
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-semibold">
-                                R$ {product.price.toFixed(2)}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
                 </>
               )}
             </TabsContent>

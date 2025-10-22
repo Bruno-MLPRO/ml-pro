@@ -25,11 +25,32 @@ interface CampaignCardProps {
 
 export const CampaignCard = ({ campaign }: CampaignCardProps) => {
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'active': return 'bg-green-500/10 text-green-700 border-green-200';
-      case 'paused': return 'bg-yellow-500/10 text-yellow-700 border-yellow-200';
+      case 'paused': 
+      case 'hold': return 'bg-yellow-500/10 text-yellow-700 border-yellow-200';
+      case 'idle': return 'bg-gray-500/10 text-gray-700 border-gray-200';
       default: return 'bg-gray-500/10 text-gray-700 border-gray-200';
     }
+  };
+
+  const translateStatus = (status: string) => {
+    const translations: Record<string, string> = {
+      'active': 'ativo',
+      'paused': 'pausado',
+      'idle': 'inativo',
+      'hold': 'retido'
+    };
+    return translations[status.toLowerCase()] || status;
+  };
+
+  const translateStrategy = (strategy: string) => {
+    const translations: Record<string, string> = {
+      'PROFITABILITY': 'RENTABILIDADE',
+      'INCREASE': 'AUMENTAR',
+      'TRAFFIC': 'TRÁFEGO'
+    };
+    return translations[strategy.toUpperCase()] || strategy;
   };
 
   const getRoasColor = (roas: number | null) => {
@@ -47,10 +68,10 @@ export const CampaignCard = ({ campaign }: CampaignCardProps) => {
             <CardTitle className="text-base mb-2">{campaign.campaign_name}</CardTitle>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge className={getStatusColor(campaign.status)}>
-                {campaign.status}
+                {translateStatus(campaign.status)}
               </Badge>
               <Badge variant="outline" className="text-xs">
-                {campaign.strategy}
+                {translateStrategy(campaign.strategy)}
               </Badge>
             </div>
           </div>

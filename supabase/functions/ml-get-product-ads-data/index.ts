@@ -13,7 +13,7 @@ serve(async (req) => {
 
   try {
     const { ml_account_id } = await req.json();
-    console.log('[PRODUCT ADS SYNC] Starting for account:', ml_account_id);
+    console.log('📊 [PRODUCT ADS SYNC] Starting for account:', ml_account_id);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -27,7 +27,7 @@ serve(async (req) => {
       .single();
 
     if (accountError || !account) {
-      console.error('[PRODUCT ADS SYNC] Account not found:', accountError);
+      console.error('❌ Account not found:', accountError);
       throw new Error('Account not found');
     }
 
@@ -35,16 +35,16 @@ serve(async (req) => {
 
     // Check if token is expired and refresh if needed
     if (new Date(account.token_expires_at) <= new Date()) {
-      console.log('[PRODUCT ADS SYNC] Token expired, refreshing...');
+      console.log('🔄 Token expired, refreshing...');
       accessToken = await refreshToken(account, supabase);
     }
 
     // Step 1: Get advertiser_id
     let advertiserId = account.advertiser_id;
-    console.log('[PRODUCT ADS SYNC] Advertiser ID:', advertiserId || 'not set');
+    console.log('🎯 Advertiser ID:', advertiserId || 'not set');
     
     if (!advertiserId) {
-      console.log('[PRODUCT ADS SYNC] Fetching advertiser_id from API...');
+      console.log('🔍 Fetching advertiser_id from API...');
       
       try {
         const advertiserResponse = await fetch(
@@ -56,7 +56,7 @@ serve(async (req) => {
 
         if (!advertiserResponse.ok) {
           if (advertiserResponse.status === 404) {
-            console.log('[PRODUCT ADS SYNC] ❌ Product Ads not enabled (404)');
+            console.log('❌ Product Ads not enabled (404)');
             await supabase
               .from('mercado_livre_accounts')
               .update({ 
@@ -75,16 +75,12 @@ serve(async (req) => {
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
-          const errorText = await advertiserResponse.text();
-          console.error('[PRODUCT ADS SYNC] API error:', advertiserResponse.status, errorText);
-          throw new Error(`Failed to get advertiser (${advertiserResponse.status}): ${errorText}`);
+          throw new Error(`Failed to get advertiser (${advertiserResponse.status})`);
         }
 
         const advertiserData = await advertiserResponse.json();
-        console.log('[PRODUCT ADS SYNC] API Response:', JSON.stringify(advertiserData));
 
         if (!advertiserData.advertisers || advertiserData.advertisers.length === 0) {
-          console.error('[PRODUCT ADS SYNC] ❌ No advertisers found in response');
           throw new Error('No advertisers found for this user');
         }
 
@@ -92,7 +88,7 @@ serve(async (req) => {
           || advertiserData.advertisers[0];
 
         advertiserId = advertiser.advertiser_id?.toString();
-        console.log('[PRODUCT ADS SYNC] ✅ Advertiser ID obtained:', advertiserId, 'for site:', advertiser.site_id);
+        console.log('✅ Advertiser ID obtained:', advertiserId);
 
         if (!advertiserId) {
           throw new Error('Invalid advertiser_id received from API');
@@ -107,33 +103,42 @@ serve(async (req) => {
           .eq('id', ml_account_id);
           
       } catch (fetchError) {
-        console.error('[PRODUCT ADS SYNC] Error fetching advertiser:', fetchError);
+        console.error('❌ Error fetching advertiser:', fetchError);
         throw fetchError;
       }
     }
 
-    // Step 2: Fetch campaigns to verify if there are active campaigns
-    console.log('[PRODUCT ADS SYNC] Fetching campaigns...');
-    const dateFrom = new Date();
-    dateFrom.setDate(dateFrom.getDate() - 30);
-    const dateTo = new Date();
-
-    const campaignsUrl = `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/product_ads/campaigns?date_from=${dateFrom.toISOString().split('T')[0]}&date_to=${dateTo.toISOString().split('T')[0]}&metrics=clicks,prints,cost,cpc,acos,organic_units_quantity,organic_items_quantity,direct_items_quantity,indirect_items_quantity,advertising_items_quantity,direct_units_quantity,indirect_units_quantity,units_quantity,direct_amount,indirect_amount,total_amount`;
-
+    // Step 2: Fetch campaigns with metrics from last 30 days
+    console.log('📊 Step 2: Fetching campaigns with metrics...');
+    
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    const dateFrom = thirtyDaysAgo.toISOString().split('T')[0];
+    const dateTo = today.toISOString().split('T')[0];
+    
+    const metricsParams = [
+      'clicks', 'prints', 'ctr', 'cost', 'cpc', 'acos',
+      'organic_units_quantity', 'organic_units_amount',
+      'direct_items_quantity', 'indirect_items_quantity',
+      'advertising_items_quantity', 'cvr', 'roas',
+      'direct_units_quantity', 'indirect_units_quantity',
+      'units_quantity', 'direct_amount', 'indirect_amount', 'total_amount'
+    ].join(',');
+    
+    const campaignsUrl = `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/product_ads/campaigns?date_from=${dateFrom}&date_to=${dateTo}&metrics=${metricsParams}&limit=50`;
+    
     const campaignsResponse = await fetch(campaignsUrl, {
-      headers: { 
+      headers: {
         'Authorization': `Bearer ${accessToken}`,
         'api-version': '2'
       }
     });
 
     if (!campaignsResponse.ok) {
-      const errorText = await campaignsResponse.text();
-      console.error('[PRODUCT ADS SYNC] Campaigns API error:', campaignsResponse.status, errorText);
-      
-      // If 404, means no active campaigns
       if (campaignsResponse.status === 404) {
-        console.log('[PRODUCT ADS SYNC] No active campaigns found');
+        console.log('❌ No active campaigns found');
         
         await supabase
           .from('mercado_livre_accounts')
@@ -154,28 +159,14 @@ serve(async (req) => {
         });
       }
       
-      throw new Error(`Failed to fetch campaigns: ${errorText}`);
+      throw new Error(`Failed to fetch campaigns: ${campaignsResponse.status}`);
     }
 
     const campaignsData = await campaignsResponse.json();
-    console.log('[PRODUCT ADS SYNC] Campaigns found:', campaignsData.paging?.total || 0);
+    const campaigns = campaignsData.results || [];
+    console.log(`✅ Found ${campaigns.length} campaigns`);
     
-    // Create a map of campaign metrics for distribution
-    const campaignMetrics = new Map();
-    if (campaignsData.results) {
-      for (const campaign of campaignsData.results) {
-        campaignMetrics.set(campaign.id, {
-          metrics: campaign.metrics,
-          name: campaign.name
-        });
-        console.log(`[PRODUCT ADS SYNC] Campaign ${campaign.id} "${campaign.name}": Cost=${campaign.metrics.cost}, ROAS=${campaign.metrics.roas}, Revenue=${campaign.metrics.total_amount}`);
-      }
-    }
-
-    // If no campaigns, update and return
-    if (!campaignsData.results || campaignsData.results.length === 0) {
-      console.log('[PRODUCT ADS SYNC] No campaigns in response');
-      
+    if (campaigns.length === 0) {
       await supabase
         .from('mercado_livre_accounts')
         .update({ 
@@ -195,6 +186,55 @@ serve(async (req) => {
       });
     }
 
+    // Step 2.1: Save campaigns to database
+    console.log('💾 Saving campaigns to database...');
+    const campaignsToUpsert = campaigns.map(campaign => ({
+      ml_account_id: account.id,
+      student_id: account.student_id,
+      campaign_id: campaign.id,
+      campaign_name: campaign.name,
+      status: campaign.status,
+      strategy: campaign.strategy,
+      budget: campaign.budget,
+      acos_target: campaign.acos_target,
+      
+      // Metrics
+      total_spend: campaign.metrics?.cost || 0,
+      ad_revenue: campaign.metrics?.direct_amount || 0,
+      organic_revenue: campaign.metrics?.organic_units_amount || 0,
+      total_revenue: campaign.metrics?.total_amount || 0,
+      
+      advertised_sales: campaign.metrics?.advertising_items_quantity || 0,
+      organic_sales: campaign.metrics?.organic_units_quantity || 0,
+      total_sales: campaign.metrics?.units_quantity || 0,
+      
+      impressions: campaign.metrics?.prints || 0,
+      clicks: campaign.metrics?.clicks || 0,
+      ctr: campaign.metrics?.ctr || null,
+      roas: campaign.metrics?.roas || null,
+      acos: campaign.metrics?.acos || null,
+      
+      synced_at: new Date().toISOString()
+    }));
+    
+    if (campaignsToUpsert.length > 0) {
+      const { error: campaignsError } = await supabase
+        .from('mercado_livre_campaigns')
+        .upsert(campaignsToUpsert, {
+          onConflict: 'ml_account_id,campaign_id'
+        });
+      
+      if (campaignsError) {
+        console.error('❌ Error saving campaigns:', campaignsError);
+        throw campaignsError;
+      }
+      
+      console.log(`✅ Saved ${campaignsToUpsert.length} campaigns`);
+    }
+    
+    // Create campaign map for quick lookup
+    const campaignMap = new Map(campaigns.map(c => [c.id, c.name]));
+
     // Update account to indicate active campaigns
     await supabase
       .from('mercado_livre_accounts')
@@ -204,7 +244,8 @@ serve(async (req) => {
       })
       .eq('id', ml_account_id);
 
-    // Step 3: Get active products for this account
+    // Step 3: Get active products
+    console.log('📦 Step 3: Fetching active products...');
     const { data: products, error: productsError } = await supabase
       .from('mercado_livre_products')
       .select('ml_item_id, title, thumbnail, price, status')
@@ -216,45 +257,35 @@ serve(async (req) => {
       throw new Error(`Failed to get products: ${productsError.message}`);
     }
 
-    console.log(`[PRODUCT ADS SYNC] Processing ${products.length} active products`);
+    console.log(`✅ Found ${products.length} active products`);
 
     if (products.length === 0) {
-      console.log('[PRODUCT ADS SYNC] ⚠️ No active products found');
+      console.log('⚠️ No active products found');
       return new Response(
         JSON.stringify({ 
           success: true, 
-          items_synced: 0,
-          has_product_ads: true,
-          has_active_campaigns: true,
-          advertiser_id: advertiserId,
-          message: 'Nenhum produto ativo encontrado para sincronizar'
+          campaigns: campaigns.length,
+          products_synced: 0,
+          message: 'Campanhas sincronizadas, mas nenhum produto ativo encontrado'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Step 4: Get Product Ads item details and group by campaign
-    const productsByCampaign = new Map();
-    const productsWithoutCampaign = [];
+    // Step 4: Process products and save status/recommendation only
+    console.log('🔍 Step 4: Processing product details...');
+    const productAdsData = [];
     let processedCount = 0;
-    
-    console.log('[PRODUCT ADS SYNC] Fetching product details and grouping by campaign...');
-    
+    let errorCount = 0;
+
     for (const product of products) {
       try {
-        processedCount++;
-        if (processedCount % 10 === 0) {
-          console.log(`[PRODUCT ADS SYNC] Progress: ${processedCount}/${products.length}`);
-        }
-
         // Wait 200ms between requests to respect rate limits
         await new Promise(resolve => setTimeout(resolve, 200));
 
-        // Get item details from Product Ads API (v2)
         const itemUrl = `https://api.mercadolibre.com/advertising/product_ads/items/${product.ml_item_id}`;
-        
         const itemResponse = await fetch(itemUrl, {
-          headers: { 
+          headers: {
             'Authorization': `Bearer ${accessToken}`,
             'api-version': '2'
           }
@@ -262,172 +293,66 @@ serve(async (req) => {
 
         if (!itemResponse.ok) {
           if (itemResponse.status === 404) {
-            console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} not in Product Ads`);
-            productsWithoutCampaign.push({
-              ...product,
+            // Product not in Product Ads
+            productAdsData.push({
+              ml_account_id: account.id,
+              student_id: account.student_id,
+              advertiser_id: advertiserId,
+              ml_item_id: product.ml_item_id,
+              title: product.title,
+              thumbnail: product.thumbnail,
+              price: product.price,
               status: 'not_in_campaign',
               campaign_id: null,
-              is_recommended: false
+              campaign_name: null,
+              ad_group_id: null,
+              is_recommended: false,
+              synced_at: new Date().toISOString()
             });
+            errorCount++;
             continue;
           }
           
-          const errorText = await itemResponse.text();
-          console.error(`[PRODUCT ADS SYNC] Error fetching item ${product.ml_item_id}:`, itemResponse.status, errorText);
-          productsWithoutCampaign.push({
-            ...product,
-            status: 'error',
-            campaign_id: null,
-            is_recommended: false
-          });
+          console.warn(`⚠️ Failed to fetch ${product.ml_item_id}: ${itemResponse.status}`);
+          errorCount++;
           continue;
         }
 
         const itemData = await itemResponse.json();
-        const campaignId = itemData.campaign_id;
-        
-        if (!campaignId) {
-          console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} - No campaign assigned`);
-          productsWithoutCampaign.push({
-            ...product,
-            ...itemData,
-            status: itemData.status || 'inactive',
-            campaign_id: null
-          });
-          continue;
-        }
-        
-        // Group products by campaign
-        if (!productsByCampaign.has(campaignId)) {
-          productsByCampaign.set(campaignId, []);
-        }
-        
-        productsByCampaign.get(campaignId).push({
-          ...product,
-          ...itemData
-        });
-        
-        console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} → Campaign ${campaignId}, Status: ${itemData.status}, Recommended: ${itemData.recommended}`);
-        
-      } catch (error) {
-        console.error(`[PRODUCT ADS SYNC] Error processing item ${product.ml_item_id}:`, error);
-        productsWithoutCampaign.push({
-          ...product,
-          status: 'error',
-          campaign_id: null,
-          is_recommended: false
-        });
-      }
-    }
-    
-    // Step 5: Distribute campaign metrics proportionally among products
-    console.log('[PRODUCT ADS SYNC] Distributing campaign metrics...');
-    const productAdsData = [];
-    
-    // Process products in campaigns
-    for (const [campaignId, campaignProducts] of productsByCampaign) {
-      const campaignData = campaignMetrics.get(campaignId);
-      
-      if (!campaignData) {
-        console.warn(`[PRODUCT ADS SYNC] ⚠️ No metrics found for campaign ${campaignId}`);
-        // Add products without metrics
-        for (const prod of campaignProducts) {
-          productAdsData.push({
-            ml_account_id,
-            student_id: account.student_id,
-            advertiser_id: advertiserId,
-            ml_item_id: prod.ml_item_id,
-            title: prod.title,
-            thumbnail: prod.thumbnail,
-            price: prod.price,
-            status: prod.status,
-            campaign_id: campaignId,
-            is_recommended: prod.recommended || false,
-            total_sales: 0,
-            advertised_sales: 0,
-            non_advertised_sales: 0,
-            ad_revenue: 0,
-            non_ad_revenue: 0,
-            total_spend: 0,
-            roas: null,
-            impressions: 0,
-            clicks: 0,
-            ctr: null,
-            acos: null,
-          });
-        }
-        continue;
-      }
-      
-      const metrics = campaignData.metrics;
-      const productsCount = campaignProducts.length;
-      
-      console.log(`[PRODUCT ADS SYNC] Campaign ${campaignId} "${campaignData.name}": ${productsCount} products`);
-      console.log(`[PRODUCT ADS SYNC]   Total metrics - Cost: ${metrics.cost}, Revenue: ${metrics.total_amount}, ROAS: ${metrics.roas}`);
-      
-      // Distribute metrics equally among products in the campaign
-      for (const prod of campaignProducts) {
-        const distributedMetrics = {
-          total_spend: metrics.cost / productsCount,
-          ad_revenue: metrics.direct_amount / productsCount,
-          non_ad_revenue: (metrics.organic_units_quantity || 0) * (prod.price || 0) / productsCount,
-          advertised_sales: (metrics.advertising_items_quantity || 0) / productsCount,
-          non_advertised_sales: (metrics.organic_items_quantity || 0) / productsCount,
-          total_sales: (metrics.units_quantity || 0) / productsCount,
-          impressions: (metrics.prints || 0) / productsCount,
-          clicks: (metrics.clicks || 0) / productsCount,
-          roas: metrics.roas || null,
-          acos: metrics.acos || null,
-          ctr: metrics.ctr || null,
-        };
-        
-        console.log(`[PRODUCT ADS SYNC]   Product ${prod.ml_item_id}: Spend=${distributedMetrics.total_spend.toFixed(2)}, Revenue=${distributedMetrics.ad_revenue.toFixed(2)}, Sales=${distributedMetrics.advertised_sales.toFixed(1)}`);
         
         productAdsData.push({
-          ml_account_id,
+          ml_account_id: account.id,
           student_id: account.student_id,
           advertiser_id: advertiserId,
-          ml_item_id: prod.ml_item_id,
-          title: prod.title,
-          thumbnail: prod.thumbnail,
-          price: prod.price,
-          status: prod.status,
-          campaign_id: campaignId,
-          is_recommended: prod.recommended || false,
-          ...distributedMetrics
+          ml_item_id: product.ml_item_id,
+          title: product.title,
+          thumbnail: product.thumbnail,
+          price: product.price,
+          status: itemData.status || 'inactive',
+          campaign_id: itemData.campaign_id || null,
+          campaign_name: campaignMap.get(itemData.campaign_id) || null,
+          ad_group_id: itemData.ad_group_id || null,
+          is_recommended: itemData.recommended || false,
+          synced_at: new Date().toISOString()
         });
+        
+        processedCount++;
+        
+        if (processedCount % 10 === 0) {
+          console.log(`Progress: ${processedCount}/${products.length}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error processing ${product.ml_item_id}:`, error.message);
+        errorCount++;
       }
     }
-    
-    // Process products without campaigns
-    for (const prod of productsWithoutCampaign) {
-      productAdsData.push({
-        ml_account_id,
-        student_id: account.student_id,
-        advertiser_id: advertiserId,
-        ml_item_id: prod.ml_item_id,
-        title: prod.title,
-        thumbnail: prod.thumbnail,
-        price: prod.price,
-        status: prod.status,
-        campaign_id: null,
-        is_recommended: prod.is_recommended || false,
-        total_sales: 0,
-        advertised_sales: 0,
-        non_advertised_sales: 0,
-        ad_revenue: 0,
-        non_ad_revenue: 0,
-        total_spend: 0,
-        roas: null,
-        impressions: 0,
-        clicks: 0,
-        ctr: null,
-        acos: null,
-      });
-    }
 
-    // Step 6: Upsert data
+    console.log(`✅ Processed ${processedCount} products (${errorCount} errors)`);
+
+    // Step 5: Upsert product ads data
     if (productAdsData.length > 0) {
+      console.log('💾 Saving product ads data...');
+      
       const { error: upsertError } = await supabase
         .from('mercado_livre_product_ads')
         .upsert(productAdsData, {
@@ -436,90 +361,103 @@ serve(async (req) => {
         });
 
       if (upsertError) {
+        console.error('❌ Error upserting product ads:', upsertError);
         throw new Error(`Failed to upsert data: ${upsertError.message}`);
       }
+      
+      console.log(`✅ Saved ${productAdsData.length} products`);
     }
 
-    console.log(`[PRODUCT ADS SYNC] ✅ Successfully synced ${productAdsData.length} product ads items`);
-    console.log(`[PRODUCT ADS SYNC] Summary:`);
-    console.log(`  - Total products: ${products.length}`);
-    console.log(`  - Campaigns found: ${campaignMetrics.size}`);
-    console.log(`  - Products in campaigns: ${productAdsData.filter(i => i.campaign_id).length}`);
-    console.log(`  - Products without campaigns: ${productAdsData.filter(i => !i.campaign_id).length}`);
-    console.log(`  - Recommended products: ${productAdsData.filter(i => i.is_recommended).length}`);
+    // Step 6: Update products_count in campaigns
+    console.log('🔢 Updating campaign product counts...');
+    const campaignProductCounts = new Map();
+    for (const product of productAdsData) {
+      if (product.campaign_id) {
+        campaignProductCounts.set(
+          product.campaign_id,
+          (campaignProductCounts.get(product.campaign_id) || 0) + 1
+        );
+      }
+    }
     
-    // Calculate totals for verification
-    const totalSpend = productAdsData.reduce((sum, p) => sum + (p.total_spend || 0), 0);
-    const totalRevenue = productAdsData.reduce((sum, p) => sum + (p.ad_revenue || 0), 0);
-    const totalSales = productAdsData.reduce((sum, p) => sum + (p.advertised_sales || 0), 0);
+    for (const [campaignId, count] of campaignProductCounts) {
+      await supabase
+        .from('mercado_livre_campaigns')
+        .update({ products_count: count })
+        .eq('ml_account_id', account.id)
+        .eq('campaign_id', campaignId);
+    }
+
+    console.log('✅ Product Ads sync completed successfully');
     
-    console.log(`[PRODUCT ADS SYNC] Aggregated Totals:`);
-    console.log(`  - Total Spend: R$ ${totalSpend.toFixed(2)}`);
-    console.log(`  - Total Revenue (Ads): R$ ${totalRevenue.toFixed(2)}`);
-    console.log(`  - Total Sales (Ads): ${totalSales.toFixed(0)}`);
-    console.log(`  - Avg ROAS: ${totalSpend > 0 ? (totalRevenue / totalSpend).toFixed(2) : 'N/A'}`);
+    return new Response(JSON.stringify({
+      success: true,
+      message: 'Product Ads data synced successfully',
+      summary: {
+        campaigns: campaigns.length,
+        products_synced: productAdsData.length,
+        products_in_campaigns: productAdsData.filter(p => p.campaign_id).length,
+        recommended_products: productAdsData.filter(p => p.is_recommended).length
+      }
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        items_synced: productAdsData.length,
-        has_product_ads: true,
-        has_active_campaigns: true,
-        advertiser_id: advertiserId,
-        recommended_count: productAdsData.filter(i => i.is_recommended).length,
-        in_campaigns: productAdsData.filter(i => i.campaign_id).length,
-        not_in_campaigns: productAdsData.filter(i => i.status === 'not_in_campaign').length
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
-  } catch (error: any) {
-    console.error('[PRODUCT ADS SYNC] ❌ Error:', error);
+  } catch (error) {
+    console.error('❌ Error in ml-get-product-ads-data:', error);
     return new Response(
       JSON.stringify({ 
         error: error.message,
-        details: error.stack
+        details: error.stack 
       }),
       { 
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
   }
 });
 
 async function refreshToken(account: any, supabase: any): Promise<string> {
+  console.log('🔄 Refreshing access token...');
+  
   const clientId = Deno.env.get('MERCADO_LIVRE_APP_ID');
   const clientSecret = Deno.env.get('MERCADO_LIVRE_SECRET_KEY');
 
-  const response = await fetch('https://api.mercadolibre.com/oauth/token', {
+  const refreshResponse = await fetch('https://api.mercadolibre.com/oauth/token', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json'
+    },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
       client_id: clientId!,
       client_secret: clientSecret!,
-      refresh_token: account.refresh_token,
-    }),
+      refresh_token: account.refresh_token
+    })
   });
 
-  if (!response.ok) {
-    throw new Error('Failed to refresh token');
+  if (!refreshResponse.ok) {
+    const errorText = await refreshResponse.text();
+    console.error('❌ Failed to refresh token:', refreshResponse.status, errorText);
+    throw new Error(`Failed to refresh token: ${errorText}`);
   }
 
-  const data = await response.json();
+  const tokenData = await refreshResponse.json();
   
   const expiresAt = new Date();
-  expiresAt.setSeconds(expiresAt.getSeconds() + data.expires_in);
+  expiresAt.setSeconds(expiresAt.getSeconds() + tokenData.expires_in);
 
   await supabase
     .from('mercado_livre_accounts')
     .update({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      token_expires_at: expiresAt.toISOString(),
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      token_expires_at: expiresAt.toISOString()
     })
     .eq('id', account.id);
 
-  return data.access_token;
+  console.log('✅ Token refreshed successfully');
+  return tokenData.access_token;
 }

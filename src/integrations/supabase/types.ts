@@ -226,6 +226,112 @@ export type Database = {
           },
         ]
       }
+      mercado_livre_campaigns: {
+        Row: {
+          acos: number | null
+          acos_target: number | null
+          ad_revenue: number | null
+          advertised_sales: number | null
+          budget: number | null
+          campaign_id: number
+          campaign_name: string
+          clicks: number | null
+          created_at: string | null
+          ctr: number | null
+          id: string
+          impressions: number | null
+          ml_account_id: string
+          organic_revenue: number | null
+          organic_sales: number | null
+          products_count: number | null
+          roas: number | null
+          status: string | null
+          strategy: string | null
+          student_id: string
+          synced_at: string | null
+          total_revenue: number | null
+          total_sales: number | null
+          total_spend: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          acos?: number | null
+          acos_target?: number | null
+          ad_revenue?: number | null
+          advertised_sales?: number | null
+          budget?: number | null
+          campaign_id: number
+          campaign_name: string
+          clicks?: number | null
+          created_at?: string | null
+          ctr?: number | null
+          id?: string
+          impressions?: number | null
+          ml_account_id: string
+          organic_revenue?: number | null
+          organic_sales?: number | null
+          products_count?: number | null
+          roas?: number | null
+          status?: string | null
+          strategy?: string | null
+          student_id: string
+          synced_at?: string | null
+          total_revenue?: number | null
+          total_sales?: number | null
+          total_spend?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          acos?: number | null
+          acos_target?: number | null
+          ad_revenue?: number | null
+          advertised_sales?: number | null
+          budget?: number | null
+          campaign_id?: number
+          campaign_name?: string
+          clicks?: number | null
+          created_at?: string | null
+          ctr?: number | null
+          id?: string
+          impressions?: number | null
+          ml_account_id?: string
+          organic_revenue?: number | null
+          organic_sales?: number | null
+          products_count?: number | null
+          roas?: number | null
+          status?: string | null
+          strategy?: string | null
+          student_id?: string
+          synced_at?: string | null
+          total_revenue?: number | null
+          total_sales?: number | null
+          total_spend?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_campaigns_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_campaigns_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_campaigns_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mercado_livre_full_stock: {
         Row: {
           available_units: number | null
@@ -605,84 +711,57 @@ export type Database = {
       }
       mercado_livre_product_ads: {
         Row: {
-          acos: number | null
-          ad_revenue: number | null
-          advertised_sales: number | null
+          ad_group_id: number | null
           advertiser_id: string | null
           campaign_id: number | null
-          clicks: number | null
+          campaign_name: string | null
           created_at: string | null
-          ctr: number | null
           id: string
-          impressions: number | null
           is_recommended: boolean | null
           ml_account_id: string
           ml_item_id: string
-          non_ad_revenue: number | null
-          non_advertised_sales: number | null
           price: number | null
-          roas: number | null
           status: string | null
           student_id: string
           synced_at: string | null
           thumbnail: string | null
           title: string
-          total_sales: number | null
-          total_spend: number | null
           updated_at: string | null
         }
         Insert: {
-          acos?: number | null
-          ad_revenue?: number | null
-          advertised_sales?: number | null
+          ad_group_id?: number | null
           advertiser_id?: string | null
           campaign_id?: number | null
-          clicks?: number | null
+          campaign_name?: string | null
           created_at?: string | null
-          ctr?: number | null
           id?: string
-          impressions?: number | null
           is_recommended?: boolean | null
           ml_account_id: string
           ml_item_id: string
-          non_ad_revenue?: number | null
-          non_advertised_sales?: number | null
           price?: number | null
-          roas?: number | null
           status?: string | null
           student_id: string
           synced_at?: string | null
           thumbnail?: string | null
           title: string
-          total_sales?: number | null
-          total_spend?: number | null
           updated_at?: string | null
         }
         Update: {
-          acos?: number | null
-          ad_revenue?: number | null
-          advertised_sales?: number | null
+          ad_group_id?: number | null
           advertiser_id?: string | null
           campaign_id?: number | null
-          clicks?: number | null
+          campaign_name?: string | null
           created_at?: string | null
-          ctr?: number | null
           id?: string
-          impressions?: number | null
           is_recommended?: boolean | null
           ml_account_id?: string
           ml_item_id?: string
-          non_ad_revenue?: number | null
-          non_advertised_sales?: number | null
           price?: number | null
-          roas?: number | null
           status?: string | null
           student_id?: string
           synced_at?: string | null
           thumbnail?: string | null
           title?: string
-          total_sales?: number | null
-          total_spend?: number | null
           updated_at?: string | null
         }
         Relationships: [

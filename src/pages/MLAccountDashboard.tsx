@@ -1497,7 +1497,7 @@ export default function MLAccountDashboard() {
                   )}
 
                   {/* Produtos Recomendados */}
-                  {productAds.filter(p => p.is_recommended).length > 0 && (
+                  {productAds.filter(p => p.is_recommended && p.status === 'active').length > 0 && (
                     <Card>
                       <CardHeader>
                         <div className="space-y-1">
@@ -1511,7 +1511,7 @@ export default function MLAccountDashboard() {
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <SimpleProductsTable items={productAds.filter(p => p.is_recommended)} />
+                        <SimpleProductsTable items={productAds.filter(p => p.is_recommended && p.status === 'active')} />
                       </CardContent>
                     </Card>
                   )}

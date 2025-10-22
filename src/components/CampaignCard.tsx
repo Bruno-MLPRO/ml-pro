@@ -36,12 +36,12 @@ export const CampaignCard = ({ campaign }: CampaignCardProps) => {
 
   const translateStatus = (status: string) => {
     const translations: Record<string, string> = {
-      'active': 'ativo',
-      'paused': 'pausado',
-      'idle': 'inativo',
-      'hold': 'retido'
+      'active': 'ATIVO',
+      'paused': 'PAUSADO',
+      'idle': 'INATIVO',
+      'hold': 'RETIDO'
     };
-    return translations[status.toLowerCase()] || status;
+    return translations[status.toLowerCase()] || status.toUpperCase();
   };
 
   const translateStrategy = (strategy: string) => {

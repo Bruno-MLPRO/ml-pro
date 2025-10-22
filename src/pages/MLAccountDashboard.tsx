@@ -392,7 +392,7 @@ export default function MLAccountDashboard() {
           .eq('ml_account_id', accountId)
           .order('last_updated', { ascending: false })
           .limit(1)
-          .single(),
+          .maybeSingle(),
         
         supabase
           .from('mercado_livre_products')
@@ -402,15 +402,7 @@ export default function MLAccountDashboard() {
         
         supabase
           .from('mercado_livre_full_stock')
-          .select(`
-            *,
-            mercado_livre_products (
-              title,
-              thumbnail,
-              permalink,
-              price
-            )
-          `)
+          .select('*')
           .eq('ml_account_id', accountId)
           .order('ml_item_id'),
         
@@ -427,25 +419,26 @@ export default function MLAccountDashboard() {
           .order('recorded_at', { ascending: true })
       ]);
 
-      const enrichedStock = await Promise.all(
-        (stockResult.data || []).map(async (stock) => {
-          const { data: product } = await supabase
-            .from('mercado_livre_products')
-            .select('title, thumbnail, permalink')
-            .eq('ml_item_id', stock.ml_item_id)
-            .eq('ml_account_id', accountId)
-            .single();
-          
-          return {
-            ...stock,
-            mercado_livre_products: product || undefined
-          };
-        })
-      );
-
-      if (metricsResult.error) throw metricsResult.error;
+      if (metricsResult.error && metricsResult.error.code !== 'PGRST116') throw metricsResult.error;
       if (productsResult.error) throw productsResult.error;
       if (stockResult.error) throw stockResult.error;
+
+      // Create a map of products by ml_item_id for quick lookup
+      const productMap = new Map((productsResult.data || []).map(p => [p.ml_item_id, p]));
+
+      // Enrich stock data with product information
+      const enrichedStock = (stockResult.data || []).map(stock => {
+        const product = productMap.get(stock.ml_item_id);
+        return {
+          ...stock,
+          mercado_livre_products: product ? {
+            title: product.title,
+            thumbnail: product.thumbnail,
+            permalink: product.permalink,
+            price: product.price
+          } : undefined
+        };
+      });
 
       const healthMap = new Map((healthResult.data || []).map(h => [h.ml_item_id, h]));
       
@@ -462,7 +455,7 @@ export default function MLAccountDashboard() {
         } : undefined
       }));
 
-      setMetrics(metricsResult.data);
+      setMetrics(metricsResult.data || null);
       setProducts(productsWithHealth);
       setFullStock(enrichedStock);
       
@@ -538,7 +531,7 @@ export default function MLAccountDashboard() {
         .from('mercado_livre_accounts')
         .select('has_product_ads_enabled, has_active_campaigns')
         .eq('id', accountId)
-        .single();
+        .maybeSingle();
 
       setHasProductAds(accountData?.has_product_ads_enabled || false);
       setHasActiveCampaigns(accountData?.has_active_campaigns);

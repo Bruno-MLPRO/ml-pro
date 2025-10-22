@@ -23,29 +23,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Timeout de segurança: se após 10 segundos ainda estiver loading, forçar false
-    const timeoutId = setTimeout(() => {
-      if (loading) {
-        console.warn('Loading timeout - forcing loading to false');
-        setLoading(false);
-      }
-    }, 10000);
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('Auth state changed:', event, 'User:', session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          console.log('Fetching user role for:', session.user.id);
           setTimeout(() => {
             fetchUserRole(session.user.id);
           }, 0);
         } else {
-          console.log('No session, setting userRole to null');
           setUserRole(null);
-          setLoading(false);
         }
       }
     );
@@ -55,19 +43,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchUserRole(session.user.id);
-      } else {
-        setLoading(false);
       }
+      setLoading(false);
     });
 
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeoutId);
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const fetchUserRole = async (userId: string, retryCount = 0) => {
-    console.log(`Fetching user role for ${userId}, attempt ${retryCount + 1}`);
     try {
       const { data, error } = await supabase
         .from('user_roles')
@@ -76,33 +59,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching user role:', error);
         // Se for erro de rede e ainda temos retries, tentar novamente
         if (error.message?.includes('Failed to fetch') && retryCount < 3) {
           console.log(`Retrying fetch user role... Attempt ${retryCount + 1}`);
           setTimeout(() => {
             fetchUserRole(userId, retryCount + 1);
-          }, Math.pow(2, retryCount) * 1000);
+          }, Math.pow(2, retryCount) * 1000); // Exponential backoff
           return;
         }
-        // Se esgotou os retries ou é outro tipo de erro, setar null e parar loading
-        console.error('Failed to fetch user role after retries');
-        setUserRole(null);
-        setLoading(false);
-        return;
+        throw error;
       }
-      
-      // Se data é null ou não tem role, setar null
-      if (!data || !data.role) {
-        console.warn('User has no role in user_roles table for userId:', userId);
-        setUserRole(null);
-      } else {
-        console.log('User role fetched successfully:', data.role);
-        setUserRole(data.role as 'student' | 'manager');
-      }
+      setUserRole(data?.role as 'student' | 'manager');
       setLoading(false);
     } catch (error) {
-      console.error('Unexpected error fetching user role:', error);
+      console.error('Error fetching user role:', error);
       setUserRole(null);
       setLoading(false);
     }

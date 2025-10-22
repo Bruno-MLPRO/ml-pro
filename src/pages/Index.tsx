@@ -9,17 +9,24 @@ const Index = () => {
   const { user, userRole, loading } = useAuth();
 
   useEffect(() => {
-    if (!loading && user && userRole) {
-      console.log('Redirecting user with role:', userRole);
-      if (userRole === 'manager') {
-        navigate('/gestor/dashboard');
-      } else if (userRole === 'student') {
-        navigate('/aluno/dashboard');
+    if (!loading) {
+      if (user && userRole) {
+        if (userRole === 'manager') {
+          navigate('/gestor/dashboard');
+        } else if (userRole === 'student') {
+          navigate('/aluno/dashboard');
+        }
+      } else if (user && !userRole) {
+        // User is authenticated but has no role - wait for role to load
+        // If role doesn't load after timeout, stay on index
+        return;
+      } else if (!user) {
+        // User is not authenticated, show landing page
+        return;
       }
     }
   }, [user, userRole, loading, navigate]);
 
-  // Show loading if checking auth
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">

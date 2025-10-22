@@ -385,6 +385,8 @@ export default function MLAccountDashboard() {
   const loadAccountData = async (accountId: string) => {
     setLoading(true);
     try {
+      console.log('Loading account data for:', accountId);
+      
       const [metricsResult, productsResult, stockResult, healthResult, historyResult] = await Promise.all([
         supabase
           .from('mercado_livre_metrics')
@@ -419,26 +421,55 @@ export default function MLAccountDashboard() {
           .order('recorded_at', { ascending: true })
       ]);
 
+      console.log('Query results:', {
+        metricsCount: metricsResult.data ? 1 : 0,
+        productsCount: productsResult.data?.length || 0,
+        stockCount: stockResult.data?.length || 0,
+        healthCount: healthResult.data?.length || 0,
+        historyCount: historyResult.data?.length || 0,
+        errors: {
+          metrics: metricsResult.error,
+          products: productsResult.error,
+          stock: stockResult.error,
+          health: healthResult.error,
+          history: historyResult.error
+        }
+      });
+
       if (metricsResult.error && metricsResult.error.code !== 'PGRST116') throw metricsResult.error;
       if (productsResult.error) throw productsResult.error;
       if (stockResult.error) throw stockResult.error;
+      if (healthResult.error) console.error('Health data error:', healthResult.error);
+      if (historyResult.error) console.error('History data error:', historyResult.error);
 
-      // Create a map of products by ml_item_id for quick lookup
-      const productMap = new Map((productsResult.data || []).map(p => [p.ml_item_id, p]));
+      let enrichedStock = [];
+      
+      try {
+        // Create a map of products by ml_item_id for quick lookup
+        const productMap = new Map((productsResult.data || []).map(p => [p.ml_item_id, p]));
 
-      // Enrich stock data with product information
-      const enrichedStock = (stockResult.data || []).map(stock => {
-        const product = productMap.get(stock.ml_item_id);
-        return {
-          ...stock,
-          mercado_livre_products: product ? {
-            title: product.title,
-            thumbnail: product.thumbnail,
-            permalink: product.permalink,
-            price: product.price
-          } : undefined
-        };
-      });
+        // Enrich stock data with product information
+        enrichedStock = (stockResult.data || []).map(stock => {
+          const product = productMap.get(stock.ml_item_id);
+          
+          if (!product) {
+            console.warn(`Product not found for stock item: ${stock.ml_item_id}`);
+          }
+          
+          return {
+            ...stock,
+            mercado_livre_products: product ? {
+              title: product.title,
+              thumbnail: product.thumbnail || '',
+              permalink: product.permalink || '',
+              price: product.price || 0
+            } : undefined
+          };
+        });
+      } catch (enrichError) {
+        console.error('Error enriching stock data:', enrichError);
+        enrichedStock = [];
+      }
 
       const healthMap = new Map((healthResult.data || []).map(h => [h.ml_item_id, h]));
       
@@ -488,7 +519,14 @@ export default function MLAccountDashboard() {
         setItemHistory(itemHistoryData);
       }
     } catch (error: any) {
-      console.error('Error loading account data:', error);
+      console.error('Error loading account data:', {
+        error,
+        accountId,
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        errorDetails: error?.details,
+        errorHint: error?.hint
+      });
       toast.error('Erro ao carregar dados da conta');
     } finally {
       setLoading(false);

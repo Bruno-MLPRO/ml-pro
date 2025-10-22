@@ -112,6 +112,7 @@ interface MLFullStock {
     title: string;
     thumbnail: string;
     permalink: string;
+    price?: number;
   };
 }
 
@@ -401,7 +402,15 @@ export default function MLAccountDashboard() {
         
         supabase
           .from('mercado_livre_full_stock')
-          .select('*')
+          .select(`
+            *,
+            mercado_livre_products (
+              title,
+              thumbnail,
+              permalink,
+              price
+            )
+          `)
           .eq('ml_account_id', accountId)
           .order('ml_item_id'),
         
@@ -1295,37 +1304,39 @@ export default function MLAccountDashboard() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="grid md:grid-cols-4 gap-4">
+                      <div className="grid md:grid-cols-3 gap-4">
                         <div>
-                          <p className="text-sm text-muted-foreground">Disponíveis</p>
+                          <p className="text-sm text-muted-foreground">Unidades Disponíveis</p>
                           <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                             {fullStock.reduce((sum, item) => sum + item.available_units, 0)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Reservadas</p>
+                          <p className="text-sm text-muted-foreground">Faturamento Previsto</p>
                           <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                            {fullStock.reduce((sum, item) => sum + item.reserved_units, 0)}
+                            {fullStock.reduce((sum, item) => {
+                              const price = item.mercado_livre_products?.price || 0;
+                              return sum + (item.available_units * price);
+                            }, 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Em Trânsito</p>
-                          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                            {fullStock.reduce((sum, item) => sum + item.inbound_units, 0)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Danificadas</p>
-                          <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                            {fullStock.reduce((sum, item) => sum + item.damaged_units, 0)}
+                          <p className="text-sm text-muted-foreground">Payout Previsto</p>
+                          <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+                            {fullStock.reduce((sum, item) => {
+                              const price = item.mercado_livre_products?.price || 0;
+                              const revenue = item.available_units * price;
+                              const payout = revenue * (1 - 0.22); // 22% taxas (14% ML + 8% frete)
+                              return sum + payout;
+                            }, 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </p>
                         </div>
                       </div>
 
                       <div>
                         <div className="flex justify-between text-sm mb-2">
-                          <span>Total de Unidades</span>
-                          <span className="font-medium">{totalStockUnits} unidades</span>
+                          <span>Total de Unidades no Estoque FULL</span>
+                          <span className="font-medium">{fullStock.reduce((sum, item) => sum + item.available_units, 0)} unidades</span>
                         </div>
                         <Progress value={100} className="h-2" />
                       </div>
@@ -1336,66 +1347,81 @@ export default function MLAccountDashboard() {
                   <div>
                     <h3 className="text-lg font-semibold mb-3">Produtos no Estoque FULL</h3>
                     <div className="space-y-2">
-                      {fullStock.map((item) => (
-                        <Card key={item.id}>
-                          <CardContent className="p-4">
-                            <div className="flex items-start gap-4">
-                              {/* Foto do Produto */}
-                              {item.mercado_livre_products?.thumbnail && (
-                                <img 
-                                  src={item.mercado_livre_products.thumbnail} 
-                                  alt={item.mercado_livre_products.title || 'Produto'}
-                                  className="w-20 h-20 object-cover rounded"
-                                />
-                              )}
-                              
-                              {/* Informações do Produto */}
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-medium mb-1">
-                                  {item.mercado_livre_products?.title || `Item: ${item.ml_item_id}`}
-                                </h4>
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  Item ID: {item.ml_item_id} • Inventário: {item.inventory_id}
-                                  {item.stock_status && ` • Status: ${item.stock_status}`}
-                                </p>
+                      {fullStock.map((item) => {
+                        const price = item.mercado_livre_products?.price || 0;
+                        const revenue = item.available_units * price;
+                        const payout = revenue * (1 - 0.22); // 22% taxas (14% ML + 8% frete)
+                        
+                        return (
+                          <Card key={item.id}>
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-4">
+                                {/* Foto do Produto */}
+                                {item.mercado_livre_products?.thumbnail && (
+                                  <img 
+                                    src={item.mercado_livre_products.thumbnail} 
+                                    alt={item.mercado_livre_products.title || 'Produto'}
+                                    className="w-20 h-20 object-cover rounded"
+                                  />
+                                )}
                                 
-                                <div className="flex gap-4 text-sm">
-                                  <div className="text-center">
-                                    <p className="text-green-600 dark:text-green-400 font-bold">{item.available_units}</p>
-                                    <p className="text-muted-foreground text-xs">Disponível</p>
-                                  </div>
-                                  <div className="text-center">
-                                    <p className="text-blue-600 dark:text-blue-400 font-bold">{item.reserved_units}</p>
-                                    <p className="text-muted-foreground text-xs">Reservado</p>
-                                  </div>
-                                  <div className="text-center">
-                                    <p className="text-orange-600 dark:text-orange-400 font-bold">{item.inbound_units}</p>
-                                    <p className="text-muted-foreground text-xs">Trânsito</p>
-                                  </div>
-                                  {item.damaged_units > 0 && (
-                                    <div className="text-center">
-                                      <p className="text-red-600 dark:text-red-400 font-bold">{item.damaged_units}</p>
-                                      <p className="text-muted-foreground text-xs">Danificado</p>
+                                {/* Informações do Produto */}
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-medium mb-1">
+                                    {item.mercado_livre_products?.title || `Item: ${item.ml_item_id}`}
+                                  </h4>
+                                  <p className="text-sm text-muted-foreground mb-3">
+                                    {item.ml_item_id} • Inventário: {item.inventory_id}
+                                  </p>
+                                  
+                                  <div className="flex flex-wrap gap-4 text-sm">
+                                    <div>
+                                      <p className="text-muted-foreground text-xs mb-1">Quantidade Disponível</p>
+                                      <p className="text-green-600 dark:text-green-400 font-bold">{item.available_units} unidades</p>
                                     </div>
-                                  )}
+                                    <div>
+                                      <p className="text-muted-foreground text-xs mb-1">Preço Unitário</p>
+                                      <p className="font-bold">
+                                        {price > 0 
+                                          ? price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) 
+                                          : 'Não disponível'}
+                                      </p>
+                                    </div>
+                                    {price > 0 && (
+                                      <>
+                                        <div>
+                                          <p className="text-muted-foreground text-xs mb-1">Faturamento Previsto</p>
+                                          <p className="text-blue-600 dark:text-blue-400 font-bold">
+                                            {revenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <p className="text-muted-foreground text-xs mb-1">Payout Previsto</p>
+                                          <p className="text-emerald-700 dark:text-emerald-400 font-bold">
+                                            {payout.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </p>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
+                                
+                                {/* Botão Ver Anúncio */}
+                                {item.mercado_livre_products?.permalink && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => window.open(item.mercado_livre_products!.permalink, '_blank')}
+                                  >
+                                    <ExternalLink className="w-4 h-4 mr-2" />
+                                    Ver Anúncio
+                                  </Button>
+                                )}
                               </div>
-                              
-                              {/* Botão Ver Anúncio */}
-                              {item.mercado_livre_products?.permalink && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => window.open(item.mercado_livre_products!.permalink, '_blank')}
-                                >
-                                  <ExternalLink className="w-4 h-4 mr-2" />
-                                  Ver Anúncio
-                                </Button>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </div>
                   </div>
                 </>

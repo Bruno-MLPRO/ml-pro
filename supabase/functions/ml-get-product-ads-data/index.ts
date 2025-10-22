@@ -188,7 +188,7 @@ serve(async (req) => {
 
     // Step 2.1: Save campaigns to database
     console.log('💾 Saving campaigns to database...');
-    const campaignsToUpsert = campaigns.map(campaign => ({
+    const campaignsToUpsert = campaigns.map((campaign: any) => ({
       ml_account_id: account.id,
       student_id: account.student_id,
       campaign_id: campaign.id,
@@ -233,7 +233,7 @@ serve(async (req) => {
     }
     
     // Create campaign map for quick lookup
-    const campaignMap = new Map(campaigns.map(c => [c.id, c.name]));
+    const campaignMap = new Map(campaigns.map((c: any) => [c.id, c.name]));
 
     // Update account to indicate active campaigns
     await supabase
@@ -341,7 +341,7 @@ serve(async (req) => {
         if (processedCount % 10 === 0) {
           console.log(`Progress: ${processedCount}/${products.length}`);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error(`❌ Error processing ${product.ml_item_id}:`, error.message);
         errorCount++;
       }
@@ -403,7 +403,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error in ml-get-product-ads-data:', error);
     return new Response(
       JSON.stringify({ 

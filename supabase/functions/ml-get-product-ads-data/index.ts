@@ -159,6 +159,18 @@ serve(async (req) => {
 
     const campaignsData = await campaignsResponse.json();
     console.log('[PRODUCT ADS SYNC] Campaigns found:', campaignsData.paging?.total || 0);
+    
+    // Create a map of campaign metrics for distribution
+    const campaignMetrics = new Map();
+    if (campaignsData.results) {
+      for (const campaign of campaignsData.results) {
+        campaignMetrics.set(campaign.id, {
+          metrics: campaign.metrics,
+          name: campaign.name
+        });
+        console.log(`[PRODUCT ADS SYNC] Campaign ${campaign.id} "${campaign.name}": Cost=${campaign.metrics.cost}, ROAS=${campaign.metrics.roas}, Revenue=${campaign.metrics.total_amount}`);
+      }
+    }
 
     // If no campaigns, update and return
     if (!campaignsData.results || campaignsData.results.length === 0) {
@@ -221,9 +233,12 @@ serve(async (req) => {
       );
     }
 
-    // Step 4: Get Product Ads item details with metrics
-    const productAdsData = [];
+    // Step 4: Get Product Ads item details and group by campaign
+    const productsByCampaign = new Map();
+    const productsWithoutCampaign = [];
     let processedCount = 0;
+    
+    console.log('[PRODUCT ADS SYNC] Fetching product details and grouping by campaign...');
     
     for (const product of products) {
       try {
@@ -248,103 +263,170 @@ serve(async (req) => {
         if (!itemResponse.ok) {
           if (itemResponse.status === 404) {
             console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} not in Product Ads`);
-            
-            // Save without metrics
-            productAdsData.push({
-              ml_account_id,
-              student_id: account.student_id,
-              advertiser_id: advertiserId,
-              ml_item_id: product.ml_item_id,
-              title: product.title,
-              thumbnail: product.thumbnail,
-              price: product.price,
+            productsWithoutCampaign.push({
+              ...product,
               status: 'not_in_campaign',
               campaign_id: null,
-              is_recommended: false,
-              total_sales: 0,
-              advertised_sales: 0,
-              non_advertised_sales: 0,
-              ad_revenue: 0,
-              non_ad_revenue: 0,
-              total_spend: 0,
-              roas: null,
-              impressions: 0,
-              clicks: 0,
-              ctr: null,
-              acos: null,
+              is_recommended: false
             });
-            
             continue;
           }
           
           const errorText = await itemResponse.text();
           console.error(`[PRODUCT ADS SYNC] Error fetching item ${product.ml_item_id}:`, itemResponse.status, errorText);
-          throw new Error(`Failed to fetch item details: ${itemResponse.status}`);
+          productsWithoutCampaign.push({
+            ...product,
+            status: 'error',
+            campaign_id: null,
+            is_recommended: false
+          });
+          continue;
         }
 
         const itemData = await itemResponse.json();
-        console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} - Campaign: ${itemData.campaign_id}, Status: ${itemData.status}, Recommended: ${itemData.recommended}`);
-
-        // Note: The Product Ads API v2 doesn't return individual item metrics
-        // Metrics are only available aggregated by campaign
-        // So we only track if the item is in a campaign and if it's recommended
-
-        productAdsData.push({
-          ml_account_id,
-          student_id: account.student_id,
-          advertiser_id: advertiserId,
-          ml_item_id: product.ml_item_id,
-          title: product.title || itemData.title,
-          thumbnail: product.thumbnail || itemData.thumbnail,
-          price: product.price || itemData.price,
-          status: itemData.status,
-          campaign_id: itemData.campaign_id || null,
-          is_recommended: itemData.recommended || false,
-          // Metrics are not available per individual item in Product Ads API v2
-          total_sales: 0,
-          advertised_sales: 0,
-          non_advertised_sales: 0,
-          ad_revenue: 0,
-          non_ad_revenue: 0,
-          total_spend: 0,
-          roas: null,
-          impressions: 0,
-          clicks: 0,
-          ctr: null,
-          acos: null,
+        const campaignId = itemData.campaign_id;
+        
+        if (!campaignId) {
+          console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} - No campaign assigned`);
+          productsWithoutCampaign.push({
+            ...product,
+            ...itemData,
+            status: itemData.status || 'inactive',
+            campaign_id: null
+          });
+          continue;
+        }
+        
+        // Group products by campaign
+        if (!productsByCampaign.has(campaignId)) {
+          productsByCampaign.set(campaignId, []);
+        }
+        
+        productsByCampaign.get(campaignId).push({
+          ...product,
+          ...itemData
         });
+        
+        console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} → Campaign ${campaignId}, Status: ${itemData.status}, Recommended: ${itemData.recommended}`);
         
       } catch (error) {
         console.error(`[PRODUCT ADS SYNC] Error processing item ${product.ml_item_id}:`, error);
+        productsWithoutCampaign.push({
+          ...product,
+          status: 'error',
+          campaign_id: null,
+          is_recommended: false
+        });
+      }
+    }
+    
+    // Step 5: Distribute campaign metrics proportionally among products
+    console.log('[PRODUCT ADS SYNC] Distributing campaign metrics...');
+    const productAdsData = [];
+    
+    // Process products in campaigns
+    for (const [campaignId, campaignProducts] of productsByCampaign) {
+      const campaignData = campaignMetrics.get(campaignId);
+      
+      if (!campaignData) {
+        console.warn(`[PRODUCT ADS SYNC] ⚠️ No metrics found for campaign ${campaignId}`);
+        // Add products without metrics
+        for (const prod of campaignProducts) {
+          productAdsData.push({
+            ml_account_id,
+            student_id: account.student_id,
+            advertiser_id: advertiserId,
+            ml_item_id: prod.ml_item_id,
+            title: prod.title,
+            thumbnail: prod.thumbnail,
+            price: prod.price,
+            status: prod.status,
+            campaign_id: campaignId,
+            is_recommended: prod.recommended || false,
+            total_sales: 0,
+            advertised_sales: 0,
+            non_advertised_sales: 0,
+            ad_revenue: 0,
+            non_ad_revenue: 0,
+            total_spend: 0,
+            roas: null,
+            impressions: 0,
+            clicks: 0,
+            ctr: null,
+            acos: null,
+          });
+        }
+        continue;
+      }
+      
+      const metrics = campaignData.metrics;
+      const productsCount = campaignProducts.length;
+      
+      console.log(`[PRODUCT ADS SYNC] Campaign ${campaignId} "${campaignData.name}": ${productsCount} products`);
+      console.log(`[PRODUCT ADS SYNC]   Total metrics - Cost: ${metrics.cost}, Revenue: ${metrics.total_amount}, ROAS: ${metrics.roas}`);
+      
+      // Distribute metrics equally among products in the campaign
+      for (const prod of campaignProducts) {
+        const distributedMetrics = {
+          total_spend: metrics.cost / productsCount,
+          ad_revenue: metrics.direct_amount / productsCount,
+          non_ad_revenue: (metrics.organic_units_quantity || 0) * (prod.price || 0) / productsCount,
+          advertised_sales: (metrics.advertising_items_quantity || 0) / productsCount,
+          non_advertised_sales: (metrics.organic_items_quantity || 0) / productsCount,
+          total_sales: (metrics.units_quantity || 0) / productsCount,
+          impressions: (metrics.prints || 0) / productsCount,
+          clicks: (metrics.clicks || 0) / productsCount,
+          roas: metrics.roas || null,
+          acos: metrics.acos || null,
+          ctr: metrics.ctr || null,
+        };
         
-        // On error, save with zeroed metrics
+        console.log(`[PRODUCT ADS SYNC]   Product ${prod.ml_item_id}: Spend=${distributedMetrics.total_spend.toFixed(2)}, Revenue=${distributedMetrics.ad_revenue.toFixed(2)}, Sales=${distributedMetrics.advertised_sales.toFixed(1)}`);
+        
         productAdsData.push({
           ml_account_id,
           student_id: account.student_id,
           advertiser_id: advertiserId,
-          ml_item_id: product.ml_item_id,
-          title: product.title,
-          thumbnail: product.thumbnail,
-          price: product.price,
-          status: 'error',
-          campaign_id: null,
-          is_recommended: false,
-          total_sales: 0,
-          advertised_sales: 0,
-          non_advertised_sales: 0,
-          ad_revenue: 0,
-          non_ad_revenue: 0,
-          total_spend: 0,
-          roas: null,
-          impressions: 0,
-          clicks: 0,
-          ctr: null,
-          acos: null,
+          ml_item_id: prod.ml_item_id,
+          title: prod.title,
+          thumbnail: prod.thumbnail,
+          price: prod.price,
+          status: prod.status,
+          campaign_id: campaignId,
+          is_recommended: prod.recommended || false,
+          ...distributedMetrics
         });
       }
     }
+    
+    // Process products without campaigns
+    for (const prod of productsWithoutCampaign) {
+      productAdsData.push({
+        ml_account_id,
+        student_id: account.student_id,
+        advertiser_id: advertiserId,
+        ml_item_id: prod.ml_item_id,
+        title: prod.title,
+        thumbnail: prod.thumbnail,
+        price: prod.price,
+        status: prod.status,
+        campaign_id: null,
+        is_recommended: prod.is_recommended || false,
+        total_sales: 0,
+        advertised_sales: 0,
+        non_advertised_sales: 0,
+        ad_revenue: 0,
+        non_ad_revenue: 0,
+        total_spend: 0,
+        roas: null,
+        impressions: 0,
+        clicks: 0,
+        ctr: null,
+        acos: null,
+      });
+    }
 
-    // Step 5: Upsert data
+    // Step 6: Upsert data
     if (productAdsData.length > 0) {
       const { error: upsertError } = await supabase
         .from('mercado_livre_product_ads')
@@ -361,9 +443,21 @@ serve(async (req) => {
     console.log(`[PRODUCT ADS SYNC] ✅ Successfully synced ${productAdsData.length} product ads items`);
     console.log(`[PRODUCT ADS SYNC] Summary:`);
     console.log(`  - Total products: ${products.length}`);
-    console.log(`  - Recommended: ${productAdsData.filter(i => i.is_recommended).length}`);
-    console.log(`  - Active campaigns: ${productAdsData.filter(i => i.campaign_id).length}`);
-    console.log(`  - Not in campaigns: ${productAdsData.filter(i => i.status === 'not_in_campaign').length}`);
+    console.log(`  - Campaigns found: ${campaignMetrics.size}`);
+    console.log(`  - Products in campaigns: ${productAdsData.filter(i => i.campaign_id).length}`);
+    console.log(`  - Products without campaigns: ${productAdsData.filter(i => !i.campaign_id).length}`);
+    console.log(`  - Recommended products: ${productAdsData.filter(i => i.is_recommended).length}`);
+    
+    // Calculate totals for verification
+    const totalSpend = productAdsData.reduce((sum, p) => sum + (p.total_spend || 0), 0);
+    const totalRevenue = productAdsData.reduce((sum, p) => sum + (p.ad_revenue || 0), 0);
+    const totalSales = productAdsData.reduce((sum, p) => sum + (p.advertised_sales || 0), 0);
+    
+    console.log(`[PRODUCT ADS SYNC] Aggregated Totals:`);
+    console.log(`  - Total Spend: R$ ${totalSpend.toFixed(2)}`);
+    console.log(`  - Total Revenue (Ads): R$ ${totalRevenue.toFixed(2)}`);
+    console.log(`  - Total Sales (Ads): ${totalSales.toFixed(0)}`);
+    console.log(`  - Avg ROAS: ${totalSpend > 0 ? (totalRevenue / totalSpend).toFixed(2) : 'N/A'}`);
 
     return new Response(
       JSON.stringify({ 

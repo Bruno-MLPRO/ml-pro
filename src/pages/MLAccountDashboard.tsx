@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ReputationBadge } from "@/components/ReputationBadge";
-import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3 } from "lucide-react";
+import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HealthDashboard } from "@/components/ml-health/HealthDashboard";
 import { HealthIndividual } from "@/components/ml-health/HealthIndividual";
@@ -161,6 +162,7 @@ export default function MLAccountDashboard() {
   const [productAdsLoading, setProductAdsLoading] = useState(false);
   const [hasProductAds, setHasProductAds] = useState<boolean | null>(null);
   const [checkingProductAds, setCheckingProductAds] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -1410,12 +1412,68 @@ export default function MLAccountDashboard() {
               ) : (
                 <>
                   {/* Botão de Sincronização */}
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    <Button 
+                      onClick={async () => {
+                        if (!selectedAccountId) return;
+                        setTestingConnection(true);
+                        try {
+                          const { data, error } = await supabase.functions.invoke('ml-check-product-ads-status', {
+                            body: { ml_account_id: selectedAccountId }
+                          });
+                          if (error) throw error;
+                          toast.success(data.enabled ? '✅ Product Ads Conectado' : '❌ Product Ads Não Habilitado', {
+                            description: data.enabled 
+                              ? `Advertiser ID: ${data.advertiser_id}` 
+                              : data.message
+                          });
+                        } catch (err: any) {
+                          toast.error("Erro ao testar conexão", {
+                            description: err.message
+                          });
+                        } finally {
+                          setTestingConnection(false);
+                        }
+                      }}
+                      disabled={testingConnection}
+                      variant="outline"
+                    >
+                      <RefreshCw className={`w-4 h-4 mr-2 ${testingConnection ? 'animate-spin' : ''}`} />
+                      Testar Conexão
+                    </Button>
                     <Button onClick={syncProductAds} disabled={productAdsLoading} variant="outline">
                       <RefreshCw className={`w-4 h-4 mr-2 ${productAdsLoading ? 'animate-spin' : ''}`} />
                       Sincronizar Dados
                     </Button>
                   </div>
+
+                  {/* Alerta sobre métricas zeradas */}
+                  {(() => {
+                    const hasZeroMetrics = productAds.length > 0 && productAds.every(ad => 
+                      ad.total_sales === 0 && 
+                      ad.advertised_sales === 0 && 
+                      ad.total_spend === 0
+                    );
+                    
+                    return hasZeroMetrics && (
+                      <Alert className="mb-4">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          <strong>Você tem Product Ads habilitado, mas ainda não há métricas disponíveis.</strong>
+                          <br />
+                          Isso pode acontecer se:
+                          <ul className="list-disc ml-4 mt-2 space-y-1">
+                            <li>Você acabou de ativar o Product Ads</li>
+                            <li>Não há campanhas ativas nos últimos 30 dias</li>
+                            <li>Os anúncios ainda não geraram impressões/cliques</li>
+                          </ul>
+                          <p className="mt-2 text-sm">
+                            Tente usar o botão "Testar Conexão" para verificar o status da API.
+                          </p>
+                        </AlertDescription>
+                      </Alert>
+                    );
+                  })()}
 
                   {/* Resumo Geral - Cards de Métricas */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

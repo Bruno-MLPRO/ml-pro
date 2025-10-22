@@ -79,9 +79,25 @@ serve(async (req) => {
           throw new Error(`Failed to get advertiser (${advertiserResponse.status}): ${errorText}`);
         }
 
-        const advertiserData = await advertiserResponse.json();
-        advertiserId = advertiserData.advertiser_id?.toString();
-        console.log('[PRODUCT ADS SYNC] ✅ Advertiser ID obtained:', advertiserId);
+    const advertiserData = await advertiserResponse.json();
+    console.log('[PRODUCT ADS SYNC] API Response:', JSON.stringify(advertiserData));
+
+    // A API retorna um array de advertisers
+    if (!advertiserData.advertisers || advertiserData.advertisers.length === 0) {
+      console.error('[PRODUCT ADS SYNC] ❌ No advertisers found in response');
+      throw new Error('No advertisers found for this user');
+    }
+
+    // Buscar advertiser do site MLB (Brasil) ou pegar o primeiro
+    const advertiser = advertiserData.advertisers.find((adv: any) => adv.site_id === 'MLB') 
+      || advertiserData.advertisers[0];
+
+    advertiserId = advertiser.advertiser_id?.toString();
+    console.log('[PRODUCT ADS SYNC] ✅ Advertiser ID obtained:', advertiserId, 'for site:', advertiser.site_id);
+
+    if (!advertiserId) {
+      throw new Error('Invalid advertiser_id received from API');
+    }
 
         // Update account with advertiser_id
         await supabase
@@ -188,33 +204,48 @@ serve(async (req) => {
 
     let metricsMap = new Map();
 
+    // Fetch metrics for all items
     if (itemIds) {
-      try {
-        const metricsResponse = await fetch(
-          `https://api.mercadolibre.com/advertising/pads/reports/${advertiserId}/item-metrics?date_from=${dateFrom.toISOString().split('T')[0]}&date_to=${dateTo.toISOString().split('T')[0]}&item_ids=${itemIds}`,
-          {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-          }
-        );
-
-        if (metricsResponse.ok) {
-          const metricsData = await metricsResponse.json();
+      if (!advertiserId) {
+        console.error('[PRODUCT ADS SYNC] ❌ Cannot fetch metrics: advertiserId is null');
+        console.log('[PRODUCT ADS SYNC] Saving items without metrics...');
+      } else {
+        try {
+          const metricsUrl = `https://api.mercadolibre.com/advertising/pads/reports/${advertiserId}/item-metrics?date_from=${dateFrom.toISOString().split('T')[0]}&date_to=${dateTo.toISOString().split('T')[0]}&item_ids=${itemIds}`;
+          console.log('[PRODUCT ADS SYNC] Fetching metrics from:', metricsUrl);
           
-          if (metricsData.results) {
-            for (const metric of metricsData.results) {
-              metricsMap.set(metric.item_id, {
-                total_sales: metric.sales || 0,
-                advertised_sales: metric.advertised_sales || 0,
-                ad_revenue: metric.revenue || 0,
-                total_spend: metric.cost || 0,
-                impressions: metric.impressions || 0,
-                clicks: metric.clicks || 0,
-              });
+          const metricsResponse = await fetch(metricsUrl, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          console.log('[PRODUCT ADS SYNC] Metrics response status:', metricsResponse.status);
+
+          if (metricsResponse.ok) {
+            const metricsData = await metricsResponse.json();
+            console.log('[PRODUCT ADS SYNC] Metrics data received:', metricsData.results?.length || 0, 'items');
+            
+            if (metricsData.results && metricsData.results.length > 0) {
+              console.log(`[PRODUCT ADS SYNC] Found metrics for ${metricsData.results.length} items`);
+              for (const metric of metricsData.results) {
+                metricsMap.set(metric.item_id, {
+                  total_sales: metric.sales || 0,
+                  advertised_sales: metric.advertised_sales || 0,
+                  ad_revenue: metric.revenue || 0,
+                  total_spend: metric.cost || 0,
+                  impressions: metric.impressions || 0,
+                  clicks: metric.clicks || 0,
+                });
+              }
+            } else {
+              console.log('[PRODUCT ADS SYNC] ⚠️ API returned empty results');
             }
+          } else {
+            const errorText = await metricsResponse.text();
+            console.error('[PRODUCT ADS SYNC] Metrics API error:', metricsResponse.status, errorText);
           }
+        } catch (err) {
+          console.error('[PRODUCT ADS SYNC] Error fetching metrics:', err);
         }
-      } catch (err) {
-        console.error('Error fetching metrics:', err);
       }
     }
 

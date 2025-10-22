@@ -69,7 +69,39 @@ serve(async (req) => {
     }
 
     const advertiserData = await advertiserResponse.json();
-    const advertiserId = advertiserData.advertiser_id?.toString();
+    console.log('Advertiser API Response:', JSON.stringify(advertiserData));
+
+    // A API retorna um array de advertisers
+    if (!advertiserData.advertisers || advertiserData.advertisers.length === 0) {
+      console.log('Product Ads not enabled - no advertisers found');
+      await supabase
+        .from('mercado_livre_accounts')
+        .update({ 
+          has_product_ads_enabled: false,
+          advertiser_id: null
+        })
+        .eq('id', ml_account_id);
+      
+      return new Response(
+        JSON.stringify({ 
+          enabled: false,
+          message: 'Product Ads não está habilitado nesta conta'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Buscar advertiser do site MLB (Brasil) ou pegar o primeiro
+    const advertiser = advertiserData.advertisers.find((adv: any) => adv.site_id === 'MLB') 
+      || advertiserData.advertisers[0];
+
+    const advertiserId = advertiser.advertiser_id?.toString();
+    
+    if (!advertiserId) {
+      throw new Error('Invalid advertiser_id received from API');
+    }
+    
+    console.log('Advertiser ID obtained:', advertiserId, 'for site:', advertiser.site_id);
 
     // Update account
     await supabase

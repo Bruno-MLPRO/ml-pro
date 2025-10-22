@@ -3,10 +3,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
 import logo from "@/assets/logo.jpeg";
+import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, userRole, loading } = useAuth();
+  const { user, userRole, loading, signOut } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!loading && user && userRole) {
@@ -16,10 +18,20 @@ const Index = () => {
         navigate('/aluno/dashboard');
       }
     }
-  }, [user, userRole, loading, navigate]);
+    
+    // Se user existe mas não tem role após loading terminar, fazer logout
+    if (!loading && user && !userRole) {
+      toast({
+        variant: "destructive",
+        title: "Erro de Autenticação",
+        description: "Sua conta não está configurada corretamente. Entre em contato com o suporte.",
+      });
+      signOut();
+    }
+  }, [user, userRole, loading, navigate, signOut, toast]);
 
-  // Show loading if checking auth or if user is authenticated (waiting for redirect)
-  if (loading || user) {
+  // Show loading if checking auth
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center space-y-4">

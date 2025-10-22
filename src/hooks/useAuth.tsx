@@ -23,6 +23,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Timeout de segurança: se após 10 segundos ainda estiver loading, forçar false
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn('Loading timeout - forcing loading to false');
+        setLoading(false);
+      }
+    }, 10000);
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
@@ -34,6 +42,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }, 0);
         } else {
           setUserRole(null);
+          setLoading(false);
         }
       }
     );
@@ -48,7 +57,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const fetchUserRole = async (userId: string, retryCount = 0) => {
@@ -60,20 +72,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .maybeSingle();
 
       if (error) {
+        console.error('Error fetching user role:', error);
         // Se for erro de rede e ainda temos retries, tentar novamente
         if (error.message?.includes('Failed to fetch') && retryCount < 3) {
           console.log(`Retrying fetch user role... Attempt ${retryCount + 1}`);
           setTimeout(() => {
             fetchUserRole(userId, retryCount + 1);
-          }, Math.pow(2, retryCount) * 1000); // Exponential backoff
+          }, Math.pow(2, retryCount) * 1000);
           return;
         }
-        throw error;
+        // Se esgotou os retries ou é outro tipo de erro, setar null e parar loading
+        setUserRole(null);
+        setLoading(false);
+        return;
       }
-      setUserRole(data?.role as 'student' | 'manager');
+      
+      // Se data é null ou não tem role, setar null
+      if (!data || !data.role) {
+        console.warn('User has no role in user_roles table');
+        setUserRole(null);
+      } else {
+        setUserRole(data.role as 'student' | 'manager');
+      }
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching user role:', error);
+      console.error('Unexpected error fetching user role:', error);
       setUserRole(null);
       setLoading(false);
     }

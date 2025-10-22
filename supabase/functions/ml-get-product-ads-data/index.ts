@@ -235,8 +235,8 @@ serve(async (req) => {
         // Wait 200ms between requests to respect rate limits
         await new Promise(resolve => setTimeout(resolve, 200));
 
-        // Get item details from Product Ads API with metrics
-        const itemUrl = `https://api.mercadolibre.com/advertising/product_ads/items/${product.ml_item_id}?date_from=${dateFrom.toISOString().split('T')[0]}&date_to=${dateTo.toISOString().split('T')[0]}`;
+        // Get item details from Product Ads API (v2)
+        const itemUrl = `https://api.mercadolibre.com/advertising/product_ads/items/${product.ml_item_id}`;
         
         const itemResponse = await fetch(itemUrl, {
           headers: { 
@@ -283,22 +283,11 @@ serve(async (req) => {
         }
 
         const itemData = await itemResponse.json();
-        console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} - Campaign: ${itemData.campaign_id}, Status: ${itemData.status}`);
+        console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} - Campaign: ${itemData.campaign_id}, Status: ${itemData.status}, Recommended: ${itemData.recommended}`);
 
-        // Extract metrics from metrics_summary
-        const metrics = itemData.metrics_summary || {};
-        
-        const totalSales = (metrics.organic_items_quantity || 0) + (metrics.advertising_items_quantity || 0);
-        const advertisedSales = metrics.advertising_items_quantity || 0;
-        const nonAdvertisedSales = metrics.organic_items_quantity || 0;
-        
-        const adRevenue = metrics.total_amount || 0;
-        const nonAdRevenue = (metrics.organic_units_quantity || 0) * (product.price || 0);
-        const totalSpend = metrics.cost || 0;
-        
-        const roas = totalSpend > 0 ? adRevenue / totalSpend : null;
-        const ctr = (metrics.prints || 0) > 0 ? ((metrics.clicks || 0) / metrics.prints) * 100 : null;
-        const acos = adRevenue > 0 ? (totalSpend / adRevenue) * 100 : null;
+        // Note: The Product Ads API v2 doesn't return individual item metrics
+        // Metrics are only available aggregated by campaign
+        // So we only track if the item is in a campaign and if it's recommended
 
         productAdsData.push({
           ml_account_id,
@@ -311,17 +300,18 @@ serve(async (req) => {
           status: itemData.status,
           campaign_id: itemData.campaign_id || null,
           is_recommended: itemData.recommended || false,
-          total_sales: totalSales,
-          advertised_sales: advertisedSales,
-          non_advertised_sales: nonAdvertisedSales,
-          ad_revenue: adRevenue,
-          non_ad_revenue: nonAdRevenue,
-          total_spend: totalSpend,
-          roas: roas,
-          impressions: metrics.prints || 0,
-          clicks: metrics.clicks || 0,
-          ctr: ctr,
-          acos: acos,
+          // Metrics are not available per individual item in Product Ads API v2
+          total_sales: 0,
+          advertised_sales: 0,
+          non_advertised_sales: 0,
+          ad_revenue: 0,
+          non_ad_revenue: 0,
+          total_spend: 0,
+          roas: null,
+          impressions: 0,
+          clicks: 0,
+          ctr: null,
+          acos: null,
         });
         
       } catch (error) {

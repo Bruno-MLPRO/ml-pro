@@ -20,12 +20,12 @@ interface SimpleProductsTableProps {
 export const SimpleProductsTable = ({ items }: SimpleProductsTableProps) => {
   const translateStatus = (status: string) => {
     const translations: Record<string, string> = {
-      'active': 'ativo',
-      'paused': 'pausado',
-      'idle': 'inativo',
-      'hold': 'retido'
+      'active': 'ATIVO',
+      'paused': 'INATIVO',
+      'idle': 'INATIVO',
+      'hold': 'INATIVO'
     };
-    return translations[status.toLowerCase()] || status;
+    return translations[status.toLowerCase()] || status.toUpperCase();
   };
 
   return (

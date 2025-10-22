@@ -10,10 +10,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ReputationBadge } from "@/components/ReputationBadge";
-import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse } from "lucide-react";
+import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HealthDashboard } from "@/components/ml-health/HealthDashboard";
 import { HealthIndividual } from "@/components/ml-health/HealthIndividual";
+import { ProductAdsMetricCard } from "@/components/ProductAdsMetricCard";
+import { RecommendedItemsTable } from "@/components/RecommendedItemsTable";
+import { SalesComparisonChart } from "@/components/SalesComparisonChart";
+import { TopPerformersCard } from "@/components/TopPerformersCard";
 
 interface MLAccount {
   id: string;
@@ -114,12 +118,33 @@ interface ShippingStats {
   total: number;
 }
 
+interface ProductAd {
+  id: string;
+  ml_item_id: string;
+  title: string;
+  thumbnail: string | null;
+  status: string;
+  is_recommended: boolean;
+  total_sales: number;
+  advertised_sales: number;
+  non_advertised_sales: number;
+  ad_revenue: number;
+  non_ad_revenue: number;
+  total_spend: number;
+  roas: number | null;
+  impressions: number;
+  clicks: number;
+  ctr: number | null;
+  acos: number | null;
+  price: number;
+}
+
 export default function MLAccountDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"geral" | "anuncios" | "estoque">("geral");
+  const [activeTab, setActiveTab] = useState<"geral" | "anuncios" | "estoque" | "publicidade">("geral");
   const [metrics, setMetrics] = useState<MLMetrics | null>(null);
   const [products, setProducts] = useState<MLProduct[]>([]);
   const [fullStock, setFullStock] = useState<MLFullStock[]>([]);
@@ -130,6 +155,9 @@ export default function MLAccountDashboard() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [healthHistory, setHealthHistory] = useState<any[]>([]);
   const [itemHistory, setItemHistory] = useState<any[]>([]);
+  const [productAds, setProductAds] = useState<ProductAd[]>([]);
+  const [productAdsLoading, setProductAdsLoading] = useState(false);
+  const [hasProductAds, setHasProductAds] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -176,6 +204,7 @@ export default function MLAccountDashboard() {
   useEffect(() => {
     if (selectedAccountId) {
       loadAccountData(selectedAccountId);
+      loadProductAds(selectedAccountId);
     }
   }, [selectedAccountId]);
 
@@ -251,11 +280,24 @@ export default function MLAccountDashboard() {
       })
       .subscribe();
 
+    const productAdsChannel = supabase
+      .channel('ml-product-ads-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mercado_livre_product_ads',
+        filter: `ml_account_id=eq.${selectedAccountId}`
+      }, () => {
+        loadProductAds(selectedAccountId);
+      })
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(metricsChannel);
-      supabase.removeChannel(productsChannel);
-      supabase.removeChannel(stockChannel);
-      supabase.removeChannel(healthChannel);
+      metricsChannel.unsubscribe();
+      productsChannel.unsubscribe();
+      stockChannel.unsubscribe();
+      healthChannel.unsubscribe();
+      productAdsChannel.unsubscribe();
     };
   }, [selectedAccountId]);
 
@@ -417,6 +459,71 @@ export default function MLAccountDashboard() {
       toast.error('Erro ao carregar dados da conta');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadProductAds = async (accountId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('mercado_livre_product_ads')
+        .select('*')
+        .eq('ml_account_id', accountId)
+        .order('is_recommended', { ascending: false })
+        .order('total_sales', { ascending: false });
+
+      if (error) throw error;
+
+      setProductAds(data || []);
+      
+      // Check if user has product ads enabled
+      const { data: accountData } = await supabase
+        .from('mercado_livre_accounts')
+        .select('has_product_ads_enabled')
+        .eq('id', accountId)
+        .single();
+
+      setHasProductAds(accountData?.has_product_ads_enabled || false);
+    } catch (error: any) {
+      console.error('Error loading product ads:', error);
+      setProductAds([]);
+      setHasProductAds(null);
+    }
+  };
+
+  const syncProductAds = async () => {
+    setProductAdsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ml-get-product-ads-data', {
+        body: { ml_account_id: selectedAccountId }
+      });
+
+      if (error) {
+        toast.error('Erro ao sincronizar', {
+          description: error.message
+        });
+        return;
+      }
+
+      if (data.has_product_ads === false) {
+        setHasProductAds(false);
+        toast.warning('Product Ads não habilitado', {
+          description: 'Esta conta ainda não tem acesso ao Product Ads do Mercado Livre'
+        });
+        return;
+      }
+
+      setHasProductAds(true);
+      toast.success('✅ Dados Sincronizados!', {
+        description: `${data.items_synced} anúncios atualizados`
+      });
+
+      await loadProductAds(selectedAccountId);
+    } catch (error: any) {
+      toast.error('Erro ao sincronizar', {
+        description: error.message || 'Erro desconhecido'
+      });
+    } finally {
+      setProductAdsLoading(false);
     }
   };
 
@@ -612,7 +719,7 @@ export default function MLAccountDashboard() {
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="geral">
                 <Home className="w-4 h-4 mr-2" />
                 Geral
@@ -624,6 +731,10 @@ export default function MLAccountDashboard() {
               <TabsTrigger value="estoque">
                 <Package className="w-4 h-4 mr-2" />
                 Estoque FULL
+              </TabsTrigger>
+              <TabsTrigger value="publicidade">
+                <Megaphone className="w-4 h-4 mr-2" />
+                Publicidade
               </TabsTrigger>
             </TabsList>
 
@@ -1189,6 +1300,168 @@ export default function MLAccountDashboard() {
                     </p>
                   </CardContent>
                 </Card>
+              )}
+            </TabsContent>
+
+            {/* ABA PUBLICIDADE */}
+            <TabsContent value="publicidade" className="space-y-6">
+              {loading || productAdsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : hasProductAds === false ? (
+                <Card>
+                  <CardContent className="p-12 text-center">
+                    <div className="max-w-md mx-auto space-y-4">
+                      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
+                        <Megaphone className="w-8 h-8 text-muted-foreground" />
+                      </div>
+                      <h3 className="text-xl font-semibold">Product Ads não está habilitado</h3>
+                      <p className="text-muted-foreground">
+                        Para usar Product Ads, você precisa:
+                      </p>
+                      <ul className="text-left space-y-2 text-sm text-muted-foreground">
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          Ter reputação amarela ou superior
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          Pelo menos 15 dias desde o registro
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          Mínimo de 10 vendas (pessoa física) ou 1 venda (empresa)
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          Nenhuma fatura vencida
+                        </li>
+                      </ul>
+                      <Button 
+                        variant="outline"
+                        onClick={() => window.open('https://www.mercadolivre.com.br/ajuda/Product-Ads_3273', '_blank')}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Saiba mais no Mercado Livre
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : productAds.length === 0 ? (
+                <Card>
+                  <CardContent className="p-12 text-center">
+                    <div className="max-w-md mx-auto space-y-4">
+                      <BarChart3 className="w-16 h-16 text-muted-foreground mx-auto" />
+                      <h3 className="text-xl font-semibold">Nenhum dado de publicidade encontrado</h3>
+                      <p className="text-muted-foreground">
+                        Você ainda não tem anúncios com Product Ads ativo. Configure suas campanhas no Mercado Livre para começar.
+                      </p>
+                      <Button onClick={syncProductAds} disabled={productAdsLoading}>
+                        <RefreshCw className={`w-4 h-4 mr-2 ${productAdsLoading ? 'animate-spin' : ''}`} />
+                        Sincronizar Dados de Publicidade
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  {/* Botão de Sincronização */}
+                  <div className="flex justify-end">
+                    <Button onClick={syncProductAds} disabled={productAdsLoading} variant="outline">
+                      <RefreshCw className={`w-4 h-4 mr-2 ${productAdsLoading ? 'animate-spin' : ''}`} />
+                      Sincronizar Dados
+                    </Button>
+                  </div>
+
+                  {/* Resumo Geral - Cards de Métricas */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <ProductAdsMetricCard
+                      title="Vendas com Ads"
+                      value={productAds.reduce((sum, item) => sum + item.advertised_sales, 0)}
+                      subtitle={`R$ ${productAds.reduce((sum, item) => sum + item.ad_revenue, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      trend={`${productAds.some(p => p.roas) ? `${(productAds.filter(p => p.roas).reduce((sum, p) => sum + (p.roas || 0), 0) / productAds.filter(p => p.roas).length).toFixed(1)}x ROAS médio` : ''}`}
+                      icon={TrendingUp}
+                      gradient="bg-gradient-to-br from-green-500 to-cyan-500"
+                    />
+
+                    <ProductAdsMetricCard
+                      title="Vendas Orgânicas"
+                      value={productAds.reduce((sum, item) => sum + item.non_advertised_sales, 0)}
+                      subtitle={`R$ ${productAds.reduce((sum, item) => sum + item.non_ad_revenue, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      trend={`${((productAds.reduce((sum, item) => sum + item.non_advertised_sales, 0) / Math.max(productAds.reduce((sum, item) => sum + item.total_sales, 0), 1)) * 100).toFixed(0)}% do total`}
+                      icon={BarChart3}
+                      gradient="bg-gradient-to-br from-purple-500 to-pink-500"
+                    />
+
+                    <ProductAdsMetricCard
+                      title="Investimento Total"
+                      value={`R$ ${productAds.reduce((sum, item) => sum + item.total_spend, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      subtitle={productAds.some(p => p.acos) ? `${(productAds.filter(p => p.acos).reduce((sum, p) => sum + (p.acos || 0), 0) / productAds.filter(p => p.acos).length).toFixed(1)}% ACOS médio` : 'Sem dados'}
+                      icon={DollarSign}
+                      gradient="bg-gradient-to-br from-orange-500 to-red-500"
+                    />
+                  </div>
+
+                  {/* Anúncios Recomendados */}
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <CardTitle className="flex items-center gap-2">
+                            <Zap className="w-5 h-5 text-yellow-500" />
+                            Anúncios Recomendados pelo Mercado Livre
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            Segundo nossos modelos, estes anúncios têm bom rendimento. Se ativada a publicidade, as vendas serão potencializadas.
+                          </p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <RecommendedItemsTable items={productAds} />
+                    </CardContent>
+                  </Card>
+
+                  {/* Comparativo Visual */}
+                  <SalesComparisonChart
+                    advertisedSales={productAds.reduce((sum, item) => sum + item.advertised_sales, 0)}
+                    nonAdvertisedSales={productAds.reduce((sum, item) => sum + item.non_advertised_sales, 0)}
+                  />
+
+                  {/* Top Performers */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <TopPerformersCard
+                      title="Top 5 Anúncios COM Publicidade"
+                      icon={<Target className="h-5 w-5 text-green-600" />}
+                      items={productAds
+                        .filter(p => p.roas && p.roas > 0)
+                        .sort((a, b) => (b.roas || 0) - (a.roas || 0))
+                        .slice(0, 5)
+                        .map(p => ({
+                          title: p.title,
+                          value: p.roas ? parseFloat(p.roas.toFixed(1)) : 0,
+                          metric: `ROAS: ${p.roas?.toFixed(1)}x - R$ ${p.ad_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                          thumbnail: p.thumbnail
+                        }))}
+                    />
+
+                    <TopPerformersCard
+                      title="Top 5 Anúncios SEM Publicidade"
+                      icon={<BarChart3 className="h-5 w-5 text-purple-600" />}
+                      items={productAds
+                        .filter(p => p.non_advertised_sales > 0)
+                        .sort((a, b) => b.non_advertised_sales - a.non_advertised_sales)
+                        .slice(0, 5)
+                        .map(p => ({
+                          title: p.title,
+                          value: p.non_advertised_sales,
+                          metric: `${p.non_advertised_sales} vendas - R$ ${p.non_ad_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                          thumbnail: p.thumbnail
+                        }))}
+                    />
+                  </div>
+                </>
               )}
             </TabsContent>
           </Tabs>

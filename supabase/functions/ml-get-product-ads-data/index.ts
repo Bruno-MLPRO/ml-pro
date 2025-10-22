@@ -1,0 +1,299 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { ml_account_id } = await req.json();
+    console.log('Getting Product Ads data for account:', ml_account_id);
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get ML account with access token
+    const { data: account, error: accountError } = await supabase
+      .from('mercado_livre_accounts')
+      .select('*')
+      .eq('id', ml_account_id)
+      .single();
+
+    if (accountError || !account) {
+      throw new Error('Account not found');
+    }
+
+    let accessToken = account.access_token;
+
+    // Check if token is expired and refresh if needed
+    if (new Date(account.token_expires_at) <= new Date()) {
+      console.log('Token expired, refreshing...');
+      accessToken = await refreshToken(account, supabase);
+    }
+
+    // Step 1: Get advertiser_id
+    let advertiserId = account.advertiser_id;
+    
+    if (!advertiserId) {
+      console.log('Fetching advertiser_id...');
+      const advertiserResponse = await fetch(
+        `https://api.mercadolibre.com/advertising/advertisers?product_id=PADS`,
+        {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        }
+      );
+
+      if (!advertiserResponse.ok) {
+        if (advertiserResponse.status === 404) {
+          console.log('Product Ads not enabled for this account');
+          await supabase
+            .from('mercado_livre_accounts')
+            .update({ has_product_ads_enabled: false })
+            .eq('id', ml_account_id);
+          
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              message: 'Product Ads not enabled for this account',
+              has_product_ads: false
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        throw new Error(`Failed to get advertiser: ${advertiserResponse.status}`);
+      }
+
+      const advertiserData = await advertiserResponse.json();
+      advertiserId = advertiserData.advertiser_id?.toString();
+
+      // Update account with advertiser_id
+      await supabase
+        .from('mercado_livre_accounts')
+        .update({ 
+          advertiser_id: advertiserId,
+          has_product_ads_enabled: true
+        })
+        .eq('id', ml_account_id);
+    }
+
+    // Step 2: Get active products for this account
+    const { data: products, error: productsError } = await supabase
+      .from('mercado_livre_products')
+      .select('ml_item_id, title, thumbnail, price, status')
+      .eq('ml_account_id', ml_account_id)
+      .eq('status', 'active')
+      .limit(100);
+
+    if (productsError) {
+      throw new Error(`Failed to get products: ${productsError.message}`);
+    }
+
+    console.log(`Processing ${products.length} products`);
+
+    // Step 3: Get Product Ads item details and metrics
+    const productAdsData = [];
+    
+    for (const product of products) {
+      try {
+        // Wait 100ms between requests to respect rate limits
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Get item details from Product Ads API
+        const itemResponse = await fetch(
+          `https://api.mercadolibre.com/advertising/product_ads/items/${product.ml_item_id}`,
+          {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          }
+        );
+
+        let isRecommended = false;
+        let campaignId = null;
+        let adStatus = 'inactive';
+
+        if (itemResponse.ok) {
+          const itemData = await itemResponse.json();
+          isRecommended = itemData.recommended === true;
+          campaignId = itemData.campaign_id;
+          adStatus = itemData.status || 'inactive';
+        }
+
+        productAdsData.push({
+          ml_item_id: product.ml_item_id,
+          title: product.title,
+          thumbnail: product.thumbnail,
+          price: product.price,
+          status: adStatus,
+          is_recommended: isRecommended,
+          campaign_id: campaignId
+        });
+
+      } catch (err) {
+        console.error(`Error processing item ${product.ml_item_id}:`, err);
+        // Continue with next item
+      }
+    }
+
+    // Step 4: Get metrics for items (if we have any with campaigns)
+    const itemIds = productAdsData.map(p => p.ml_item_id).join(',');
+    const dateFrom = new Date();
+    dateFrom.setDate(dateFrom.getDate() - 30);
+    const dateTo = new Date();
+
+    let metricsMap = new Map();
+
+    if (itemIds) {
+      try {
+        const metricsResponse = await fetch(
+          `https://api.mercadolibre.com/advertising/pads/reports/${advertiserId}/item-metrics?date_from=${dateFrom.toISOString().split('T')[0]}&date_to=${dateTo.toISOString().split('T')[0]}&item_ids=${itemIds}`,
+          {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          }
+        );
+
+        if (metricsResponse.ok) {
+          const metricsData = await metricsResponse.json();
+          
+          if (metricsData.results) {
+            for (const metric of metricsData.results) {
+              metricsMap.set(metric.item_id, {
+                total_sales: metric.sales || 0,
+                advertised_sales: metric.advertised_sales || 0,
+                ad_revenue: metric.revenue || 0,
+                total_spend: metric.cost || 0,
+                impressions: metric.impressions || 0,
+                clicks: metric.clicks || 0,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching metrics:', err);
+      }
+    }
+
+    // Step 5: Calculate derived metrics and upsert data
+    const upsertData = [];
+
+    for (const item of productAdsData) {
+      const metrics = metricsMap.get(item.ml_item_id) || {
+        total_sales: 0,
+        advertised_sales: 0,
+        ad_revenue: 0,
+        total_spend: 0,
+        impressions: 0,
+        clicks: 0,
+      };
+
+      const nonAdvertisedSales = metrics.total_sales - metrics.advertised_sales;
+      const nonAdRevenue = item.price ? (nonAdvertisedSales * parseFloat(item.price.toString())) : 0;
+      const roas = metrics.total_spend > 0 ? metrics.ad_revenue / metrics.total_spend : null;
+      const ctr = metrics.impressions > 0 ? (metrics.clicks / metrics.impressions) * 100 : null;
+      const acos = metrics.ad_revenue > 0 ? (metrics.total_spend / metrics.ad_revenue) * 100 : null;
+
+      upsertData.push({
+        ml_account_id: ml_account_id,
+        student_id: account.student_id,
+        ml_item_id: item.ml_item_id,
+        advertiser_id: advertiserId,
+        campaign_id: item.campaign_id,
+        title: item.title,
+        thumbnail: item.thumbnail,
+        status: item.status,
+        is_recommended: item.is_recommended,
+        price: item.price,
+        total_sales: metrics.total_sales,
+        advertised_sales: metrics.advertised_sales,
+        non_advertised_sales: nonAdvertisedSales,
+        ad_revenue: metrics.ad_revenue,
+        non_ad_revenue: nonAdRevenue,
+        total_spend: metrics.total_spend,
+        roas: roas,
+        impressions: metrics.impressions,
+        clicks: metrics.clicks,
+        ctr: ctr,
+        acos: acos,
+        synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    // Batch upsert
+    if (upsertData.length > 0) {
+      const { error: upsertError } = await supabase
+        .from('mercado_livre_product_ads')
+        .upsert(upsertData, {
+          onConflict: 'ml_account_id,ml_item_id',
+          ignoreDuplicates: false
+        });
+
+      if (upsertError) {
+        throw new Error(`Failed to upsert data: ${upsertError.message}`);
+      }
+    }
+
+    console.log(`Successfully synced ${upsertData.length} product ads items`);
+
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        items_synced: upsertData.length,
+        has_product_ads: true,
+        advertiser_id: advertiserId
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error: any) {
+    console.error('Error in ml-get-product-ads-data:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
+});
+
+async function refreshToken(account: any, supabase: any): Promise<string> {
+  const clientId = Deno.env.get('MERCADO_LIVRE_APP_ID');
+  const clientSecret = Deno.env.get('MERCADO_LIVRE_SECRET_KEY');
+
+  const response = await fetch('https://api.mercadolibre.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: clientId!,
+      client_secret: clientSecret!,
+      refresh_token: account.refresh_token,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to refresh token');
+  }
+
+  const data = await response.json();
+  
+  const expiresAt = new Date();
+  expiresAt.setSeconds(expiresAt.getSeconds() + data.expires_in);
+
+  await supabase
+    .from('mercado_livre_accounts')
+    .update({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      token_expires_at: expiresAt.toISOString(),
+    })
+    .eq('id', account.id);
+
+  return data.access_token;
+}

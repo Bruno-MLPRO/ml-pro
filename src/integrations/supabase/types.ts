@@ -161,8 +161,10 @@ export type Database = {
       mercado_livre_accounts: {
         Row: {
           access_token: string
+          advertiser_id: string | null
           connected_at: string | null
           created_at: string | null
+          has_product_ads_enabled: boolean | null
           id: string
           is_active: boolean | null
           is_primary: boolean | null
@@ -176,8 +178,10 @@ export type Database = {
         }
         Insert: {
           access_token: string
+          advertiser_id?: string | null
           connected_at?: string | null
           created_at?: string | null
+          has_product_ads_enabled?: boolean | null
           id?: string
           is_active?: boolean | null
           is_primary?: boolean | null
@@ -191,8 +195,10 @@ export type Database = {
         }
         Update: {
           access_token?: string
+          advertiser_id?: string | null
           connected_at?: string | null
           created_at?: string | null
+          has_product_ads_enabled?: boolean | null
           id?: string
           is_active?: boolean | null
           is_primary?: boolean | null
@@ -587,6 +593,105 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mercado_livre_product_ads: {
+        Row: {
+          acos: number | null
+          ad_revenue: number | null
+          advertised_sales: number | null
+          advertiser_id: string | null
+          campaign_id: number | null
+          clicks: number | null
+          created_at: string | null
+          ctr: number | null
+          id: string
+          impressions: number | null
+          is_recommended: boolean | null
+          ml_account_id: string
+          ml_item_id: string
+          non_ad_revenue: number | null
+          non_advertised_sales: number | null
+          price: number | null
+          roas: number | null
+          status: string | null
+          student_id: string
+          synced_at: string | null
+          thumbnail: string | null
+          title: string
+          total_sales: number | null
+          total_spend: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          acos?: number | null
+          ad_revenue?: number | null
+          advertised_sales?: number | null
+          advertiser_id?: string | null
+          campaign_id?: number | null
+          clicks?: number | null
+          created_at?: string | null
+          ctr?: number | null
+          id?: string
+          impressions?: number | null
+          is_recommended?: boolean | null
+          ml_account_id: string
+          ml_item_id: string
+          non_ad_revenue?: number | null
+          non_advertised_sales?: number | null
+          price?: number | null
+          roas?: number | null
+          status?: string | null
+          student_id: string
+          synced_at?: string | null
+          thumbnail?: string | null
+          title: string
+          total_sales?: number | null
+          total_spend?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          acos?: number | null
+          ad_revenue?: number | null
+          advertised_sales?: number | null
+          advertiser_id?: string | null
+          campaign_id?: number | null
+          clicks?: number | null
+          created_at?: string | null
+          ctr?: number | null
+          id?: string
+          impressions?: number | null
+          is_recommended?: boolean | null
+          ml_account_id?: string
+          ml_item_id?: string
+          non_ad_revenue?: number | null
+          non_advertised_sales?: number | null
+          price?: number | null
+          roas?: number | null
+          status?: string | null
+          student_id?: string
+          synced_at?: string | null
+          thumbnail?: string | null
+          title?: string
+          total_sales?: number | null
+          total_spend?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mercado_livre_product_ads_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mercado_livre_product_ads_ml_account_id_fkey"
+            columns: ["ml_account_id"]
+            isOneToOne: false
+            referencedRelation: "mercado_livre_accounts_safe"
             referencedColumns: ["id"]
           },
         ]

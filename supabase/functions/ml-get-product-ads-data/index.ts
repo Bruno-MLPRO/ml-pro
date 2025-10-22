@@ -61,7 +61,8 @@ serve(async (req) => {
               .from('mercado_livre_accounts')
               .update({ 
                 has_product_ads_enabled: false,
-                advertiser_id: null
+                advertiser_id: null,
+                has_active_campaigns: null
               })
               .eq('id', ml_account_id);
             
@@ -79,27 +80,24 @@ serve(async (req) => {
           throw new Error(`Failed to get advertiser (${advertiserResponse.status}): ${errorText}`);
         }
 
-    const advertiserData = await advertiserResponse.json();
-    console.log('[PRODUCT ADS SYNC] API Response:', JSON.stringify(advertiserData));
+        const advertiserData = await advertiserResponse.json();
+        console.log('[PRODUCT ADS SYNC] API Response:', JSON.stringify(advertiserData));
 
-    // A API retorna um array de advertisers
-    if (!advertiserData.advertisers || advertiserData.advertisers.length === 0) {
-      console.error('[PRODUCT ADS SYNC] ❌ No advertisers found in response');
-      throw new Error('No advertisers found for this user');
-    }
+        if (!advertiserData.advertisers || advertiserData.advertisers.length === 0) {
+          console.error('[PRODUCT ADS SYNC] ❌ No advertisers found in response');
+          throw new Error('No advertisers found for this user');
+        }
 
-    // Buscar advertiser do site MLB (Brasil) ou pegar o primeiro
-    const advertiser = advertiserData.advertisers.find((adv: any) => adv.site_id === 'MLB') 
-      || advertiserData.advertisers[0];
+        const advertiser = advertiserData.advertisers.find((adv: any) => adv.site_id === 'MLB') 
+          || advertiserData.advertisers[0];
 
-    advertiserId = advertiser.advertiser_id?.toString();
-    console.log('[PRODUCT ADS SYNC] ✅ Advertiser ID obtained:', advertiserId, 'for site:', advertiser.site_id);
+        advertiserId = advertiser.advertiser_id?.toString();
+        console.log('[PRODUCT ADS SYNC] ✅ Advertiser ID obtained:', advertiserId, 'for site:', advertiser.site_id);
 
-    if (!advertiserId) {
-      throw new Error('Invalid advertiser_id received from API');
-    }
+        if (!advertiserId) {
+          throw new Error('Invalid advertiser_id received from API');
+        }
 
-        // Update account with advertiser_id
         await supabase
           .from('mercado_livre_accounts')
           .update({ 
@@ -114,7 +112,87 @@ serve(async (req) => {
       }
     }
 
-    // Step 2: Get active products for this account
+    // Step 2: Fetch campaigns to verify if there are active campaigns
+    console.log('[PRODUCT ADS SYNC] Fetching campaigns...');
+    const dateFrom = new Date();
+    dateFrom.setDate(dateFrom.getDate() - 30);
+    const dateTo = new Date();
+
+    const campaignsUrl = `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/product_ads/campaigns?date_from=${dateFrom.toISOString().split('T')[0]}&date_to=${dateTo.toISOString().split('T')[0]}&metrics=clicks,prints,cost,cpc,acos,organic_units_quantity,organic_items_quantity,direct_items_quantity,indirect_items_quantity,advertising_items_quantity,direct_units_quantity,indirect_units_quantity,units_quantity,direct_amount,indirect_amount,total_amount`;
+
+    const campaignsResponse = await fetch(campaignsUrl, {
+      headers: { 
+        'Authorization': `Bearer ${accessToken}`,
+        'api-version': '2'
+      }
+    });
+
+    if (!campaignsResponse.ok) {
+      const errorText = await campaignsResponse.text();
+      console.error('[PRODUCT ADS SYNC] Campaigns API error:', campaignsResponse.status, errorText);
+      
+      // If 404, means no active campaigns
+      if (campaignsResponse.status === 404) {
+        console.log('[PRODUCT ADS SYNC] No active campaigns found');
+        
+        await supabase
+          .from('mercado_livre_accounts')
+          .update({ 
+            has_active_campaigns: false,
+            has_product_ads_enabled: true
+          })
+          .eq('id', ml_account_id);
+          
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Product Ads habilitado mas sem campanhas ativas',
+          advertiser_id: advertiserId,
+          has_active_campaigns: false,
+          has_product_ads: true
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      throw new Error(`Failed to fetch campaigns: ${errorText}`);
+    }
+
+    const campaignsData = await campaignsResponse.json();
+    console.log('[PRODUCT ADS SYNC] Campaigns found:', campaignsData.paging?.total || 0);
+
+    // If no campaigns, update and return
+    if (!campaignsData.results || campaignsData.results.length === 0) {
+      console.log('[PRODUCT ADS SYNC] No campaigns in response');
+      
+      await supabase
+        .from('mercado_livre_accounts')
+        .update({ 
+          has_active_campaigns: false,
+          has_product_ads_enabled: true
+        })
+        .eq('id', ml_account_id);
+        
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Product Ads habilitado mas sem campanhas ativas',
+        advertiser_id: advertiserId,
+        has_active_campaigns: false,
+        has_product_ads: true
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Update account to indicate active campaigns
+    await supabase
+      .from('mercado_livre_accounts')
+      .update({ 
+        has_active_campaigns: true,
+        has_product_ads_enabled: true
+      })
+      .eq('id', ml_account_id);
+
+    // Step 3: Get active products for this account
     const { data: products, error: productsError } = await supabase
       .from('mercado_livre_products')
       .select('ml_item_id, title, thumbnail, price, status')
@@ -135,6 +213,7 @@ serve(async (req) => {
           success: true, 
           items_synced: 0,
           has_product_ads: true,
+          has_active_campaigns: true,
           advertiser_id: advertiserId,
           message: 'Nenhum produto ativo encontrado para sincronizar'
         }),
@@ -142,7 +221,7 @@ serve(async (req) => {
       );
     }
 
-    // Step 3: Get Product Ads item details and metrics
+    // Step 4: Get Product Ads item details with metrics
     const productAdsData = [];
     let processedCount = 0;
     
@@ -153,153 +232,133 @@ serve(async (req) => {
           console.log(`[PRODUCT ADS SYNC] Progress: ${processedCount}/${products.length}`);
         }
 
-        // Wait 100ms between requests to respect rate limits
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Wait 200ms between requests to respect rate limits
+        await new Promise(resolve => setTimeout(resolve, 200));
 
-        // Get item details from Product Ads API
-        const itemResponse = await fetch(
-          `https://api.mercadolibre.com/advertising/product_ads/items/${product.ml_item_id}`,
-          {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
+        // Get item details from Product Ads API with metrics
+        const itemUrl = `https://api.mercadolibre.com/advertising/product_ads/items/${product.ml_item_id}?date_from=${dateFrom.toISOString().split('T')[0]}&date_to=${dateTo.toISOString().split('T')[0]}`;
+        
+        const itemResponse = await fetch(itemUrl, {
+          headers: { 
+            'Authorization': `Bearer ${accessToken}`,
+            'api-version': '2'
           }
-        );
+        });
 
-        let isRecommended = false;
-        let campaignId = null;
-        let adStatus = 'inactive';
-
-        if (itemResponse.ok) {
-          const itemData = await itemResponse.json();
-          isRecommended = itemData.recommended === true;
-          campaignId = itemData.campaign_id;
-          adStatus = itemData.status || 'inactive';
-        } else if (itemResponse.status === 404) {
-          // Item not in Product Ads yet, that's ok
-          console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} not in Product Ads`);
-        } else {
-          console.error(`[PRODUCT ADS SYNC] Error fetching item ${product.ml_item_id}: ${itemResponse.status}`);
+        if (!itemResponse.ok) {
+          if (itemResponse.status === 404) {
+            console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} not in Product Ads`);
+            
+            // Save without metrics
+            productAdsData.push({
+              ml_account_id,
+              student_id: account.student_id,
+              advertiser_id: advertiserId,
+              ml_item_id: product.ml_item_id,
+              title: product.title,
+              thumbnail: product.thumbnail,
+              price: product.price,
+              status: 'not_in_campaign',
+              campaign_id: null,
+              is_recommended: false,
+              total_sales: 0,
+              advertised_sales: 0,
+              non_advertised_sales: 0,
+              ad_revenue: 0,
+              non_ad_revenue: 0,
+              total_spend: 0,
+              roas: null,
+              impressions: 0,
+              clicks: 0,
+              ctr: null,
+              acos: null,
+            });
+            
+            continue;
+          }
+          
+          const errorText = await itemResponse.text();
+          console.error(`[PRODUCT ADS SYNC] Error fetching item ${product.ml_item_id}:`, itemResponse.status, errorText);
+          throw new Error(`Failed to fetch item details: ${itemResponse.status}`);
         }
 
+        const itemData = await itemResponse.json();
+        console.log(`[PRODUCT ADS SYNC] Item ${product.ml_item_id} - Campaign: ${itemData.campaign_id}, Status: ${itemData.status}`);
+
+        // Extract metrics from metrics_summary
+        const metrics = itemData.metrics_summary || {};
+        
+        const totalSales = (metrics.organic_items_quantity || 0) + (metrics.advertising_items_quantity || 0);
+        const advertisedSales = metrics.advertising_items_quantity || 0;
+        const nonAdvertisedSales = metrics.organic_items_quantity || 0;
+        
+        const adRevenue = metrics.total_amount || 0;
+        const nonAdRevenue = (metrics.organic_units_quantity || 0) * (product.price || 0);
+        const totalSpend = metrics.cost || 0;
+        
+        const roas = totalSpend > 0 ? adRevenue / totalSpend : null;
+        const ctr = (metrics.prints || 0) > 0 ? ((metrics.clicks || 0) / metrics.prints) * 100 : null;
+        const acos = adRevenue > 0 ? (totalSpend / adRevenue) * 100 : null;
+
         productAdsData.push({
+          ml_account_id,
+          student_id: account.student_id,
+          advertiser_id: advertiserId,
+          ml_item_id: product.ml_item_id,
+          title: product.title || itemData.title,
+          thumbnail: product.thumbnail || itemData.thumbnail,
+          price: product.price || itemData.price,
+          status: itemData.status,
+          campaign_id: itemData.campaign_id || null,
+          is_recommended: itemData.recommended || false,
+          total_sales: totalSales,
+          advertised_sales: advertisedSales,
+          non_advertised_sales: nonAdvertisedSales,
+          ad_revenue: adRevenue,
+          non_ad_revenue: nonAdRevenue,
+          total_spend: totalSpend,
+          roas: roas,
+          impressions: metrics.prints || 0,
+          clicks: metrics.clicks || 0,
+          ctr: ctr,
+          acos: acos,
+        });
+        
+      } catch (error) {
+        console.error(`[PRODUCT ADS SYNC] Error processing item ${product.ml_item_id}:`, error);
+        
+        // On error, save with zeroed metrics
+        productAdsData.push({
+          ml_account_id,
+          student_id: account.student_id,
+          advertiser_id: advertiserId,
           ml_item_id: product.ml_item_id,
           title: product.title,
           thumbnail: product.thumbnail,
           price: product.price,
-          status: adStatus,
-          is_recommended: isRecommended,
-          campaign_id: campaignId
+          status: 'error',
+          campaign_id: null,
+          is_recommended: false,
+          total_sales: 0,
+          advertised_sales: 0,
+          non_advertised_sales: 0,
+          ad_revenue: 0,
+          non_ad_revenue: 0,
+          total_spend: 0,
+          roas: null,
+          impressions: 0,
+          clicks: 0,
+          ctr: null,
+          acos: null,
         });
-
-      } catch (err) {
-        console.error(`[PRODUCT ADS SYNC] Error processing item ${product.ml_item_id}:`, err);
-        // Continue with next item
       }
     }
 
-    // Step 4: Get metrics for items (if we have any with campaigns)
-    const itemIds = productAdsData.map(p => p.ml_item_id).join(',');
-    const dateFrom = new Date();
-    dateFrom.setDate(dateFrom.getDate() - 30);
-    const dateTo = new Date();
-
-    let metricsMap = new Map();
-
-    // Fetch metrics for all items
-    if (itemIds) {
-      if (!advertiserId) {
-        console.error('[PRODUCT ADS SYNC] ❌ Cannot fetch metrics: advertiserId is null');
-        console.log('[PRODUCT ADS SYNC] Saving items without metrics...');
-      } else {
-        try {
-          const metricsUrl = `https://api.mercadolibre.com/advertising/pads/reports/${advertiserId}/item-metrics?date_from=${dateFrom.toISOString().split('T')[0]}&date_to=${dateTo.toISOString().split('T')[0]}&item_ids=${itemIds}`;
-          console.log('[PRODUCT ADS SYNC] Fetching metrics from:', metricsUrl);
-          
-          const metricsResponse = await fetch(metricsUrl, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-          });
-
-          console.log('[PRODUCT ADS SYNC] Metrics response status:', metricsResponse.status);
-
-          if (metricsResponse.ok) {
-            const metricsData = await metricsResponse.json();
-            console.log('[PRODUCT ADS SYNC] Metrics data received:', metricsData.results?.length || 0, 'items');
-            
-            if (metricsData.results && metricsData.results.length > 0) {
-              console.log(`[PRODUCT ADS SYNC] Found metrics for ${metricsData.results.length} items`);
-              for (const metric of metricsData.results) {
-                metricsMap.set(metric.item_id, {
-                  total_sales: metric.sales || 0,
-                  advertised_sales: metric.advertised_sales || 0,
-                  ad_revenue: metric.revenue || 0,
-                  total_spend: metric.cost || 0,
-                  impressions: metric.impressions || 0,
-                  clicks: metric.clicks || 0,
-                });
-              }
-            } else {
-              console.log('[PRODUCT ADS SYNC] ⚠️ API returned empty results');
-            }
-          } else {
-            const errorText = await metricsResponse.text();
-            console.error('[PRODUCT ADS SYNC] Metrics API error:', metricsResponse.status, errorText);
-          }
-        } catch (err) {
-          console.error('[PRODUCT ADS SYNC] Error fetching metrics:', err);
-        }
-      }
-    }
-
-    // Step 5: Calculate derived metrics and upsert data
-    const upsertData = [];
-
-    for (const item of productAdsData) {
-      const metrics = metricsMap.get(item.ml_item_id) || {
-        total_sales: 0,
-        advertised_sales: 0,
-        ad_revenue: 0,
-        total_spend: 0,
-        impressions: 0,
-        clicks: 0,
-      };
-
-      const nonAdvertisedSales = metrics.total_sales - metrics.advertised_sales;
-      const nonAdRevenue = item.price ? (nonAdvertisedSales * parseFloat(item.price.toString())) : 0;
-      const roas = metrics.total_spend > 0 ? metrics.ad_revenue / metrics.total_spend : null;
-      const ctr = metrics.impressions > 0 ? (metrics.clicks / metrics.impressions) * 100 : null;
-      const acos = metrics.ad_revenue > 0 ? (metrics.total_spend / metrics.ad_revenue) * 100 : null;
-
-      upsertData.push({
-        ml_account_id: ml_account_id,
-        student_id: account.student_id,
-        ml_item_id: item.ml_item_id,
-        advertiser_id: advertiserId,
-        campaign_id: item.campaign_id,
-        title: item.title,
-        thumbnail: item.thumbnail,
-        status: item.status,
-        is_recommended: item.is_recommended,
-        price: item.price,
-        total_sales: metrics.total_sales,
-        advertised_sales: metrics.advertised_sales,
-        non_advertised_sales: nonAdvertisedSales,
-        ad_revenue: metrics.ad_revenue,
-        non_ad_revenue: nonAdRevenue,
-        total_spend: metrics.total_spend,
-        roas: roas,
-        impressions: metrics.impressions,
-        clicks: metrics.clicks,
-        ctr: ctr,
-        acos: acos,
-        synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    // Batch upsert
-    if (upsertData.length > 0) {
+    // Step 5: Upsert data
+    if (productAdsData.length > 0) {
       const { error: upsertError } = await supabase
         .from('mercado_livre_product_ads')
-        .upsert(upsertData, {
+        .upsert(productAdsData, {
           onConflict: 'ml_account_id,ml_item_id',
           ignoreDuplicates: false
         });
@@ -309,19 +368,23 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[PRODUCT ADS SYNC] ✅ Successfully synced ${upsertData.length} product ads items`);
+    console.log(`[PRODUCT ADS SYNC] ✅ Successfully synced ${productAdsData.length} product ads items`);
     console.log(`[PRODUCT ADS SYNC] Summary:`);
     console.log(`  - Total products: ${products.length}`);
-    console.log(`  - Recommended: ${upsertData.filter(i => i.is_recommended).length}`);
-    console.log(`  - Active campaigns: ${upsertData.filter(i => i.campaign_id).length}`);
+    console.log(`  - Recommended: ${productAdsData.filter(i => i.is_recommended).length}`);
+    console.log(`  - Active campaigns: ${productAdsData.filter(i => i.campaign_id).length}`);
+    console.log(`  - Not in campaigns: ${productAdsData.filter(i => i.status === 'not_in_campaign').length}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        items_synced: upsertData.length,
+        items_synced: productAdsData.length,
         has_product_ads: true,
+        has_active_campaigns: true,
         advertiser_id: advertiserId,
-        recommended_count: upsertData.filter(i => i.is_recommended).length
+        recommended_count: productAdsData.filter(i => i.is_recommended).length,
+        in_campaigns: productAdsData.filter(i => i.campaign_id).length,
+        not_in_campaigns: productAdsData.filter(i => i.status === 'not_in_campaign').length
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

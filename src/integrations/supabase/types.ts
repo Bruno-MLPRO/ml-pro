@@ -164,6 +164,7 @@ export type Database = {
           advertiser_id: string | null
           connected_at: string | null
           created_at: string | null
+          has_active_campaigns: boolean | null
           has_product_ads_enabled: boolean | null
           id: string
           is_active: boolean | null
@@ -181,6 +182,7 @@ export type Database = {
           advertiser_id?: string | null
           connected_at?: string | null
           created_at?: string | null
+          has_active_campaigns?: boolean | null
           has_product_ads_enabled?: boolean | null
           id?: string
           is_active?: boolean | null
@@ -198,6 +200,7 @@ export type Database = {
           advertiser_id?: string | null
           connected_at?: string | null
           created_at?: string | null
+          has_active_campaigns?: boolean | null
           has_product_ads_enabled?: boolean | null
           id?: string
           is_active?: boolean | null
@@ -1423,7 +1426,7 @@ export type Database = {
     }
     Functions: {
       get_all_ml_accounts_safe: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           connected_at: string | null
           created_at: string | null
@@ -1437,6 +1440,12 @@ export type Database = {
           token_expires_at: string | null
           updated_at: string | null
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "mercado_livre_accounts_safe"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_student_ml_accounts_safe: {
         Args: { student_uuid: string }
@@ -1453,6 +1462,12 @@ export type Database = {
           token_expires_at: string | null
           updated_at: string | null
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "mercado_livre_accounts_safe"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       has_role: {
         Args: {
@@ -1462,7 +1477,7 @@ export type Database = {
         Returns: boolean
       }
       initialize_student_milestones_from_templates: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: undefined
       }
     }

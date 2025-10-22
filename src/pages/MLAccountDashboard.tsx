@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ReputationBadge } from "@/components/ReputationBadge";
 import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ interface MLAccount {
   token_expires_at: string;
   has_product_ads_enabled: boolean | null;
   advertiser_id: string | null;
+  has_active_campaigns: boolean | null;
 }
 
 interface MLMetrics {
@@ -161,6 +162,7 @@ export default function MLAccountDashboard() {
   const [productAds, setProductAds] = useState<ProductAd[]>([]);
   const [productAdsLoading, setProductAdsLoading] = useState(false);
   const [hasProductAds, setHasProductAds] = useState<boolean | null>(null);
+  const [hasActiveCampaigns, setHasActiveCampaigns] = useState<boolean | null>(null);
   const [checkingProductAds, setCheckingProductAds] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
 
@@ -341,7 +343,7 @@ export default function MLAccountDashboard() {
     try {
       const { data, error } = await supabase
         .from('mercado_livre_accounts')
-        .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at, token_expires_at, has_product_ads_enabled, advertiser_id')
+        .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at, token_expires_at, has_product_ads_enabled, advertiser_id, has_active_campaigns')
         .eq('student_id', user?.id)
         .eq('is_active', true)
         .order('is_primary', { ascending: false });
@@ -486,18 +488,20 @@ export default function MLAccountDashboard() {
 
       setProductAds(data || []);
       
-      // Check if user has product ads enabled
+      // Check if user has product ads enabled and active campaigns
       const { data: accountData } = await supabase
         .from('mercado_livre_accounts')
-        .select('has_product_ads_enabled')
+        .select('has_product_ads_enabled, has_active_campaigns')
         .eq('id', accountId)
         .single();
 
       setHasProductAds(accountData?.has_product_ads_enabled || false);
+      setHasActiveCampaigns(accountData?.has_active_campaigns);
     } catch (error: any) {
       console.error('Error loading product ads:', error);
       setProductAds([]);
       setHasProductAds(null);
+      setHasActiveCampaigns(null);
     }
   };
 
@@ -542,6 +546,7 @@ export default function MLAccountDashboard() {
 
       if (data.has_product_ads === false) {
         setHasProductAds(false);
+        setHasActiveCampaigns(null);
         toast.warning('Product Ads não habilitado', {
           description: 'Esta conta ainda não tem acesso ao Product Ads do Mercado Livre'
         });
@@ -549,9 +554,17 @@ export default function MLAccountDashboard() {
       }
 
       setHasProductAds(true);
-      toast.success('✅ Dados Sincronizados!', {
-        description: `${data.items_synced} anúncios atualizados`
-      });
+      setHasActiveCampaigns(data.has_active_campaigns);
+      
+      if (data.has_active_campaigns === false) {
+        toast.warning('⚠️ Sem Campanhas Ativas', {
+          description: 'Product Ads está habilitado, mas você não tem campanhas ativas no momento'
+        });
+      } else {
+        toast.success('✅ Dados Sincronizados!', {
+          description: `${data.items_synced} anúncios atualizados. ${data.in_campaigns || 0} em campanhas.`
+        });
+      }
 
       await loadProductAds(selectedAccountId);
     } catch (error: any) {
@@ -1393,6 +1406,28 @@ export default function MLAccountDashboard() {
                     </div>
                   </CardContent>
                 </Card>
+              ) : hasProductAds && hasActiveCampaigns === false ? (
+                <Alert className="border-yellow-500 bg-yellow-50">
+                  <AlertCircle className="h-4 w-4 text-yellow-600" />
+                  <AlertTitle className="text-yellow-800">Product Ads habilitado sem campanhas ativas</AlertTitle>
+                  <AlertDescription className="text-yellow-700">
+                    <p className="mb-3">
+                      Sua conta tem acesso ao Product Ads, mas você ainda não criou campanhas ativas com produtos anunciados.
+                    </p>
+                    <div className="bg-white p-4 rounded border border-yellow-200">
+                      <p className="font-medium mb-2">📋 Como criar sua primeira campanha:</p>
+                      <ol className="list-decimal ml-4 space-y-2 text-sm">
+                        <li>Acesse o <a href="https://www.mercadolivre.com.br" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">painel do Mercado Livre</a></li>
+                        <li>Vá em <strong>"Anúncios"</strong> → <strong>"Product Ads"</strong></li>
+                        <li>Clique em <strong>"Criar campanha"</strong></li>
+                        <li>Adicione seus produtos à campanha</li>
+                        <li>Defina seu orçamento e estratégia</li>
+                        <li>Ative a campanha</li>
+                        <li>Volte aqui e clique em <strong>"Sincronizar Dados"</strong></li>
+                      </ol>
+                    </div>
+                  </AlertDescription>
+                </Alert>
               ) : productAds.length === 0 ? (
                 <Card>
                   <CardContent className="p-12 text-center">

@@ -291,8 +291,9 @@ export default function StudentsManagement() {
     // Fetch Mercado Livre metrics for all students
     const { data: mlMetricsData } = await supabase
       .from("mercado_livre_metrics")
-      .select("student_id, has_decola, has_full")
-      .in("student_id", filteredStudentIds);
+      .select("student_id, has_decola, has_full, ml_account_id, updated_at")
+      .in("student_id", filteredStudentIds)
+      .order("updated_at", { ascending: false });
 
     // Fetch Mercado Livre products to check for FLEX
     const { data: mlProductsData } = await supabase
@@ -376,8 +377,15 @@ export default function StudentsManagement() {
         .flat()
         .filter(Boolean) || [];
 
-      // Calculate ML indicators
-      const studentMetrics = mlMetricsData?.filter(m => m.student_id === profile.id) || [];
+      // Calculate ML indicators with deduplication
+      const studentMetricsRaw = mlMetricsData?.filter(m => m.student_id === profile.id) || [];
+      const studentMetrics = studentMetricsRaw.reduce((acc, curr) => {
+        const existing = acc.find(m => m.ml_account_id === curr.ml_account_id);
+        if (!existing) {
+          acc.push(curr);
+        }
+        return acc;
+      }, [] as typeof studentMetricsRaw);
       const has_ml_decola = studentMetrics.some(m => m.has_decola === true);
       const has_ml_full = studentMetrics.some(m => m.has_full === true);
       
@@ -387,9 +395,9 @@ export default function StudentsManagement() {
         p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
       );
 
-      // Check if student has agencies (has produtos with shipping via agency)
+      // Check if student has agencies (products with drop_off logistic type)
       const has_agencies = studentProducts.some(p => 
-        p.shipping_mode === 'custom'
+        p.logistic_type === 'drop_off'
       );
 
       // Get manager name

@@ -91,6 +91,7 @@ const StudentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [connectingML, setConnectingML] = useState(false);
+  const [orderCount, setOrderCount] = useState<number | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -406,27 +407,45 @@ const StudentDashboard = () => {
           periodEnd: new Date().toISOString()
         });
 
-        // Buscar pedidos DIRETO do período (filtro no banco)
+        /**
+         * IMPORTANTE: Buscar pedidos com limite explícito
+         * 
+         * Supabase tem limite padrão de 1000 linhas se não especificar .limit()
+         * 
+         * Limites configurados:
+         * - Atual: 10.000 pedidos
+         * - Se ultrapassar: Implementar paginação
+         * 
+         * Filtros aplicados:
+         * - student_id: Apenas pedidos do aluno logado
+         * - status: 'paid' (apenas vendas confirmadas)
+         * - date_created: Últimos {selectedPeriod} dias
+         */
         const { data: orders, error: ordersError, count } = await supabase
           .from('mercado_livre_orders')
-          .select('total_amount, paid_amount, date_created', { count: 'exact' })
+          .select('total_amount, paid_amount, date_created, ml_order_id', { count: 'exact' })
           .eq('student_id', user.id)
           .eq('status', 'paid')
           .gte('date_created', periodStart.toISOString())
           .order('date_created', { ascending: false })
+          .limit(10000)
         
         if (ordersError) {
           console.error('❌ Error loading orders:', ordersError)
           return
         }
 
+        // Armazenar count para uso na UI
+        setOrderCount(count || null);
+
         // ⚠️ Validação: Verificar se há mais dados do que o retornado
         if (count && count > (orders?.length || 0)) {
           console.warn(`⚠️ AVISO: Há ${count} pedidos no período, mas apenas ${orders?.length} foram retornados!`);
           toast({
-            title: "Aviso: Muitos pedidos",
-            description: `Há ${count} pedidos neste período. Mostrando os ${orders?.length} mais recentes.`,
-            variant: "default",
+            title: "⚠️ Limite atingido",
+            description: `Há ${count.toLocaleString('pt-BR')} pedidos neste período, mas apenas ${(orders?.length || 0).toLocaleString('pt-BR')} foram carregados. Entre em contato com o suporte para aumentar o limite.`,
+            variant: "destructive",
+            duration: 10000,
           });
         }
         
@@ -435,12 +454,47 @@ const StudentDashboard = () => {
         const totalRevenue = orders?.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) || 0
         const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0
 
+        // Validar se há valores suspeitos
+        const suspiciousOrders = orders?.filter(o => 
+          !o.total_amount || 
+          o.total_amount <= 0 || 
+          o.total_amount > 100000 // Pedidos acima de R$ 100k são suspeitos
+        );
+
+        if (suspiciousOrders && suspiciousOrders.length > 0) {
+          console.warn('⚠️ Pedidos com valores suspeitos encontrados:', suspiciousOrders);
+        }
+
+        // Verificar duplicidades
+        const orderIds = orders?.map(o => o.ml_order_id) || [];
+        const uniqueOrderIds = new Set(orderIds);
+
+        if (orderIds.length !== uniqueOrderIds.size) {
+          const duplicatesCount = orderIds.length - uniqueOrderIds.size;
+          console.error('🚨 DUPLICIDADES DETECTADAS!', {
+            totalOrders: orderIds.length,
+            uniqueOrders: uniqueOrderIds.size,
+            duplicates: duplicatesCount
+          });
+          
+          toast({
+            title: "⚠️ Dados duplicados detectados",
+            description: `${duplicatesCount} pedido(s) duplicado(s) encontrado(s). Entre em contato com o suporte.`,
+            variant: "destructive",
+          });
+        }
+
         console.log('📊 Métricas calculadas do aluno:', {
           selectedPeriod: `${selectedPeriod} dias`,
+          periodStart: periodStart.toISOString(),
+          periodEnd: new Date().toISOString(),
+          totalOrders: orders?.length,
+          totalCount: count,
           totalSales,
           totalRevenue: totalRevenue.toFixed(2),
           averageTicket: averageTicket.toFixed(2),
-          ordersCount: orders?.length
+          limitReached: count && count > (orders?.length || 0),
+          percentageLoaded: count ? ((orders?.length || 0) / count * 100).toFixed(1) + '%' : '100%'
         });
         
         // Pegar outras métricas da primeira conta (não dependem de período)
@@ -759,6 +813,11 @@ const StudentDashboard = () => {
                       <div className="flex items-center gap-2 mb-2">
                         <ShoppingCart className="w-5 h-5 text-primary" />
                         <span className="text-sm text-foreground-secondary">Número de vendas</span>
+                        {orderCount && orderCount > (consolidatedMetrics?.total_sales || 0) && (
+                          <Badge variant="destructive" className="text-xs">
+                            Limitado
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-3xl font-bold text-foreground">
                         {consolidatedMetrics?.total_sales || 0}
@@ -766,6 +825,11 @@ const StudentDashboard = () => {
                       <p className="text-xs text-foreground-secondary mt-1">
                         Últimos {selectedPeriod} dias
                       </p>
+                      {orderCount && orderCount > (consolidatedMetrics?.total_sales || 0) && (
+                        <p className="text-xs text-destructive mt-1 font-semibold">
+                          ⚠️ Mostrando {(consolidatedMetrics?.total_sales || 0).toLocaleString('pt-BR')} de {orderCount.toLocaleString('pt-BR')} pedidos
+                        </p>
+                      )}
                     </div>
                     
                     <div className="p-6 rounded-lg border border-border bg-background-elevated">

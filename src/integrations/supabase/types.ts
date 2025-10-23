@@ -1601,6 +1601,75 @@ export type Database = {
           },
         ]
       }
+      student_monthly_metrics: {
+        Row: {
+          ads_acos: number | null
+          ads_roas: number | null
+          ads_total_revenue: number | null
+          ads_total_sales: number | null
+          ads_total_spend: number | null
+          average_ticket: number | null
+          calculated_at: string | null
+          id: string
+          period_end: string
+          period_start: string
+          reference_month: string
+          shipping_agencias: number | null
+          shipping_coleta: number | null
+          shipping_correios: number | null
+          shipping_flex: number | null
+          shipping_full: number | null
+          student_id: string
+          total_revenue: number | null
+          total_sales: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          ads_acos?: number | null
+          ads_roas?: number | null
+          ads_total_revenue?: number | null
+          ads_total_sales?: number | null
+          ads_total_spend?: number | null
+          average_ticket?: number | null
+          calculated_at?: string | null
+          id?: string
+          period_end: string
+          period_start: string
+          reference_month: string
+          shipping_agencias?: number | null
+          shipping_coleta?: number | null
+          shipping_correios?: number | null
+          shipping_flex?: number | null
+          shipping_full?: number | null
+          student_id: string
+          total_revenue?: number | null
+          total_sales?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          ads_acos?: number | null
+          ads_roas?: number | null
+          ads_total_revenue?: number | null
+          ads_total_sales?: number | null
+          ads_total_spend?: number | null
+          average_ticket?: number | null
+          calculated_at?: string | null
+          id?: string
+          period_end?: string
+          period_start?: string
+          reference_month?: string
+          shipping_agencias?: number | null
+          shipping_coleta?: number | null
+          shipping_correios?: number | null
+          shipping_flex?: number | null
+          shipping_full?: number | null
+          student_id?: string
+          total_revenue?: number | null
+          total_sales?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

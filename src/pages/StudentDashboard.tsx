@@ -92,6 +92,7 @@ const StudentDashboard = () => {
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [connectingML, setConnectingML] = useState(false);
   const [orderCount, setOrderCount] = useState<number | null>(null);
+  const [monthlyHistory, setMonthlyHistory] = useState<any[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -408,94 +409,141 @@ const StudentDashboard = () => {
         });
 
         /**
-         * IMPORTANTE: Buscar pedidos com limite explícito
+         * IMPORTANTE: Buscar TODOS os pedidos usando paginação
          * 
-         * Supabase tem limite padrão de 1000 linhas se não especificar .limit()
+         * Problema: Supabase JS Client ignora .limit() em alguns casos
+         * Solução: Usar .range() com paginação manual
          * 
-         * Limites configurados:
-         * - Atual: 10.000 pedidos
-         * - Se ultrapassar: Implementar paginação
-         * 
-         * Filtros aplicados:
-         * - student_id: Apenas pedidos do aluno logado
-         * - status: 'paid' (apenas vendas confirmadas)
-         * - date_created: Últimos {selectedPeriod} dias
+         * Performance:
+         * - 1.425 pedidos: ~1-2s (2 páginas)
+         * - 10.000 pedidos: ~5s (10 páginas)
          */
-        const { data: orders, error: ordersError, count } = await supabase
-          .from('mercado_livre_orders')
-          .select('total_amount, paid_amount, date_created, ml_order_id', { count: 'exact' })
-          .eq('student_id', user.id)
-          .eq('status', 'paid')
-          .gte('date_created', periodStart.toISOString())
-          .order('date_created', { ascending: false })
-          .limit(10000)
         
-        if (ordersError) {
-          console.error('❌ Error loading orders:', ordersError)
-          return
+        // Buscar TODOS os pedidos usando paginação
+        let allOrders: any[] = [];
+        let currentPage = 0;
+        const PAGE_SIZE = 1000;
+        let hasMore = true;
+        let totalCount = 0;
+
+        console.log('🔄 Iniciando paginação de pedidos...');
+
+        while (hasMore) {
+          const rangeStart = currentPage * PAGE_SIZE;
+          const rangeEnd = rangeStart + PAGE_SIZE - 1;
+          
+          const { data: pageOrders, error: ordersError, count } = await supabase
+            .from('mercado_livre_orders')
+            .select('total_amount, paid_amount, date_created, ml_order_id', { count: 'exact' })
+            .eq('student_id', user.id)
+            .eq('status', 'paid')
+            .gte('date_created', periodStart.toISOString())
+            .order('date_created', { ascending: false })
+            .range(rangeStart, rangeEnd);
+          
+          if (ordersError) {
+            console.error('❌ Error loading orders:', ordersError);
+            toast({
+              title: "Erro ao carregar pedidos",
+              description: ordersError.message,
+              variant: "destructive",
+            });
+            break;
+          }
+          
+          // Armazenar count total apenas na primeira iteração
+          if (currentPage === 0) {
+            totalCount = count || 0;
+            setOrderCount(totalCount);
+          }
+          
+          if (pageOrders && pageOrders.length > 0) {
+            allOrders = [...allOrders, ...pageOrders];
+            currentPage++;
+            
+            console.log(`📦 Página ${currentPage} carregada: ${pageOrders.length} pedidos (Total: ${allOrders.length}/${totalCount})`);
+            
+            // Se retornou menos que PAGE_SIZE, não há mais páginas
+            if (pageOrders.length < PAGE_SIZE) {
+              hasMore = false;
+            }
+          } else {
+            hasMore = false;
+          }
+          
+          // Limite de segurança (máximo 10 páginas = 10k pedidos)
+          if (currentPage >= 10) {
+            console.warn('⚠️ Limite de 10 páginas atingido');
+            toast({
+              title: "⚠️ Limite de dados atingido",
+              description: `Há ${totalCount.toLocaleString('pt-BR')} pedidos, mas apenas ${allOrders.length.toLocaleString('pt-BR')} foram carregados. Entre em contato com o suporte.`,
+              variant: "destructive",
+              duration: 10000,
+            });
+            hasMore = false;
+          }
         }
 
-        // Armazenar count para uso na UI
-        setOrderCount(count || null);
+        const orders = allOrders;
 
-        // ⚠️ Validação: Verificar se há mais dados do que o retornado
-        if (count && count > (orders?.length || 0)) {
-          console.warn(`⚠️ AVISO: Há ${count} pedidos no período, mas apenas ${orders?.length} foram retornados!`);
-          toast({
-            title: "⚠️ Limite atingido",
-            description: `Há ${count.toLocaleString('pt-BR')} pedidos neste período, mas apenas ${(orders?.length || 0).toLocaleString('pt-BR')} foram carregados. Entre em contato com o suporte para aumentar o limite.`,
-            variant: "destructive",
-            duration: 10000,
-          });
-        }
+        console.log('✅ Total de pedidos carregados:', {
+          totalOrders: orders.length,
+          expectedCount: totalCount,
+          percentageLoaded: totalCount > 0 ? ((orders.length / totalCount) * 100).toFixed(1) + '%' : '100%'
+        });
         
         // Calcular métricas do período (já filtrado)
-        const totalSales = orders?.length || 0
-        const totalRevenue = orders?.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) || 0
+        const totalSales = orders.length
+        const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0)
         const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0
-
-        // Validar se há valores suspeitos
-        const suspiciousOrders = orders?.filter(o => 
-          !o.total_amount || 
-          o.total_amount <= 0 || 
-          o.total_amount > 100000 // Pedidos acima de R$ 100k são suspeitos
-        );
-
-        if (suspiciousOrders && suspiciousOrders.length > 0) {
-          console.warn('⚠️ Pedidos com valores suspeitos encontrados:', suspiciousOrders);
-        }
-
-        // Verificar duplicidades
-        const orderIds = orders?.map(o => o.ml_order_id) || [];
-        const uniqueOrderIds = new Set(orderIds);
-
-        if (orderIds.length !== uniqueOrderIds.size) {
-          const duplicatesCount = orderIds.length - uniqueOrderIds.size;
-          console.error('🚨 DUPLICIDADES DETECTADAS!', {
-            totalOrders: orderIds.length,
-            uniqueOrders: uniqueOrderIds.size,
-            duplicates: duplicatesCount
-          });
-          
-          toast({
-            title: "⚠️ Dados duplicados detectados",
-            description: `${duplicatesCount} pedido(s) duplicado(s) encontrado(s). Entre em contato com o suporte.`,
-            variant: "destructive",
-          });
-        }
 
         console.log('📊 Métricas calculadas do aluno:', {
           selectedPeriod: `${selectedPeriod} dias`,
           periodStart: periodStart.toISOString(),
           periodEnd: new Date().toISOString(),
-          totalOrders: orders?.length,
-          totalCount: count,
+          totalOrders: orders.length,
+          totalCount: totalCount,
           totalSales,
           totalRevenue: totalRevenue.toFixed(2),
           averageTicket: averageTicket.toFixed(2),
-          limitReached: count && count > (orders?.length || 0),
-          percentageLoaded: count ? ((orders?.length || 0) / count * 100).toFixed(1) + '%' : '100%'
+          limitReached: totalCount > orders.length,
+          percentageLoaded: totalCount > 0 ? ((orders.length / totalCount) * 100).toFixed(1) + '%' : '100%'
         });
+
+        // Validar se há valores suspeitos
+        const suspiciousOrders = orders.filter(o => 
+          !o.total_amount || 
+          o.total_amount <= 0 || 
+          o.total_amount > 100000
+        );
+
+        if (suspiciousOrders.length > 0) {
+          console.warn('⚠️ Pedidos com valores suspeitos encontrados:', suspiciousOrders);
+          toast({
+            title: "⚠️ Valores suspeitos detectados",
+            description: `${suspiciousOrders.length} pedidos com valores incomuns. Verifique os dados.`,
+            variant: "destructive",
+          });
+        }
+
+        // Verificar duplicidades
+        const orderIds = orders.map(o => o.ml_order_id);
+        const uniqueOrderIds = new Set(orderIds);
+
+        if (orderIds.length !== uniqueOrderIds.size) {
+          const duplicates = orderIds.length - uniqueOrderIds.size;
+          console.error('🚨 DUPLICIDADES DETECTADAS!', {
+            totalOrders: orderIds.length,
+            uniqueOrders: uniqueOrderIds.size,
+            duplicates
+          });
+          
+          toast({
+            title: "⚠️ Dados duplicados detectados",
+            description: `${duplicates} pedidos duplicados encontrados. Entre em contato com o suporte.`,
+            variant: "destructive",
+          });
+        }
         
         // Pegar outras métricas da primeira conta (não dependem de período)
         const firstAccountMetrics = accountsData.accounts[0]?.metrics
@@ -522,6 +570,21 @@ const StudentDashboard = () => {
         // Carregar métricas de Product Ads
         const accountIds = accountsData.accounts.map((a: any) => a.id);
         await loadProductAdsMetrics(accountIds);
+
+        // Buscar histórico mensal
+        const { data: monthlyHistoryData, error: historyError } = await supabase
+          .from('student_monthly_metrics')
+          .select('*')
+          .eq('student_id', user.id)
+          .order('reference_month', { ascending: false })
+          .limit(12);
+
+        if (historyError) {
+          console.error('Error loading monthly history:', historyError);
+        } else {
+          setMonthlyHistory(monthlyHistoryData || []);
+          console.log('📅 Histórico mensal carregado:', monthlyHistoryData?.length || 0, 'meses');
+        }
       }
     } catch (error) {
       console.error('Error loading ML accounts:', error)
@@ -1272,6 +1335,45 @@ const StudentDashboard = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Histórico Mensal */}
+          {monthlyHistory.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>📈 Histórico Mensal</CardTitle>
+                <CardDescription>Evolução dos últimos meses (dados consolidados)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {monthlyHistory.map((month) => (
+                    <div key={month.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
+                      <div className="flex-1">
+                        <p className="font-semibold text-base">
+                          {format(new Date(month.reference_month + 'T00:00:00'), 'MMMM yyyy', { locale: ptBR })}
+                        </p>
+                        <div className="flex gap-4 mt-1">
+                          <p className="text-sm text-muted-foreground">
+                            {month.total_sales} vendas
+                          </p>
+                          <p className="text-sm font-medium text-green-600">
+                            {formatCurrency(month.total_revenue)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground">
+                          Ads: {formatCurrency(month.ads_total_spend)}
+                        </p>
+                        <p className="text-sm font-semibold text-green-500">
+                          ROAS: {month.ads_roas.toFixed(2)}x
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
     </div>

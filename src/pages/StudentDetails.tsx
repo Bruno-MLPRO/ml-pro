@@ -1006,15 +1006,17 @@ export default function StudentDetails() {
                             {/* FULL */}
                             <Card className={metrics.has_full ? "bg-muted/50" : ""}>
                               <CardHeader>
-                                <CardTitle className="text-sm flex items-center gap-2">
-                                  <Package className="w-4 h-4" />
-                                  Mercado Livre FULL
+                                <CardTitle className="text-sm flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Package className="w-4 h-4" />
+                                    Mercado Livre FULL
+                                  </div>
+                                  {metrics.has_full && <Badge variant="default" className="text-xs">Ativo</Badge>}
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
                                 {metrics.has_full && fullFinancials ? (
                                   <div className="space-y-3">
-                                    <Badge variant="default" className="mb-2">Ativo</Badge>
                                     
                                     {/* Layout em 2 colunas */}
                                     <div className="grid grid-cols-2 gap-4">

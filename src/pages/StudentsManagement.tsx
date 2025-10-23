@@ -245,12 +245,33 @@ export default function StudentsManagement() {
 
     if (!rolesData) return;
 
-    const studentIds = rolesData.map((r) => r.user_id);
+    const allStudentIds = rolesData.map((r) => r.user_id);
+
+    // Fetch journey data for each student
+    let journeysQuery = supabase
+      .from("student_journeys")
+      .select("id, student_id, current_phase, manager_id")
+      .in("student_id", allStudentIds);
+
+    // Filter by manager_id if user is a manager (not administrator)
+    if (userRole === 'manager' && user?.id) {
+      journeysQuery = journeysQuery.eq('manager_id', user.id);
+    }
+
+    const { data: journeysData } = await journeysQuery;
+
+    // Get only the student IDs that match the filtered journeys
+    const filteredStudentIds = journeysData?.map(j => j.student_id) || [];
+
+    if (filteredStudentIds.length === 0) {
+      setStudents([]);
+      return;
+    }
 
     const { data: profilesData, error } = await supabase
       .from("profiles")
       .select("*")
-      .in("id", studentIds);
+      .in("id", filteredStudentIds);
 
     if (error) {
       toast({
@@ -261,12 +282,6 @@ export default function StudentsManagement() {
       return;
     }
 
-    // Fetch journey data for each student
-    const { data: journeysData } = await supabase
-      .from("student_journeys")
-      .select("id, student_id, current_phase, manager_id")
-      .in("student_id", studentIds);
-
     // Fetch all milestones for these students
     const journeyIds = journeysData?.map(j => j.id) || [];
 
@@ -274,19 +289,19 @@ export default function StudentsManagement() {
     const { data: studentAppsData } = await supabase
       .from("student_apps")
       .select("student_id, apps_extensions(id, name, color)")
-      .in("student_id", studentIds);
+      .in("student_id", filteredStudentIds);
 
     // Fetch Mercado Livre metrics for all students
     const { data: mlMetricsData } = await supabase
       .from("mercado_livre_metrics")
       .select("student_id, has_decola, has_full")
-      .in("student_id", studentIds);
+      .in("student_id", filteredStudentIds);
 
     // Fetch Mercado Livre products to check for FLEX
     const { data: mlProductsData } = await supabase
       .from("mercado_livre_products")
       .select("student_id, shipping_mode, logistic_type")
-      .in("student_id", studentIds);
+      .in("student_id", filteredStudentIds);
 
     if (journeyIds.length === 0) {
       setStudents(profilesData || []);

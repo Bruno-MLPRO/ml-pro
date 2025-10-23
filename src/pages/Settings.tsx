@@ -13,11 +13,26 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 
 export default function Settings() {
-  const { userRole } = useAuth();
+  const { userRole, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  // Redirect if not administrator
+  useEffect(() => {
+    if (!authLoading && userRole !== 'administrator') {
+      navigate('/gestor/dashboard');
+      toast({
+        title: "Acesso negado",
+        description: "Apenas administradores podem acessar configurações.",
+        variant: "destructive",
+      });
+    }
+  }, [authLoading, userRole, navigate, toast]);
   
   // Plans state
   const [isCreatePlanOpen, setIsCreatePlanOpen] = useState(false);

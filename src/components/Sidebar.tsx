@@ -18,7 +18,7 @@ export const Sidebar = () => {
 
       {/* Menu Items */}
       <nav className="flex-1 flex flex-col gap-2">
-      {userRole === 'manager' ? (
+      {userRole === 'administrator' ? (
           <>
             <Button
               variant="ghost"
@@ -103,6 +103,51 @@ export const Sidebar = () => {
               title="Configurações"
             >
               <Settings className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+          </>
+        ) : userRole === 'manager' ? (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/gestor/dashboard')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/gestor/dashboard'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Dashboard"
+            >
+              <Home className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/gestor/alunos')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/gestor/alunos'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Alunos"
+            >
+              <GraduationCap className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/perfil')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/perfil'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Perfil"
+            >
+              <User className="w-5 h-5" strokeWidth={1.5} />
             </Button>
           </>
         ) : (

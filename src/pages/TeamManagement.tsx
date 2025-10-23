@@ -73,13 +73,13 @@ export default function TeamManagement() {
   });
 
   useEffect(() => {
-    if (!authLoading && (!user || userRole !== 'manager')) {
+    if (!authLoading && (!user || (userRole !== 'manager' && userRole !== 'administrator'))) {
       navigate('/auth');
     }
   }, [user, userRole, authLoading, navigate]);
 
   useEffect(() => {
-    if (user && userRole === 'manager') {
+    if (user && (userRole === 'manager' || userRole === 'administrator')) {
       loadManagers();
       loadStudents();
     }

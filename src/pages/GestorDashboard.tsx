@@ -68,12 +68,12 @@ const GestorDashboard = () => {
   const [callForm, setCallForm] = useState({ date: "", theme: "", description: "" });
 
   useEffect(() => {
-    if (!authLoading && (!user || userRole !== 'manager')) {
+    if (!authLoading && (!user || (userRole !== 'manager' && userRole !== 'administrator'))) {
       navigate('/auth');
       return;
     }
 
-    if (user && userRole === 'manager') {
+    if (user && (userRole === 'manager' || userRole === 'administrator')) {
       loadData();
     }
   }, [user, userRole, authLoading, navigate]);

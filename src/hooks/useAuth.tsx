@@ -6,10 +6,10 @@ import { useNavigate } from 'react-router-dom';
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  userRole: 'student' | 'manager' | null;
+  userRole: 'student' | 'manager' | 'administrator' | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string, role: 'student' | 'manager') => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, role: 'student' | 'manager' | 'administrator') => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -18,7 +18,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [userRole, setUserRole] = useState<'student' | 'manager' | null>(null);
+  const [userRole, setUserRole] = useState<'student' | 'manager' | 'administrator' | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -86,7 +86,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, role: 'student' | 'manager') => {
+  const signUp = async (email: string, password: string, fullName: string, role: 'student' | 'manager' | 'administrator') => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({

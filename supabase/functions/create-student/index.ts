@@ -69,23 +69,23 @@ Deno.serve(async (req) => {
 
     console.log('User authenticated:', user.id);
 
-    // Check if user has manager role
+    // Check if user has manager or administrator role
     const { data: roleData, error: roleError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .eq('role', 'manager')
+      .in('role', ['manager', 'administrator'])
       .maybeSingle();
 
     if (roleError || !roleData) {
-      console.error('User is not a manager:', roleError?.message || 'No manager role found');
+      console.error('User is not a manager or administrator:', roleError?.message || 'No role found');
       return new Response(
-        JSON.stringify({ error: 'Apenas gestores podem criar alunos' }),
+        JSON.stringify({ error: 'Apenas gestores e administradores podem criar alunos' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Manager role verified for user:', user.id);
+    console.log('Manager/Administrator role verified for user:', user.id);
 
     // Parse request body
     const body = await req.json() as CreateStudentRequest;

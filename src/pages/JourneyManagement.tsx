@@ -235,12 +235,12 @@ const JourneyManagement = () => {
   });
 
   useEffect(() => {
-    if (!authLoading && (!user || userRole !== 'manager')) {
+    if (!authLoading && (!user || (userRole !== 'manager' && userRole !== 'administrator'))) {
       navigate('/auth');
       return;
     }
 
-    if (user && userRole === 'manager') {
+    if (user && (userRole === 'manager' || userRole === 'administrator')) {
       loadJourneyTemplates();
     }
   }, [user, userRole, authLoading, navigate]);

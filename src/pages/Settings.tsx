@@ -67,7 +67,7 @@ export default function Settings() {
       if (error) throw error;
       return data;
     },
-    enabled: userRole === "manager",
+    enabled: userRole === "manager" || userRole === "administrator",
   });
 
   // Fetch bonus
@@ -82,7 +82,7 @@ export default function Settings() {
       if (error) throw error;
       return data;
     },
-    enabled: userRole === "manager",
+    enabled: userRole === "manager" || userRole === "administrator",
   });
 
   // Fetch apps/extensions
@@ -97,7 +97,7 @@ export default function Settings() {
       if (error) throw error;
       return data;
     },
-    enabled: userRole === "manager",
+    enabled: userRole === "manager" || userRole === "administrator",
   });
 
   // Create plan with bonus
@@ -462,7 +462,7 @@ export default function Settings() {
     setAppFormData({ name: "", url: "", description: "", price: "", color: "#3B82F6", coupon: "" });
   };
 
-  if (userRole !== "manager") {
+  if (userRole !== "manager" && userRole !== "administrator") {
     return null;
   }
 

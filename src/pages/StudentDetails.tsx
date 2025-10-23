@@ -690,7 +690,7 @@ export default function StudentDetails() {
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="visao-geral">
                 <Home className="w-4 h-4 mr-2" />
                 Visão Geral
@@ -698,10 +698,6 @@ export default function StudentDetails() {
               <TabsTrigger value="contas-ml">
                 <ShoppingCart className="w-4 h-4 mr-2" />
                 Contas ML
-              </TabsTrigger>
-              <TabsTrigger value="apps">
-                <Package className="w-4 h-4 mr-2" />
-                Apps
               </TabsTrigger>
               <TabsTrigger value="jornada">
                 <TrendingUp className="w-4 h-4 mr-2" />
@@ -884,9 +880,9 @@ export default function StudentDetails() {
                   {/* Layout: Status da Conta + Métricas */}
                   {selectedAccountId && (
                     <>
-                      <div className="grid md:grid-cols-2 gap-4">
+                      <div className="grid md:grid-cols-3 gap-4">
                         {/* Coluna 1: Status da Conta */}
-                        <Card>
+                        <Card className="border-blue-200 dark:border-blue-800 hover:shadow-lg transition-shadow duration-300">
                           <CardHeader className="flex flex-row items-center justify-between pb-2">
                             <CardTitle className="text-sm font-medium">Status da Conta</CardTitle>
                             <Button
@@ -958,29 +954,29 @@ export default function StudentDetails() {
 
                         {/* Coluna 2: Métricas */}
                         {metrics && (
-                          <div className="grid gap-4">
-                            <Card>
-                              <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                  <TrendingUp className="w-4 h-4" />
+                          <div className="grid gap-3">
+                            <Card className="border-emerald-200 dark:border-emerald-800 hover:shadow-md transition-shadow duration-300">
+                              <CardHeader className="pb-2">
+                                <CardTitle className="text-xs font-semibold flex items-center gap-1">
+                                  <TrendingUp className="w-3 h-3 text-emerald-600" />
                                   Vendas Totais
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
-                                <div className="text-2xl font-bold">{metrics.total_sales}</div>
-                                <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
+                                <div className="text-xl font-bold">{metrics.total_sales}</div>
+                                <p className="text-[10px] text-muted-foreground">Últimos 30 dias</p>
                               </CardContent>
                             </Card>
 
-                            <Card>
-                              <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                  <DollarSign className="w-4 h-4" />
+                            <Card className="border-blue-200 dark:border-blue-800 hover:shadow-md transition-shadow duration-300">
+                              <CardHeader className="pb-2">
+                                <CardTitle className="text-xs font-semibold flex items-center gap-1">
+                                  <DollarSign className="w-3 h-3 text-blue-600" />
                                   Faturamento
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
-                                <div className="text-2xl font-bold">
+                                <div className="text-xl font-bold">
                                   {new Intl.NumberFormat('pt-BR', { 
                                     style: 'currency', 
                                     currency: 'BRL',
@@ -988,29 +984,84 @@ export default function StudentDetails() {
                                     maximumFractionDigits: 0
                                   }).format(metrics.total_revenue)}
                                 </div>
-                                <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
+                                <p className="text-[10px] text-muted-foreground">Últimos 30 dias</p>
                               </CardContent>
                             </Card>
 
-                            <Card>
-                              <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                  <ShoppingCart className="w-4 h-4" />
+                            <Card className="border-violet-200 dark:border-violet-800 hover:shadow-md transition-shadow duration-300">
+                              <CardHeader className="pb-2">
+                                <CardTitle className="text-xs font-semibold flex items-center gap-1">
+                                  <ShoppingCart className="w-3 h-3 text-violet-600" />
                                   Ticket Médio
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
-                                <div className="text-2xl font-bold">
+                                <div className="text-xl font-bold">
                                   {new Intl.NumberFormat('pt-BR', { 
                                     style: 'currency', 
                                     currency: 'BRL' 
                                   }).format(metrics.average_ticket)}
                                 </div>
-                                <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
+                                <p className="text-[10px] text-muted-foreground">Últimos 30 dias</p>
                               </CardContent>
                             </Card>
                           </div>
                         )}
+
+                        {/* Coluna 3: Apps e Extensões */}
+                        <Card className="border-violet-200 dark:border-violet-800 hover:shadow-lg transition-shadow duration-300">
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Package className="w-4 h-4 text-violet-600" />
+                                Apps e Extensões
+                              </CardTitle>
+                              <Button 
+                                onClick={() => setIsAddingApp(true)} 
+                                size="sm" 
+                                variant="outline"
+                                className="h-7 text-xs hover:scale-105 transition-transform"
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                Adicionar
+                              </Button>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            {studentApps.length === 0 ? (
+                              <div className="text-center py-6">
+                                <Package className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                                <p className="text-xs text-muted-foreground">Nenhum app associado</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                {studentApps.map(app => (
+                                  <div
+                                    key={app.id}
+                                    className="p-2 border rounded-lg flex items-center justify-between hover:bg-muted/50 transition-colors"
+                                    style={{ borderColor: app.color }}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className="w-6 h-6 rounded-full flex-shrink-0"
+                                        style={{ backgroundColor: app.color }}
+                                      />
+                                      <span className="text-sm font-medium truncate">{app.name}</span>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => app.student_app_id && removeAppFromStudent(app.student_app_id)}
+                                      className="text-destructive hover:text-destructive h-7 w-7 p-0 hover:scale-110 transition-transform"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
                       </div>
 
                       {/* Programas Especiais e Problemas */}
@@ -1020,7 +1071,13 @@ export default function StudentDetails() {
                           {/* Programas Especiais */}
                           <div className="grid md:grid-cols-3 gap-4">
                             {/* Decola */}
-                            <Card className={metrics.has_decola ? "bg-muted/50" : ""}>
+                            <Card className={`
+                              transition-all duration-300 hover:shadow-lg
+                              ${metrics.has_decola 
+                                ? "border-emerald-200 dark:border-emerald-800" 
+                                : "border-gray-200 dark:border-gray-800"
+                              }
+                            `}>
                               <CardHeader>
                                 <CardTitle className="text-sm flex items-center justify-between">
                                   <div className="flex items-center gap-2">
@@ -1078,7 +1135,10 @@ export default function StudentDetails() {
                             </Card>
 
                             {/* Product ADS */}
-                            <Card className={adsMetrics && adsMetrics.activeCampaigns > 0 ? "bg-muted/50" : ""}>
+                            <Card className={`
+                              transition-all duration-300 hover:shadow-lg border-blue-200 dark:border-blue-800
+                              ${adsMetrics && adsMetrics.activeCampaigns > 0 ? "bg-blue-50/30 dark:bg-blue-950/20" : ""}
+                            `}>
                               <CardHeader>
                                 <CardTitle className="text-sm flex items-center justify-between">
                                   <div className="flex items-center gap-2">
@@ -1153,7 +1213,13 @@ export default function StudentDetails() {
                             </Card>
 
                             {/* FULL */}
-                            <Card className={metrics.has_full ? "bg-muted/50" : ""}>
+                            <Card className={`
+                              transition-all duration-300 hover:shadow-lg
+                              ${metrics.has_full
+                                ? "border-orange-200 dark:border-orange-800"
+                                : "border-gray-200 dark:border-gray-800"
+                              }
+                            `}>
                               <CardHeader>
                                 <CardTitle className="text-sm flex items-center justify-between">
                                   <div className="flex items-center gap-2">
@@ -1219,42 +1285,42 @@ export default function StudentDetails() {
                           </div>
 
                           {/* Problemas de Anúncios */}
-                          <Card>
+                          <Card className="border-orange-200 dark:border-orange-800 hover:shadow-lg transition-shadow duration-300">
                             <CardHeader>
                               <CardTitle className="flex items-center gap-2">
-                                <AlertTriangle className="w-5 h-5" />
+                                <AlertTriangle className="w-5 h-5 text-orange-500 animate-pulse" />
                                 Problemas de Qualidade
                               </CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-3">
-                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded">
+                            <CardContent className="space-y-2">
+                              <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors cursor-pointer">
                                 <div className="flex items-center gap-2">
                                   <Image className="w-4 h-4 text-red-500" />
-                                  <span className="text-sm">Fotos Baixa Qualidade</span>
+                                  <span className="text-sm font-medium">Fotos Baixa Qualidade</span>
                                 </div>
-                                <span className="font-bold text-red-500">
+                                <Badge variant="outline" className="text-red-600 border-red-300">
                                   {lowQualityProducts.length} anúncios
-                                </span>
+                                </Badge>
                               </div>
 
-                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded">
+                              <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-colors cursor-pointer">
                                 <div className="flex items-center gap-2">
                                   <ExternalLink className="w-4 h-4 text-orange-500" />
-                                  <span className="text-sm">Sem Descrição</span>
+                                  <span className="text-sm font-medium">Sem Descrição</span>
                                 </div>
-                                <span className="font-bold text-orange-500">
+                                <Badge variant="outline" className="text-orange-600 border-orange-300">
                                   {noDescriptionProducts.length} anúncios
-                                </span>
+                                </Badge>
                               </div>
 
-                              <div className="flex items-center justify-between p-3 bg-muted/50 rounded">
+                              <div className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800 hover:bg-yellow-100 dark:hover:bg-yellow-950/40 transition-colors cursor-pointer">
                                 <div className="flex items-center gap-2">
                                   <ExternalLink className="w-4 h-4 text-yellow-500" />
-                                  <span className="text-sm">Sem Dados Fiscais</span>
+                                  <span className="text-sm font-medium">Sem Dados Fiscais</span>
                                 </div>
-                                <span className="font-bold text-yellow-500">
+                                <Badge variant="outline" className="text-yellow-600 border-yellow-300">
                                   {noTaxDataProducts.length} anúncios
-                                </span>
+                                </Badge>
                               </div>
                             </CardContent>
                           </Card>
@@ -1266,52 +1332,6 @@ export default function StudentDetails() {
               )}
             </TabsContent>
 
-            {/* TAB: APPS */}
-            <TabsContent value="apps" className="space-y-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Apps e Extensões</CardTitle>
-                  <Button onClick={() => setIsAddingApp(true)} size="sm">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Adicionar App
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  {studentApps.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Package className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                      <p className="text-muted-foreground">Nenhum app associado</p>
-                    </div>
-                  ) : (
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {studentApps.map(app => (
-                        <div
-                          key={app.id}
-                          className="p-4 border rounded-lg flex items-center justify-between"
-                          style={{ borderColor: app.color }}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className="w-10 h-10 rounded-full"
-                              style={{ backgroundColor: app.color }}
-                            />
-                            <span className="font-medium">{app.name}</span>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => app.student_app_id && removeAppFromStudent(app.student_app_id)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
 
             {/* TAB: JORNADA */}
             <TabsContent value="jornada" className="space-y-6">

@@ -1094,47 +1094,53 @@ export default function StudentDetails() {
                               </CardHeader>
                               <CardContent>
                                 {adsMetrics && adsMetrics.activeCampaigns > 0 ? (
-                                  <div className="space-y-3">
-                                    <div>
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <DollarSign className="w-3 h-3 text-purple-600 dark:text-purple-400" />
-                                        <span className="text-xs text-muted-foreground">Investimento</span>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    {/* Coluna Esquerda: Investimento e Produtos */}
+                                    <div className="space-y-3">
+                                      <div>
+                                        <div className="flex items-center gap-1 mb-1">
+                                          <DollarSign className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                                          <span className="text-xs text-muted-foreground">Investimento</span>
+                                        </div>
+                                        <p className="text-base font-bold text-purple-600 dark:text-purple-400">
+                                          {adsMetrics.totalSpend.toLocaleString('pt-BR', { 
+                                            style: 'currency', 
+                                            currency: 'BRL' 
+                                          })}
+                                        </p>
                                       </div>
-                                      <p className="text-base font-bold text-purple-600 dark:text-purple-400">
-                                        {adsMetrics.totalSpend.toLocaleString('pt-BR', { 
-                                          style: 'currency', 
-                                          currency: 'BRL' 
-                                        })}
-                                      </p>
+
+                                      <div>
+                                        <span className="text-xs text-muted-foreground">Produtos</span>
+                                        <p className="text-sm font-medium">
+                                          {adsMetrics.totalProductsInAds} anunciados
+                                        </p>
+                                      </div>
                                     </div>
 
-                                    <div>
-                                      <span className="text-xs text-muted-foreground">ROAS</span>
-                                      <p className={`text-base font-bold ${
-                                        adsMetrics.totalRoas >= 3 ? 'text-green-600 dark:text-green-400' :
-                                        adsMetrics.totalRoas >= 2 ? 'text-yellow-600 dark:text-yellow-400' :
-                                        'text-red-600 dark:text-red-400'
-                                      }`}>
-                                        {adsMetrics.totalRoas.toFixed(1)}x
-                                      </p>
-                                    </div>
+                                    {/* Coluna Direita: ROAS e ACOS */}
+                                    <div className="space-y-3 border-l pl-4">
+                                      <div>
+                                        <span className="text-xs text-muted-foreground">ROAS</span>
+                                        <p className={`text-base font-bold ${
+                                          adsMetrics.totalRoas >= 3 ? 'text-green-600 dark:text-green-400' :
+                                          adsMetrics.totalRoas >= 2 ? 'text-yellow-600 dark:text-yellow-400' :
+                                          'text-red-600 dark:text-red-400'
+                                        }`}>
+                                          {adsMetrics.totalRoas.toFixed(1)}x
+                                        </p>
+                                      </div>
 
-                                    <div>
-                                      <span className="text-xs text-muted-foreground">ACOS</span>
-                                      <p className={`text-base font-bold ${
-                                        adsMetrics.totalAcos <= 25 ? 'text-green-600 dark:text-green-400' :
-                                        adsMetrics.totalAcos <= 40 ? 'text-yellow-600 dark:text-yellow-400' :
-                                        'text-red-600 dark:text-red-400'
-                                      }`}>
-                                        {adsMetrics.totalAcos.toFixed(1)}%
-                                      </p>
-                                    </div>
-
-                                    <div>
-                                      <span className="text-xs text-muted-foreground">Produtos</span>
-                                      <p className="text-sm font-medium">
-                                        {adsMetrics.totalProductsInAds} anunciados
-                                      </p>
+                                      <div>
+                                        <span className="text-xs text-muted-foreground">ACOS</span>
+                                        <p className={`text-base font-bold ${
+                                          adsMetrics.totalAcos <= 25 ? 'text-green-600 dark:text-green-400' :
+                                          adsMetrics.totalAcos <= 40 ? 'text-yellow-600 dark:text-yellow-400' :
+                                          'text-red-600 dark:text-red-400'
+                                        }`}>
+                                          {adsMetrics.totalAcos.toFixed(1)}%
+                                        </p>
+                                      </div>
                                     </div>
                                   </div>
                                 ) : (

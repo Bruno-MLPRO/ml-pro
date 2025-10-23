@@ -295,6 +295,8 @@ export default function StudentsManagement() {
       .in("student_id", filteredStudentIds)
       .order("updated_at", { ascending: false });
 
+    console.log('[DEBUG] ML Metrics fetched:', mlMetricsData?.length, 'records for', filteredStudentIds.length, 'students');
+
     // Fetch Mercado Livre products to check for FLEX
     const { data: mlProductsData } = await supabase
       .from("mercado_livre_products")
@@ -388,6 +390,21 @@ export default function StudentsManagement() {
       }, [] as typeof studentMetricsRaw);
       const has_ml_decola = studentMetrics.some(m => m.has_decola === true);
       const has_ml_full = studentMetrics.some(m => m.has_full === true);
+      
+      // Debug logging for specific students
+      if (profile.email === 'brunqcompany@gmail.com' || profile.email === 'joaopmbarboza@gmail.com' || profile.email === 'nexohub.co@gmail.com') {
+        console.log(`[DEBUG] ${profile.full_name}:`, {
+          raw_metrics: studentMetricsRaw.length,
+          deduplicated: studentMetrics.length,
+          metrics: studentMetrics.map(m => ({ 
+            ml_account_id: m.ml_account_id, 
+            has_decola: m.has_decola, 
+            has_full: m.has_full 
+          })),
+          has_ml_decola,
+          has_ml_full
+        });
+      }
       
       // FLEX: shipping_mode = 'me2' AND logistic_type = 'drop_off'
       const studentProducts = mlProductsData?.filter(p => p.student_id === profile.id) || [];

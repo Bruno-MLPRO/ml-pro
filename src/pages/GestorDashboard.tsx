@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
-import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign, RefreshCw, MapPin, Truck, Warehouse } from "lucide-react";
+import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign, RefreshCw, MapPin, Truck, Warehouse, ShoppingCart } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -91,15 +91,18 @@ const GestorDashboard = () => {
   const [consolidatedMetrics, setConsolidatedMetrics] = useState({
     totalRevenue: 0,
     totalSales: 0,
+    averageTicket: 0,
     shippingStats: {
       correios: 0,
       flex: 0,
       agencias: 0,
       coleta: 0,
-      full: 0
+      full: 0,
+      total: 0
     },
     adsMetrics: {
       totalSpend: 0,
+      totalRevenue: 0,
       advertisedSales: 0,
       avgRoas: 0,
       avgAcos: 0
@@ -264,10 +267,12 @@ const GestorDashboard = () => {
 
       const totalRevenue = allOrders.reduce((sum, order) => sum + (Number(order.paid_amount) || 0), 0);
       const totalSales = allOrders.length;
+      const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
 
       console.log('💰 Vendas consolidadas:', { 
         totalRevenue, 
         totalSales,
+        averageTicket,
         totalOrders: allOrders.length 
       });
 
@@ -342,15 +347,18 @@ const GestorDashboard = () => {
       setConsolidatedMetrics({
         totalRevenue,
         totalSales,
+        averageTicket,
         shippingStats: {
           correios,
           flex,
           agencias,
           coleta,
-          full
+          full,
+          total
         },
         adsMetrics: {
           totalSpend,
+          totalRevenue: totalAdRevenue,
           advertisedSales: totalAdSales,
           avgRoas,
           avgAcos
@@ -735,14 +743,15 @@ const GestorDashboard = () => {
           <p className="text-foreground-secondary">Bem-vindo ao seu painel de controle</p>
         </div>
 
-        {/* Métricas Consolidadas */}
-        <div className="mb-8 space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
-            <h2 className="text-2xl font-semibold text-foreground">Métricas Consolidadas (Tempo Real)</h2>
-            
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* Botão Sincronizar Contas */}
-              <Button onClick={handleSyncAllAccounts} disabled={syncingAccounts} variant="outline" className="gap-2">
+        {/* Dashboard de Desempenho */}
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                <CardTitle>Desempenho</CardTitle>
+              </div>
+              <Button onClick={handleSyncAllAccounts} disabled={syncingAccounts} variant="outline" size="sm" className="gap-2">
                 {syncingAccounts ? <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Sincronizando...
@@ -752,195 +761,287 @@ const GestorDashboard = () => {
                   </>}
               </Button>
             </div>
-          </div>
-          
-          {/* Progress indicator para sincronização */}
-          {syncProgress && <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                    {syncProgress.status}
-                  </p>
-                  {syncProgress.total > 0 && <p className="text-xs text-blue-600 dark:text-blue-400">
-                      {syncProgress.current} de {syncProgress.total} contas processadas
-                    </p>}
+            <CardDescription>
+              Últimos 30 dias a partir de hoje - {format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'dd/MM/yyyy', { locale: ptBR })} a {format(new Date(), 'dd/MM/yyyy', { locale: ptBR })}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Progress indicator para sincronização */}
+            {syncProgress && <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      {syncProgress.status}
+                    </p>
+                    {syncProgress.total > 0 && <p className="text-xs text-blue-600 dark:text-blue-400">
+                        {syncProgress.current} de {syncProgress.total} contas processadas
+                      </p>}
+                  </div>
                 </div>
-              </div>
-            </div>}
+              </div>}
 
-          {/* Indicador de debounce */}
-          {metricsReloadPending && !syncProgress && <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-              <span className="text-sm text-blue-900 dark:text-blue-100">
-                Atualizações pendentes... recarregando em breve
-              </span>
-            </div>}
-          
-          {/* Linha 1: Faturamento e Product Ads */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Card Faturamento Total */}
-            <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
-              <CardHeader>
-                <div className="flex items-center justify-between">
+            {/* Indicador de debounce */}
+            {metricsReloadPending && !syncProgress && <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-2 mb-4">
+                <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                <span className="text-sm text-blue-900 dark:text-blue-100">
+                  Atualizações pendentes... recarregando em breve
+                </span>
+              </div>}
+            
+            {/* Métricas Principais */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-6 rounded-lg border border-border bg-background-elevated">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="w-5 h-5 text-success" />
+                  <span className="text-sm text-foreground-secondary">Faturamento</span>
+                </div>
+                <p className="text-3xl font-bold text-foreground">
+                  {formatCurrency(consolidatedMetrics.totalRevenue)}
+                </p>
+                <p className="text-xs text-foreground-secondary mt-1">
+                  Últimos 30 dias
+                </p>
+              </div>
+              
+              <div className="p-6 rounded-lg border border-border bg-background-elevated">
+                <div className="flex items-center gap-2 mb-2">
+                  <Package className="w-5 h-5 text-primary" />
+                  <span className="text-sm text-foreground-secondary">Número de vendas</span>
+                </div>
+                <p className="text-3xl font-bold text-foreground">
+                  {consolidatedMetrics.totalSales}
+                </p>
+                <p className="text-xs text-foreground-secondary mt-1">
+                  Últimos 30 dias
+                </p>
+              </div>
+              
+              <div className="p-6 rounded-lg border border-border bg-background-elevated">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp className="w-5 h-5 text-warning" />
+                  <span className="text-sm text-foreground-secondary">Ticket Médio</span>
+                </div>
+                <p className="text-3xl font-bold text-foreground">
+                  {formatCurrency(consolidatedMetrics.averageTicket)}
+                </p>
+                <p className="text-xs text-foreground-secondary mt-1">
+                  Últimos 30 dias
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card Product Ads */}
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-accent" />
+              <CardTitle>Product Ads</CardTitle>
+            </div>
+            <CardDescription>
+              Métricas de anúncios - Últimos 30 dias
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Total Investido */}
+              <div className="p-4 rounded-lg border border-orange-500/50 bg-orange-500/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="w-5 h-5 text-orange-400" />
+                  <span className="text-sm font-medium">Total Investido</span>
+                </div>
+                <p className="text-2xl font-bold">{formatCurrency(consolidatedMetrics.adsMetrics.totalSpend)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Investimento em anúncios
+                </p>
+              </div>
+              
+              {/* Receita com Ads */}
+              <div className="p-4 rounded-lg border border-green-500/50 bg-green-500/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp className="w-5 h-5 text-green-400" />
+                  <span className="text-sm font-medium">Receita com Ads</span>
+                </div>
+                <p className="text-2xl font-bold">{formatCurrency(consolidatedMetrics.adsMetrics.totalRevenue)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {consolidatedMetrics.adsMetrics.advertisedSales} vendas
+                </p>
+              </div>
+              
+              {/* ROAS */}
+              <div className="p-4 rounded-lg border border-blue-500/50 bg-blue-500/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="w-5 h-5 text-blue-400" />
+                  <span className="text-sm font-medium">ROAS</span>
+                </div>
+                <p className="text-2xl font-bold">{consolidatedMetrics.adsMetrics.avgRoas.toFixed(2)}x</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Retorno sobre investimento
+                </p>
+              </div>
+              
+              {/* ACOS */}
+              <div className="p-4 rounded-lg border border-purple-500/50 bg-purple-500/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <Package className="w-5 h-5 text-purple-400" />
+                  <span className="text-sm font-medium">ACOS</span>
+                </div>
+                <p className="text-2xl font-bold">{consolidatedMetrics.adsMetrics.avgAcos.toFixed(2)}%</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Custo de aquisição
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card Tipos de Envio */}
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-primary" />
+              <CardTitle>Tipos de Envio</CardTitle>
+            </div>
+            <CardDescription>
+              Distribuição de anúncios por modalidade de envio Mercado Livre
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* FLEX Badge */}
+              {consolidatedMetrics.shippingStats.flex > 0 ? (
+                <div className="p-4 rounded-lg border border-blue-500/50 bg-blue-500/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-5 h-5 text-blue-400" />
+                      <span className="font-semibold">FLEX</span>
+                    </div>
+                    <Badge className="bg-blue-500">
+                      {consolidatedMetrics.shippingStats.flex} produto{consolidatedMetrics.shippingStats.flex !== 1 ? 's' : ''}
+                    </Badge>
+                  </div>
                   <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-full bg-primary/20">
-                      <TrendingUp className="w-5 h-5 text-primary" />
-                    </div>
-            <CardTitle>Faturamento Total</CardTitle>
-          </div>
-        </div>
-        <CardDescription>Últimos 30 dias a partir de hoje</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <p className="text-4xl font-bold text-primary">{formatCurrency(consolidatedMetrics.totalRevenue)}</p>
-                  <p className="text-sm text-foreground-secondary">
-                    {formatNumber(consolidatedMetrics.totalSales)} vendas realizadas
-                  </p>
+                    <Progress value={(consolidatedMetrics.shippingStats.flex / consolidatedMetrics.shippingStats.total) * 100} className="h-1 flex-1" />
+                    <span className="text-xs font-medium">{((consolidatedMetrics.shippingStats.flex / consolidatedMetrics.shippingStats.total) * 100).toFixed(0)}%</span>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              ) : (
+                <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-5 h-5 text-muted-foreground" />
+                      <span className="font-semibold text-muted-foreground">FLEX</span>
+                    </div>
+                    <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                  </div>
+                </div>
+              )}
 
-            {/* Card Product Ads */}
-            <Card className="bg-gradient-to-br from-accent/10 to-accent/5 border-accent/20">
-              <CardHeader>
-                <div className="flex items-center justify-between">
+              {/* Agências Badge */}
+              {consolidatedMetrics.shippingStats.agencias > 0 ? (
+                <div className="p-4 rounded-lg border border-purple-500/50 bg-purple-500/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-purple-400" />
+                      <span className="font-semibold">Agências</span>
+                    </div>
+                    <Badge className="bg-purple-500">
+                      {consolidatedMetrics.shippingStats.agencias} produto{consolidatedMetrics.shippingStats.agencias !== 1 ? 's' : ''}
+                    </Badge>
+                  </div>
                   <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-full bg-accent/20">
-                      <Target className="w-5 h-5 text-accent" />
-                    </div>
-                    <CardTitle>Product Ads</CardTitle>
+                    <Progress value={(consolidatedMetrics.shippingStats.agencias / consolidatedMetrics.shippingStats.total) * 100} className="h-1 flex-1" />
+                    <span className="text-xs font-medium">{((consolidatedMetrics.shippingStats.agencias / consolidatedMetrics.shippingStats.total) * 100).toFixed(0)}%</span>
                   </div>
                 </div>
-                <CardDescription>Últimos 30 dias</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-foreground-secondary">Total investido</p>
-                    <p className="text-2xl font-bold text-accent">{formatCurrency(consolidatedMetrics.adsMetrics.totalSpend)}</p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-xs text-foreground-secondary">Vendas com ads</p>
-                      <p className="text-lg font-semibold">{formatNumber(consolidatedMetrics.adsMetrics.advertisedSales)}</p>
+              ) : (
+                <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-muted-foreground" />
+                      <span className="font-semibold text-muted-foreground">Agências</span>
                     </div>
-                    <div>
-                      <p className="text-xs text-foreground-secondary">ROAS médio</p>
-                      <p className="text-lg font-semibold">{consolidatedMetrics.adsMetrics.avgRoas.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-foreground-secondary">ACOS médio</p>
-                      <p className="text-lg font-semibold">{formatPercentage(consolidatedMetrics.adsMetrics.avgAcos)}</p>
-                    </div>
+                    <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              )}
 
-          {/* Linha 2: Anúncios por Tipo de Envio */}
-          <Card className="bg-gradient-to-br from-secondary/10 to-secondary/5 border-secondary/20">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-full bg-secondary/20">
-                  <Package className="w-5 h-5 text-secondary" />
+              {/* Coleta Badge */}
+              {consolidatedMetrics.shippingStats.coleta > 0 ? (
+                <div className="p-4 rounded-lg border border-green-500/50 bg-green-500/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-5 h-5 text-green-400" />
+                      <span className="font-semibold">Coleta</span>
+                    </div>
+                    <Badge className="bg-green-500">
+                      {consolidatedMetrics.shippingStats.coleta} produto{consolidatedMetrics.shippingStats.coleta !== 1 ? 's' : ''}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Progress value={(consolidatedMetrics.shippingStats.coleta / consolidatedMetrics.shippingStats.total) * 100} className="h-1 flex-1" />
+                    <span className="text-xs font-medium">{((consolidatedMetrics.shippingStats.coleta / consolidatedMetrics.shippingStats.total) * 100).toFixed(0)}%</span>
+                  </div>
                 </div>
-                <CardTitle>Anúncios Ativos por Tipo de Envio</CardTitle>
+              ) : (
+                <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-5 h-5 text-muted-foreground" />
+                      <span className="font-semibold text-muted-foreground">Coleta</span>
+                    </div>
+                    <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                  </div>
+                </div>
+              )}
+
+              {/* FULL Badge */}
+              {consolidatedMetrics.shippingStats.full > 0 ? (
+                <div className="p-4 rounded-lg border border-orange-500/50 bg-orange-500/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Warehouse className="w-5 h-5 text-orange-400" />
+                      <span className="font-semibold">FULL</span>
+                    </div>
+                    <Badge className="bg-orange-500">
+                      {consolidatedMetrics.shippingStats.full} produto{consolidatedMetrics.shippingStats.full !== 1 ? 's' : ''}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Progress value={(consolidatedMetrics.shippingStats.full / consolidatedMetrics.shippingStats.total) * 100} className="h-1 flex-1" />
+                    <span className="text-xs font-medium">{((consolidatedMetrics.shippingStats.full / consolidatedMetrics.shippingStats.total) * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Warehouse className="w-5 h-5 text-muted-foreground" />
+                      <span className="font-semibold text-muted-foreground">FULL</span>
+                    </div>
+                    <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Resumo Total */}
+            <div className="mt-4 pt-4 border-t">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Total de anúncios ativos</span>
+                <span className="font-semibold">{consolidatedMetrics.shippingStats.total}</span>
               </div>
-              <CardDescription>Total de anúncios cadastrados</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Correios (Próprio) */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Correios (Próprio)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.correios)}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {((consolidatedMetrics.shippingStats.correios / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
-                      </Badge>
-                    </div>
-                  </div>
-                  <Progress value={(consolidatedMetrics.shippingStats.correios / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
+              {consolidatedMetrics.shippingStats.correios > 0 && (
+                <div className="flex items-center justify-between text-sm mt-2">
+                  <span className="text-muted-foreground">Envio próprio (Correios)</span>
+                  <span>{consolidatedMetrics.shippingStats.correios} ({((consolidatedMetrics.shippingStats.correios / consolidatedMetrics.shippingStats.total) * 100).toFixed(0)}%)</span>
                 </div>
-
-                {/* Flex */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Truck className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Flex</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.flex)}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {((consolidatedMetrics.shippingStats.flex / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
-                      </Badge>
-                    </div>
-                  </div>
-                  <Progress value={(consolidatedMetrics.shippingStats.flex / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
-                </div>
-
-                {/* Agências */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Agências</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.agencias)}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {((consolidatedMetrics.shippingStats.agencias / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
-                      </Badge>
-                    </div>
-                  </div>
-                  <Progress value={(consolidatedMetrics.shippingStats.agencias / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
-                </div>
-
-                {/* Coleta */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Truck className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Coleta</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.coleta)}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {((consolidatedMetrics.shippingStats.coleta / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
-                      </Badge>
-                    </div>
-                  </div>
-                  <Progress value={(consolidatedMetrics.shippingStats.coleta / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
-                </div>
-
-                {/* Full */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Warehouse className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Full</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.full)}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {((consolidatedMetrics.shippingStats.full / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
-                      </Badge>
-                    </div>
-                  </div>
-                  <Progress value={(consolidatedMetrics.shippingStats.full / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Gestão de Conteúdo */}
         <div className="mb-6">

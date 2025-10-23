@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
-import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
+import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -67,6 +67,25 @@ const GestorDashboard = () => {
   const [linkForm, setLinkForm] = useState({ title: "", url: "", category: "" });
   const [callForm, setCallForm] = useState({ date: "", theme: "", description: "" });
 
+  // Consolidated metrics state
+  const [consolidatedMetrics, setConsolidatedMetrics] = useState({
+    totalRevenue: 0,
+    totalSales: 0,
+    shippingStats: {
+      correios: 0,
+      flex: 0,
+      agencias: 0,
+      coleta: 0,
+      full: 0
+    },
+    adsMetrics: {
+      totalSpend: 0,
+      advertisedSales: 0,
+      avgRoas: 0,
+      avgAcos: 0
+    }
+  });
+
   useEffect(() => {
     if (!authLoading && (!user || (userRole !== 'manager' && userRole !== 'administrator'))) {
       navigate('/auth');
@@ -93,12 +112,142 @@ const GestorDashboard = () => {
       setNotices(noticesData.data || []);
       setLinks(linksData.data || []);
       setCalls(callsData.data || []);
+      
+      // Load consolidated metrics
+      await loadConsolidatedMetrics();
     } catch (error) {
       console.error('Error loading data:', error);
       toast({ title: "Erro ao carregar dados", variant: "destructive" });
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadConsolidatedMetrics = async () => {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      // Query 1: Faturamento e Vendas (últimos 30 dias)
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('mercado_livre_orders')
+        .select('paid_amount')
+        .gte('date_created', thirtyDaysAgo.toISOString());
+
+      if (ordersError) throw ordersError;
+
+      const totalRevenue = ordersData?.reduce((sum, order) => sum + (Number(order.paid_amount) || 0), 0) || 0;
+      const totalSales = ordersData?.length || 0;
+
+      // Query 2: Anúncios por Tipo de Envio (apenas ativos)
+      const { data: productsData, error: productsError } = await supabase
+        .from('mercado_livre_products')
+        .select('logistic_type, shipping_mode')
+        .eq('status', 'active');
+
+      if (productsError) throw productsError;
+
+      const shippingStats = {
+        correios: 0,
+        flex: 0,
+        agencias: 0,
+        coleta: 0,
+        full: 0
+      };
+
+      productsData?.forEach(product => {
+        const logisticType = product.logistic_type?.toLowerCase();
+        const shippingMode = product.shipping_mode?.toLowerCase();
+        
+        if (logisticType === 'fulfillment') {
+          shippingStats.full++;
+        } else if (logisticType === 'drop_off') {
+          shippingStats.agencias++;
+        } else if (logisticType === 'xd_drop_off') {
+          shippingStats.coleta++;
+        } else if (shippingMode === 'me2') {
+          shippingStats.correios++;
+        } else if (logisticType === 'not_specified' && shippingMode !== 'me2') {
+          shippingStats.flex++;
+        }
+      });
+
+      // Query 3: Métricas de Product Ads (últimos 30 dias)
+      const { data: campaignsData, error: campaignsError } = await supabase
+        .from('mercado_livre_campaigns')
+        .select('total_spend, advertised_sales, roas, acos')
+        .gte('synced_at', thirtyDaysAgo.toISOString());
+
+      if (campaignsError) throw campaignsError;
+
+      const totalSpend = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.total_spend) || 0), 0) || 0;
+      const advertisedSales = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.advertised_sales) || 0), 0) || 0;
+      
+      const validRoas = campaignsData?.filter(c => c.roas != null && c.roas > 0) || [];
+      const avgRoas = validRoas.length > 0 
+        ? validRoas.reduce((sum, c) => sum + Number(c.roas), 0) / validRoas.length 
+        : 0;
+      
+      const validAcos = campaignsData?.filter(c => c.acos != null && c.acos > 0) || [];
+      const avgAcos = validAcos.length > 0 
+        ? validAcos.reduce((sum, c) => sum + Number(c.acos), 0) / validAcos.length 
+        : 0;
+
+      setConsolidatedMetrics({
+        totalRevenue,
+        totalSales,
+        shippingStats,
+        adsMetrics: {
+          totalSpend,
+          advertisedSales,
+          avgRoas,
+          avgAcos
+        }
+      });
+
+      // Set up realtime subscriptions
+      const ordersChannel = supabase
+        .channel('orders-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_orders' }, () => {
+          loadConsolidatedMetrics();
+        })
+        .subscribe();
+
+      const productsChannel = supabase
+        .channel('products-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_products' }, () => {
+          loadConsolidatedMetrics();
+        })
+        .subscribe();
+
+      const campaignsChannel = supabase
+        .channel('campaigns-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_campaigns' }, () => {
+          loadConsolidatedMetrics();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(ordersChannel);
+        supabase.removeChannel(productsChannel);
+        supabase.removeChannel(campaignsChannel);
+      };
+    } catch (error) {
+      console.error('Error loading consolidated metrics:', error);
+    }
+  };
+
+  // Helper functions
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  };
+
+  const formatNumber = (value: number) => {
+    return new Intl.NumberFormat('pt-BR').format(value);
+  };
+
+  const formatPercentage = (value: number) => {
+    return `${value.toFixed(2)}%`;
   };
 
   // Notice handlers
@@ -323,6 +472,116 @@ const GestorDashboard = () => {
         <div className="mb-8">
           <h1 className="text-4xl font-display font-bold text-foreground mb-2">Dashboard</h1>
           <p className="text-foreground-secondary">Bem-vindo ao seu painel de controle</p>
+        </div>
+
+        {/* Métricas Consolidadas */}
+        <div className="mb-8 space-y-6">
+          <h2 className="text-2xl font-semibold text-foreground">Métricas Consolidadas</h2>
+          
+          {/* Linha 1: Faturamento e Product Ads */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Card Faturamento Total */}
+            <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-full bg-primary/20">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                    </div>
+                    <CardTitle>Faturamento Total</CardTitle>
+                  </div>
+                </div>
+                <CardDescription>Últimos 30 dias</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <p className="text-4xl font-bold text-primary">{formatCurrency(consolidatedMetrics.totalRevenue)}</p>
+                  <p className="text-sm text-foreground-secondary">
+                    {formatNumber(consolidatedMetrics.totalSales)} vendas realizadas
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Card Product Ads */}
+            <Card className="bg-gradient-to-br from-accent/10 to-accent/5 border-accent/20">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-full bg-accent/20">
+                      <Target className="w-5 h-5 text-accent" />
+                    </div>
+                    <CardTitle>Product Ads</CardTitle>
+                  </div>
+                </div>
+                <CardDescription>Últimos 30 dias</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-foreground-secondary">Total investido</p>
+                    <p className="text-2xl font-bold text-accent">{formatCurrency(consolidatedMetrics.adsMetrics.totalSpend)}</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs text-foreground-secondary">Vendas com ads</p>
+                      <p className="text-lg font-semibold">{formatNumber(consolidatedMetrics.adsMetrics.advertisedSales)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-foreground-secondary">ROAS médio</p>
+                      <p className="text-lg font-semibold">{consolidatedMetrics.adsMetrics.avgRoas.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-foreground-secondary">ACOS médio</p>
+                      <p className="text-lg font-semibold">{formatPercentage(consolidatedMetrics.adsMetrics.avgAcos)}</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Linha 2: Anúncios por Tipo de Envio */}
+          <Card className="bg-gradient-to-br from-secondary/10 to-secondary/5 border-secondary/20">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-secondary/20">
+                  <Package className="w-5 h-5 text-secondary" />
+                </div>
+                <CardTitle>Anúncios Ativos por Tipo de Envio</CardTitle>
+              </div>
+              <CardDescription>Total de anúncios cadastrados</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                <div className="text-center">
+                  <p className="text-sm text-foreground-secondary mb-1">Correios</p>
+                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.correios)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-foreground-secondary mb-1">Flex</p>
+                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.flex)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-foreground-secondary mb-1">Agências</p>
+                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.agencias)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-foreground-secondary mb-1">Coleta</p>
+                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.coleta)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-foreground-secondary mb-1">Full</p>
+                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.full)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Gestão de Conteúdo */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-semibold text-foreground">Gestão de Conteúdo</h2>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -724,10 +724,10 @@ const GestorDashboard = () => {
                     <div className="p-2 rounded-full bg-primary/20">
                       <TrendingUp className="w-5 h-5 text-primary" />
                     </div>
-                    <CardTitle>Faturamento Total</CardTitle>
-                  </div>
-                </div>
-                <CardDescription>Últimos 30 dias</CardDescription>
+            <CardTitle>Faturamento Total</CardTitle>
+          </div>
+        </div>
+        <CardDescription>Últimos 30 dias a partir de hoje</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">

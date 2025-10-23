@@ -17,14 +17,14 @@ Deno.serve(async (req) => {
 
     console.log('🚀 Iniciando cálculo de métricas mensais...');
 
-    // Definir período: últimos 30 dias do mês anterior
+    // Definir período: últimos 30 dias a partir de HOJE
     const now = new Date();
-    const periodEnd = new Date(now.getFullYear(), now.getMonth(), 1); // Primeiro dia do mês atual
-    const periodStart = new Date(periodEnd);
-    periodStart.setDate(periodStart.getDate() - 30); // 30 dias antes
+    const periodEnd = new Date(); // HOJE
+    const periodStart = new Date();
+    periodStart.setDate(periodStart.getDate() - 30); // 30 dias atrás de hoje
 
-    // Primeiro dia do mês de referência (mês anterior)
-    const referenceMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    // Primeiro dia do mês atual (referência)
+    const referenceMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     console.log('📅 Período de cálculo:', {
       referenceMonth: referenceMonth.toISOString().split('T')[0],
@@ -32,10 +32,11 @@ Deno.serve(async (req) => {
       periodEnd: periodEnd.toISOString()
     });
 
-    // Query 1: Faturamento e Vendas
+    // Query 1: Faturamento e Vendas (apenas pedidos pagos)
     const { data: ordersData, error: ordersError } = await supabase
       .from('mercado_livre_orders')
       .select('paid_amount')
+      .eq('status', 'paid')
       .gte('date_created', periodStart.toISOString())
       .lt('date_created', periodEnd.toISOString())
       .limit(10000);
@@ -62,14 +63,48 @@ Deno.serve(async (req) => {
     }
 
     const shippingStats = {
-      correios: productsData?.filter(p => p.logistic_type === 'drop_off' && p.shipping_mode === 'me2').length || 0,
-      flex: productsData?.filter(p => p.logistic_type === 'cross_docking').length || 0,
-      agencias: productsData?.filter(p => p.logistic_type === 'drop_off' && ['custom', 'not_specified'].includes(p.shipping_mode || '')).length || 0,
-      coleta: productsData?.filter(p => p.logistic_type === 'xd_drop_off').length || 0,
-      full: productsData?.filter(p => p.logistic_type === 'fulfillment').length || 0,
+      // Correios: drop_off + me2
+      correios: productsData?.filter(p => 
+        p.logistic_type === 'drop_off' && p.shipping_mode === 'me2'
+      ).length || 0,
+      
+      // Flex: cross_docking (raramente usado no ML Brasil)
+      flex: productsData?.filter(p => 
+        p.logistic_type === 'cross_docking'
+      ).length || 0,
+      
+      // Agências: drop_off SEM me2, ou not_specified
+      agencias: productsData?.filter(p => 
+        (p.logistic_type === 'drop_off' && p.shipping_mode !== 'me2') ||
+        (p.logistic_type === 'not_specified')
+      ).length || 0,
+      
+      // Coleta: xd_drop_off
+      coleta: productsData?.filter(p => 
+        p.logistic_type === 'xd_drop_off'
+      ).length || 0,
+      
+      // Full: fulfillment
+      full: productsData?.filter(p => 
+        p.logistic_type === 'fulfillment'
+      ).length || 0,
     };
 
-    console.log('📦 Produtos por tipo de envio:', shippingStats);
+    console.log('📦 Produtos por tipo de envio (DETALHADO):', {
+      total_products: productsData?.length || 0,
+      by_logistic_type: {
+        fulfillment: productsData?.filter(p => p.logistic_type === 'fulfillment').length || 0,
+        drop_off: productsData?.filter(p => p.logistic_type === 'drop_off').length || 0,
+        xd_drop_off: productsData?.filter(p => p.logistic_type === 'xd_drop_off').length || 0,
+        cross_docking: productsData?.filter(p => p.logistic_type === 'cross_docking').length || 0,
+        not_specified: productsData?.filter(p => p.logistic_type === 'not_specified').length || 0,
+      },
+      shipping_stats: shippingStats,
+      validation: {
+        sum: Object.values(shippingStats).reduce((a, b) => a + b, 0),
+        total_products: productsData?.length || 0
+      }
+    });
 
     // Query 3: Métricas de Product Ads - CÁLCULO CORRETO
     const { data: campaignsData, error: campaignsError } = await supabase

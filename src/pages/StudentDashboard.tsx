@@ -5,7 +5,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink, ShoppingCart, MapPin, Truck, Warehouse } from 'lucide-react';
+import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink, ShoppingCart, MapPin, Truck, Warehouse, Target } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -70,6 +70,14 @@ interface ShippingStats {
   total: number;
 }
 
+interface ProductAdsMetrics {
+  totalSpend: number;
+  totalRevenue: number;
+  totalSales: number;
+  roas: number;
+  acos: number;
+}
+
 const StudentDashboard = () => {
   const { user, userRole, loading: authLoading } = useAuth();
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -78,6 +86,7 @@ const StudentDashboard = () => {
   const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
   const [consolidatedMetrics, setConsolidatedMetrics] = useState<MLMetrics | null>(null);
   const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
+  const [productAdsMetrics, setProductAdsMetrics] = useState<ProductAdsMetrics | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<7 | 15 | 30>(30);
   const [loading, setLoading] = useState(true);
   const [connectingML, setConnectingML] = useState(false);
@@ -306,6 +315,59 @@ const StudentDashboard = () => {
     };
   };
 
+  const loadProductAdsMetrics = async (accountIds: string[]) => {
+    if (accountIds.length === 0) {
+      setProductAdsMetrics(null);
+      return;
+    }
+    
+    try {
+      // Calcular período
+      const periodStart = new Date();
+      periodStart.setDate(periodStart.getDate() - selectedPeriod);
+      
+      // Buscar campanhas das contas do aluno
+      const { data: campaigns, error } = await supabase
+        .from('mercado_livre_campaigns')
+        .select('total_spend, ad_revenue, advertised_sales')
+        .in('ml_account_id', accountIds)
+        .gte('synced_at', periodStart.toISOString());
+      
+      if (error) {
+        console.error('❌ Error loading product ads metrics:', error);
+        setProductAdsMetrics(null);
+        return;
+      }
+      
+      const totalSpend = campaigns?.reduce((sum, c) => sum + (Number(c.total_spend) || 0), 0) || 0;
+      const totalRevenue = campaigns?.reduce((sum, c) => sum + (Number(c.ad_revenue) || 0), 0) || 0;
+      const totalSales = campaigns?.reduce((sum, c) => sum + (Number(c.advertised_sales) || 0), 0) || 0;
+      
+      const roas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+      const acos = totalRevenue > 0 ? (totalSpend / totalRevenue) * 100 : 0;
+      
+      console.log('📊 Métricas de Product Ads do aluno:', {
+        accountIds,
+        totalSpend,
+        totalRevenue,
+        totalSales,
+        roas: roas.toFixed(2),
+        acos: acos.toFixed(2) + '%'
+      });
+      
+      setProductAdsMetrics({
+        totalSpend,
+        totalRevenue,
+        totalSales,
+        roas,
+        acos
+      });
+    } catch (error) {
+      console.error('❌ Error loading product ads:', error);
+      setProductAdsMetrics(null);
+    }
+  };
+
   const loadMLAccounts = async () => {
     try {
       if (!user) return
@@ -368,6 +430,10 @@ const StudentDashboard = () => {
         // Carregar estatísticas de envio
         const stats = await calculateShippingStats(user.id);
         setShippingStats(stats);
+
+        // Carregar métricas de Product Ads
+        const accountIds = accountsData.accounts.map((a: any) => a.id);
+        await loadProductAdsMetrics(accountIds);
       }
     } catch (error) {
       console.error('Error loading ML accounts:', error)
@@ -678,6 +744,72 @@ const StudentDashboard = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Card Product Ads */}
+          {mlAccounts.length > 0 && productAdsMetrics && (
+            <Card className="mb-6">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Target className="w-5 h-5 text-accent" />
+                  <CardTitle>Product Ads</CardTitle>
+                </div>
+                <CardDescription>
+                  Métricas de anúncios - Últimos {selectedPeriod} dias
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Total Investido */}
+                  <div className="p-4 rounded-lg border border-orange-500/50 bg-orange-500/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-5 h-5 text-orange-400" />
+                      <span className="text-sm font-medium">Total Investido</span>
+                    </div>
+                    <p className="text-2xl font-bold">{formatCurrency(productAdsMetrics.totalSpend)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Investimento em anúncios
+                    </p>
+                  </div>
+                  
+                  {/* Receita com Ads */}
+                  <div className="p-4 rounded-lg border border-green-500/50 bg-green-500/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="w-5 h-5 text-green-400" />
+                      <span className="text-sm font-medium">Receita com Ads</span>
+                    </div>
+                    <p className="text-2xl font-bold">{formatCurrency(productAdsMetrics.totalRevenue)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {productAdsMetrics.totalSales} vendas
+                    </p>
+                  </div>
+                  
+                  {/* ROAS */}
+                  <div className="p-4 rounded-lg border border-blue-500/50 bg-blue-500/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Target className="w-5 h-5 text-blue-400" />
+                      <span className="text-sm font-medium">ROAS</span>
+                    </div>
+                    <p className="text-2xl font-bold">{productAdsMetrics.roas.toFixed(2)}x</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Retorno sobre investimento
+                    </p>
+                  </div>
+                  
+                  {/* ACOS */}
+                  <div className="p-4 rounded-lg border border-purple-500/50 bg-purple-500/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Package className="w-5 h-5 text-purple-400" />
+                      <span className="text-sm font-medium">ACOS</span>
+                    </div>
+                    <p className="text-2xl font-bold">{productAdsMetrics.acos.toFixed(2)}%</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Custo de aquisição
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Badges de Tipo de Envio */}
           {mlAccounts.length > 0 && shippingStats && (

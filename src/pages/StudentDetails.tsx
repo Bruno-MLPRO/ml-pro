@@ -880,9 +880,11 @@ export default function StudentDetails() {
                   {/* Layout: Status da Conta + Métricas */}
                   {selectedAccountId && (
                     <>
-                      <div className="grid md:grid-cols-3 gap-4">
-                        {/* Coluna 1: Status da Conta */}
-                        <Card className="border-blue-200 dark:border-blue-800 hover:shadow-lg transition-shadow duration-300">
+                      <div className="flex flex-col lg:flex-row gap-4">
+                        {/* Coluna 1: Status da Conta + Reputação - 50% */}
+                        <div className="flex-[0.50] flex flex-col gap-4">
+                          {/* Status da Conta */}
+                          <Card className="border border-border hover:shadow-lg transition-shadow duration-300">
                           <CardHeader className="flex flex-row items-center justify-between pb-2">
                             <CardTitle className="text-sm font-medium">Status da Conta</CardTitle>
                             <Button
@@ -932,30 +934,35 @@ export default function StudentDetails() {
                                         </span>
                                       </div>
                                     )}
-                                  </div>
-
-                                  {/* Reputação */}
-                                  {metrics && (
-                                    <div className="pt-4 border-t space-y-3">
-                                      <h4 className="font-semibold">Reputação</h4>
-                                      <ReputationBadge
-                                        color={metrics.reputation_color}
-                                        levelId={metrics.reputation_level}
-                                        positiveRate={metrics.positive_ratings_rate}
-                                        totalTransactions={metrics.reputation_transactions_total}
-                                      />
-                                    </div>
-                                  )}
-                                </>
-                              ) : null;
-                            })()}
+                                   </div>
+                                 </>
+                               ) : null;
+                             })()}
                           </CardContent>
                         </Card>
 
-                        {/* Coluna 2: Métricas */}
+                        {/* Reputação */}
+                        <Card className="border border-border hover:shadow-lg transition-shadow duration-300">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium">Reputação</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {metrics && (
+                              <ReputationBadge
+                                color={metrics.reputation_color}
+                                levelId={metrics.reputation_level}
+                                positiveRate={metrics.positive_ratings_rate}
+                                totalTransactions={metrics.reputation_transactions_total}
+                              />
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                        {/* Coluna 2: Métricas - 20% */}
                         {metrics && (
-                          <div className="grid gap-3">
-                            <Card className="border-emerald-200 dark:border-emerald-800 hover:shadow-md transition-shadow duration-300">
+                          <div className="flex-[0.20] flex flex-col gap-3">
+                            <Card className="border border-border hover:shadow-lg transition-shadow duration-300 flex-1">
                               <CardHeader className="pb-2">
                                 <CardTitle className="text-xs font-semibold flex items-center gap-1">
                                   <TrendingUp className="w-3 h-3 text-emerald-600" />
@@ -968,7 +975,7 @@ export default function StudentDetails() {
                               </CardContent>
                             </Card>
 
-                            <Card className="border-blue-200 dark:border-blue-800 hover:shadow-md transition-shadow duration-300">
+                            <Card className="border border-border hover:shadow-lg transition-shadow duration-300 flex-1">
                               <CardHeader className="pb-2">
                                 <CardTitle className="text-xs font-semibold flex items-center gap-1">
                                   <DollarSign className="w-3 h-3 text-blue-600" />
@@ -988,7 +995,7 @@ export default function StudentDetails() {
                               </CardContent>
                             </Card>
 
-                            <Card className="border-violet-200 dark:border-violet-800 hover:shadow-md transition-shadow duration-300">
+                            <Card className="border border-border hover:shadow-lg transition-shadow duration-300 flex-1">
                               <CardHeader className="pb-2">
                                 <CardTitle className="text-xs font-semibold flex items-center gap-1">
                                   <ShoppingCart className="w-3 h-3 text-violet-600" />
@@ -1008,8 +1015,8 @@ export default function StudentDetails() {
                           </div>
                         )}
 
-                        {/* Coluna 3: Apps e Extensões */}
-                        <Card className="border-violet-200 dark:border-violet-800 hover:shadow-lg transition-shadow duration-300">
+                        {/* Coluna 3: Apps e Extensões - 30% */}
+                        <Card className="flex-[0.30] border border-border hover:shadow-lg transition-shadow duration-300">
                           <CardHeader className="pb-3">
                             <div className="flex items-center justify-between">
                               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -1071,13 +1078,7 @@ export default function StudentDetails() {
                           {/* Programas Especiais */}
                           <div className="grid md:grid-cols-3 gap-4">
                             {/* Decola */}
-                            <Card className={`
-                              transition-all duration-300 hover:shadow-lg
-                              ${metrics.has_decola 
-                                ? "border-emerald-200 dark:border-emerald-800" 
-                                : "border-gray-200 dark:border-gray-800"
-                              }
-                            `}>
+                            <Card className="transition-all duration-300 hover:shadow-lg border border-border">
                               <CardHeader>
                                 <CardTitle className="text-sm flex items-center justify-between">
                                   <div className="flex items-center gap-2">
@@ -1135,10 +1136,7 @@ export default function StudentDetails() {
                             </Card>
 
                             {/* Product ADS */}
-                            <Card className={`
-                              transition-all duration-300 hover:shadow-lg border-blue-200 dark:border-blue-800
-                              ${adsMetrics && adsMetrics.activeCampaigns > 0 ? "bg-blue-50/30 dark:bg-blue-950/20" : ""}
-                            `}>
+                            <Card className="transition-all duration-300 hover:shadow-lg border border-border">
                               <CardHeader>
                                 <CardTitle className="text-sm flex items-center justify-between">
                                   <div className="flex items-center gap-2">
@@ -1213,13 +1211,7 @@ export default function StudentDetails() {
                             </Card>
 
                             {/* FULL */}
-                            <Card className={`
-                              transition-all duration-300 hover:shadow-lg
-                              ${metrics.has_full
-                                ? "border-orange-200 dark:border-orange-800"
-                                : "border-gray-200 dark:border-gray-800"
-                              }
-                            `}>
+                            <Card className="transition-all duration-300 hover:shadow-lg border border-border">
                               <CardHeader>
                                 <CardTitle className="text-sm flex items-center justify-between">
                                   <div className="flex items-center gap-2">
@@ -1285,7 +1277,7 @@ export default function StudentDetails() {
                           </div>
 
                           {/* Problemas de Anúncios */}
-                          <Card className="border-orange-200 dark:border-orange-800 hover:shadow-lg transition-shadow duration-300">
+                          <Card className="border border-border hover:shadow-lg transition-shadow duration-300">
                             <CardHeader>
                               <CardTitle className="flex items-center gap-2">
                                 <AlertTriangle className="w-5 h-5 text-orange-500 animate-pulse" />
@@ -1293,7 +1285,7 @@ export default function StudentDetails() {
                               </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-2">
-                              <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors cursor-pointer">
+                              <div className="flex items-center justify-between p-3 rounded-lg border border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700 transition-colors cursor-pointer">
                                 <div className="flex items-center gap-2">
                                   <Image className="w-4 h-4 text-red-500" />
                                   <span className="text-sm font-medium">Fotos Baixa Qualidade</span>
@@ -1303,7 +1295,7 @@ export default function StudentDetails() {
                                 </Badge>
                               </div>
 
-                              <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-colors cursor-pointer">
+                              <div className="flex items-center justify-between p-3 rounded-lg border border-orange-200 dark:border-orange-800 hover:border-orange-300 dark:hover:border-orange-700 transition-colors cursor-pointer">
                                 <div className="flex items-center gap-2">
                                   <ExternalLink className="w-4 h-4 text-orange-500" />
                                   <span className="text-sm font-medium">Sem Descrição</span>
@@ -1313,7 +1305,7 @@ export default function StudentDetails() {
                                 </Badge>
                               </div>
 
-                              <div className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800 hover:bg-yellow-100 dark:hover:bg-yellow-950/40 transition-colors cursor-pointer">
+                              <div className="flex items-center justify-between p-3 rounded-lg border border-yellow-200 dark:border-yellow-800 hover:border-yellow-300 dark:hover:border-yellow-700 transition-colors cursor-pointer">
                                 <div className="flex items-center gap-2">
                                   <ExternalLink className="w-4 h-4 text-yellow-500" />
                                   <span className="text-sm font-medium">Sem Dados Fiscais</span>

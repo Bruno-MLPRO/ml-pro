@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { 
   ArrowLeft, User, Phone, Mail, MapPin, Building2, DollarSign, Package, 
   TrendingUp, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle,
-  ExternalLink, Home, Image, Plus, RefreshCw, Target
+  ExternalLink, Home, Image, Plus, RefreshCw, Target, Star
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -536,6 +536,30 @@ export default function StudentDetails() {
     }
   };
 
+  const handleSetPrimaryAccount = async (accountId: string) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('mercado_livre_accounts')
+        .update({ is_primary: false })
+        .eq('student_id', studentId);
+
+      if (updateError) throw updateError;
+
+      const { error: setPrimaryError } = await supabase
+        .from('mercado_livre_accounts')
+        .update({ is_primary: true })
+        .eq('id', accountId);
+
+      if (setPrimaryError) throw setPrimaryError;
+
+      toast({ title: "Conta principal atualizada" });
+      loadStudentData();
+    } catch (error) {
+      console.error('Error setting primary account:', error);
+      toast({ title: "Erro ao atualizar conta principal", variant: "destructive" });
+    }
+  };
+
   const loadBonusDeliveries = async () => {
     if (!studentId) return;
     
@@ -922,10 +946,17 @@ export default function StudentDetails() {
                                         {account.is_active ? "Ativa" : "Inativa"}
                                       </Badge>
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-sm text-muted-foreground">Conta Principal</span>
-                                      <span className="font-medium">{account.is_primary ? "Sim" : "Não"}</span>
-                                    </div>
+                                     <div className="flex items-center justify-between">
+                                       <span className="text-sm text-muted-foreground">Conta Principal</span>
+                                       <Button
+                                         size="sm"
+                                         variant="ghost"
+                                         onClick={() => handleSetPrimaryAccount(account.id)}
+                                         className="h-7 w-7 p-0"
+                                       >
+                                         <Star className={`w-4 h-4 ${account.is_primary ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+                                       </Button>
+                                     </div>
                                     {account.last_sync_at && (
                                       <div className="flex items-center justify-between">
                                         <span className="text-sm text-muted-foreground">Última Sincronização</span>

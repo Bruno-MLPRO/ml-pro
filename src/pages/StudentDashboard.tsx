@@ -458,6 +458,40 @@ const StudentDashboard = () => {
     }
   }
 
+  const handleSetPrimaryAccount = async (accountId: string) => {
+    try {
+      // Primeiro, desmarcar todas as contas como não-primárias
+      const { error: updateError } = await supabase
+        .from('mercado_livre_accounts')
+        .update({ is_primary: false })
+        .eq('student_id', user?.id);
+
+      if (updateError) throw updateError;
+
+      // Depois, marcar a conta selecionada como primária
+      const { error: setPrimaryError } = await supabase
+        .from('mercado_livre_accounts')
+        .update({ is_primary: true })
+        .eq('id', accountId);
+
+      if (setPrimaryError) throw setPrimaryError;
+
+      toast({
+        title: "Conta principal atualizada",
+        description: "Esta conta foi definida como sua conta principal.",
+      });
+
+      loadMLAccounts();
+    } catch (error) {
+      console.error('Error setting primary account:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar a conta principal.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSyncAccount = async (accountId: string) => {
     try {
       toast({
@@ -965,6 +999,21 @@ const StudentDashboard = () => {
                         )}
                       </div>
                       <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleSetPrimaryAccount(account.id)}
+                          className="h-9 w-9 p-0"
+                          title={account.is_primary ? "Conta principal" : "Definir como principal"}
+                        >
+                          <Star 
+                            className={`w-5 h-5 ${
+                              account.is_primary 
+                                ? 'fill-primary text-primary' 
+                                : 'text-muted-foreground hover:text-primary'
+                            }`}
+                          />
+                        </Button>
                         <Button 
                           size="sm" 
                           variant="outline"

@@ -1,4 +1,4 @@
-project_id = "yxlxholcipprdozohwhn"
+project_id = "gkpbtkewurhzudrgfuog"
 
 [functions.ml-oauth-callback]
 verify_jwt = false
@@ -6,10 +6,16 @@ verify_jwt = false
 [functions.ml-webhook-receiver]
 verify_jwt = false
 
-[functions.ml-get-item-health]
-verify_jwt = true
+[functions.ml-test-connection]
+verify_jwt = false
+
+[functions.ml-sync-status]
+verify_jwt = false
 
 [functions.ml-auto-sync-all]
+verify_jwt = false
+
+[functions.ml-fix-advertiser-ids]
 verify_jwt = false
 
 [functions.calculate-monthly-metrics]
@@ -17,3 +23,45 @@ verify_jwt = false
 
 [functions.calculate-student-monthly-metrics]
 verify_jwt = false
+
+[functions.ml-auth-start]
+verify_jwt = true
+
+[functions.ml-sync-data]
+verify_jwt = true
+
+[functions.ml-get-accounts]
+verify_jwt = true
+
+[functions.ml-get-products]
+verify_jwt = true
+
+[functions.ml-disconnect-account]
+verify_jwt = true
+
+[functions.ml-check-product-ads-status]
+verify_jwt = true
+
+[functions.ml-get-product-ads-data]
+verify_jwt = true
+
+[functions.ml-debug-product-ads-response]
+verify_jwt = true
+
+[functions.ml-get-seller-recovery-status]
+verify_jwt = true
+
+[functions.ml-fix-product-photos]
+verify_jwt = true
+
+[functions.ml-fix-tax-data]
+verify_jwt = true
+
+[functions.ml-get-item-health]
+verify_jwt = true
+
+[functions.create-student]
+verify_jwt = true
+
+[functions.delete-user-auth]
+verify_jwt = true

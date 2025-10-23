@@ -210,7 +210,7 @@ export default function StudentsManagement() {
     const { data: rolesData } = await supabase
       .from("user_roles")
       .select("user_id")
-      .eq("role", "manager");
+      .in("role", ["manager", "administrator"]);
 
     if (!rolesData) return;
 

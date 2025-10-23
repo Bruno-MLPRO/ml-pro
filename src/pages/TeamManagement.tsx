@@ -36,6 +36,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Manager {
   id: string;
@@ -70,6 +77,7 @@ export default function TeamManagement() {
     email: "",
     phone: "",
     password: "",
+    role: "manager" as "manager" | "administrator",
   });
 
   useEffect(() => {
@@ -196,7 +204,7 @@ export default function TeamManagement() {
         options: {
           data: {
             full_name: formData.full_name,
-            role: 'manager'
+            role: formData.role
           },
           emailRedirectTo: `${window.location.origin}/`
         }
@@ -225,9 +233,9 @@ export default function TeamManagement() {
         }
       }
 
-      toast.success('Gestor criado com sucesso');
+      toast.success('Membro criado com sucesso');
       setIsCreateDialogOpen(false);
-      setFormData({ full_name: "", email: "", phone: "", password: "" });
+      setFormData({ full_name: "", email: "", phone: "", password: "", role: "manager" });
       setSelectedStudentIds([]);
       loadManagers();
     } catch (error: any) {
@@ -283,7 +291,7 @@ export default function TeamManagement() {
       toast.success('Gestor atualizado com sucesso');
       setIsEditDialogOpen(false);
       setSelectedManager(null);
-      setFormData({ full_name: "", email: "", phone: "", password: "" });
+      setFormData({ full_name: "", email: "", phone: "", password: "", role: "manager" });
       setSelectedStudentIds([]);
       loadManagers();
     } catch (error: any) {
@@ -354,7 +362,7 @@ export default function TeamManagement() {
             </div>
             <Button onClick={() => setIsCreateDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              Novo Gestor
+              Novo Membro
             </Button>
           </div>
 
@@ -399,7 +407,8 @@ export default function TeamManagement() {
                                 full_name: manager.full_name,
                                 email: manager.email,
                                 phone: manager.phone || "",
-                                password: ""
+                                password: "",
+                                role: "manager"
                               });
 
                               // Load students assigned to this manager
@@ -440,9 +449,9 @@ export default function TeamManagement() {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
-            <DialogTitle>Criar Novo Gestor</DialogTitle>
+            <DialogTitle>Criar Novo Membro</DialogTitle>
             <DialogDescription>
-              Preencha os dados para criar um novo gestor
+              Preencha os dados para criar um novo membro da equipe
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh] pr-4">
@@ -486,6 +495,23 @@ export default function TeamManagement() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="role">Tipo de Acesso *</Label>
+                <Select 
+                  value={formData.role} 
+                  onValueChange={(value: "manager" | "administrator") => 
+                    setFormData({ ...formData, role: value })
+                  }
+                >
+                  <SelectTrigger id="role">
+                    <SelectValue placeholder="Selecione o tipo de acesso" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manager">Gestor</SelectItem>
+                    <SelectItem value="administrator">Administrador</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label>Alunos Atribuídos</Label>
                 <div className="border rounded-lg p-4 space-y-2 max-h-[200px] overflow-y-auto">
                   {students.length === 0 ? (
@@ -524,7 +550,7 @@ export default function TeamManagement() {
             }}>
               Cancelar
             </Button>
-            <Button onClick={handleCreateManager}>Criar Gestor</Button>
+            <Button onClick={handleCreateManager}>Criar Membro</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

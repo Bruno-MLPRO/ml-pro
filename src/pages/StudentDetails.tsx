@@ -188,7 +188,7 @@ export default function StudentDetails() {
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    if (userRole !== 'manager') {
+    if (userRole !== 'manager' && userRole !== 'administrator') {
       navigate('/auth');
       return;
     }

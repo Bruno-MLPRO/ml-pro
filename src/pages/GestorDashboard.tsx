@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
-import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign } from "lucide-react";
+import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -85,6 +85,15 @@ const GestorDashboard = () => {
       avgAcos: 0
     }
   });
+
+  // Admin actions state
+  const [syncingAccounts, setSyncingAccounts] = useState(false);
+  const [updatingMetrics, setUpdatingMetrics] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{
+    total: number;
+    current: number;
+    status: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!user || (userRole !== 'manager' && userRole !== 'administrator'))) {
@@ -294,6 +303,79 @@ const GestorDashboard = () => {
 
   const formatPercentage = (value: number) => {
     return `${value.toFixed(2)}%`;
+  };
+
+  // Admin action handlers
+  const handleSyncAllAccounts = async () => {
+    setSyncingAccounts(true);
+    setSyncProgress({ total: 0, current: 0, status: 'Iniciando sincronização...' });
+    
+    try {
+      console.log('🚀 Iniciando sincronização de todas as contas ML...');
+      
+      const { data, error } = await supabase.functions.invoke('ml-auto-sync-all', {
+        body: {}
+      });
+      
+      if (error) throw error;
+      
+      console.log('✅ Resultado da sincronização:', data);
+      
+      toast({
+        title: "✅ Sincronização Concluída!",
+        description: `${data.successful} contas sincronizadas com sucesso de ${data.total_accounts} total. ${data.tokens_renewed} tokens renovados.`,
+        variant: "default",
+      });
+      
+      // Recarregar métricas após sincronização
+      await loadConsolidatedMetrics();
+      
+    } catch (error) {
+      console.error('❌ Erro na sincronização:', error);
+      toast({
+        title: "❌ Erro na Sincronização",
+        description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingAccounts(false);
+      setSyncProgress(null);
+    }
+  };
+
+  const handleUpdateMetrics = async () => {
+    setUpdatingMetrics(true);
+    
+    try {
+      console.log('📊 Recalculando métricas consolidadas...');
+      
+      const { data, error } = await supabase.functions.invoke('calculate-monthly-metrics', {
+        body: {}
+      });
+      
+      if (error) throw error;
+      
+      console.log('✅ Métricas recalculadas:', data);
+      
+      toast({
+        title: "✅ Métricas Atualizadas!",
+        description: `Métricas consolidadas recalculadas com sucesso. Faturamento: ${formatCurrency(data.metrics?.total_revenue || 0)}`,
+        variant: "default",
+      });
+      
+      // Recarregar métricas
+      await loadConsolidatedMetrics();
+      
+    } catch (error) {
+      console.error('❌ Erro ao atualizar métricas:', error);
+      toast({
+        title: "❌ Erro na Atualização",
+        description: error instanceof Error ? error.message : "Ocorreu um erro ao recalcular as métricas",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingMetrics(false);
+    }
   };
 
   // Notice handlers
@@ -522,7 +604,70 @@ const GestorDashboard = () => {
 
         {/* Métricas Consolidadas */}
         <div className="mb-8 space-y-6">
-          <h2 className="text-2xl font-semibold text-foreground">Métricas Consolidadas</h2>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+            <h2 className="text-2xl font-semibold text-foreground">Métricas Consolidadas</h2>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Botão Sincronizar Contas */}
+              <Button
+                onClick={handleSyncAllAccounts}
+                disabled={syncingAccounts}
+                variant="outline"
+                className="gap-2"
+              >
+                {syncingAccounts ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Sincronizando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Sincronizar Contas
+                  </>
+                )}
+              </Button>
+
+              {/* Botão Atualizar Métricas */}
+              <Button
+                onClick={handleUpdateMetrics}
+                disabled={updatingMetrics}
+                variant="default"
+                className="gap-2"
+              >
+                {updatingMetrics ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Atualizando...
+                  </>
+                ) : (
+                  <>
+                    <TrendingUp className="w-4 h-4" />
+                    Atualizar Métricas
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+          
+          {/* Progress indicator para sincronização */}
+          {syncProgress && (
+            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    {syncProgress.status}
+                  </p>
+                  {syncProgress.total > 0 && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      {syncProgress.current} de {syncProgress.total} contas processadas
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Linha 1: Faturamento e Product Ads */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

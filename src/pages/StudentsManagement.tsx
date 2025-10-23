@@ -99,7 +99,7 @@ export default function StudentsManagement() {
   const [studentApps, setStudentApps] = useState<any[]>([]);
   const [availableApps, setAvailableApps] = useState<any[]>([]);
   const [managers, setManagers] = useState<Array<{ id: string; full_name: string }>>([]);
-  const [selectedManagerId, setSelectedManagerId] = useState<string>(userRole === 'administrator' ? "all" : "current");
+  const [selectedManagerId, setSelectedManagerId] = useState<string>("all");
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const { toast } = useToast();
 
@@ -136,11 +136,6 @@ export default function StudentsManagement() {
       fetchManagers();
       fetchStudents();
       fetchPlans();
-
-      // Set default manager to logged-in user
-      if (user) {
-        setSelectedManagerId(user.id);
-      }
 
       // Set up realtime subscription for profile updates
       const channel = supabase

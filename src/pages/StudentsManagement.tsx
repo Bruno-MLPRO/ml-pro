@@ -932,32 +932,67 @@ export default function StudentsManagement() {
     setIsSyncingAll(true);
     try {
       const { data, error } = await supabase.functions.invoke('ml-auto-sync-all');
+      
+      if (error) throw error;
 
-      if (error) {
-        toast({
-          title: "Erro ao sincronizar",
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
-      }
-
+      // Show immediate toast for async processing
       toast({
-        title: "Sincronização iniciada",
-        description: `Sincronizando ${data.total_synced || 0} contas do Mercado Livre`,
+        title: "🚀 Sincronização Iniciada",
+        description: `Processando ${data.total_accounts} contas em background. Aguarde 1-2 minutos.`,
       });
 
-      // Refresh students data after sync
-      setTimeout(() => {
-        fetchStudents();
-      }, 2000);
-    } catch (err: any) {
+      // Optional: Poll for status updates (every 10 seconds)
+      const logId = data.log_id;
+      let pollAttempts = 0;
+      const maxPolls = 12; // 2 minutes max (12 * 10s)
+
+      const pollInterval = setInterval(async () => {
+        pollAttempts++;
+        
+        try {
+          const { data: statusData, error: statusError } = await supabase.functions.invoke(
+            'ml-sync-status',
+            { body: { log_id: logId } }
+          );
+
+          if (statusError) {
+            console.warn('Status poll error:', statusError);
+            return;
+          }
+
+          if (statusData.status === 'completed') {
+            clearInterval(pollInterval);
+            
+            toast({
+              title: "✅ Sincronização Concluída!",
+              description: `${statusData.successful_syncs} contas sincronizadas, ${statusData.failed_syncs} falharam, ${statusData.tokens_renewed} tokens renovados`,
+            });
+
+            await fetchStudents();
+            setIsSyncingAll(false);
+          }
+        } catch (pollError) {
+          console.error('Poll error:', pollError);
+        }
+
+        // Stop polling after max attempts
+        if (pollAttempts >= maxPolls) {
+          clearInterval(pollInterval);
+          toast({
+            title: "⏱️ Sincronização em andamento",
+            description: "A sincronização está demorando mais que o esperado. Recarregue a página em alguns minutos.",
+          });
+          setIsSyncingAll(false);
+        }
+      }, 10000); // Poll every 10 seconds
+
+    } catch (err) {
+      console.error('Error syncing accounts:', err);
       toast({
         title: "Erro ao sincronizar",
-        description: err.message || "Erro desconhecido",
+        description: err instanceof Error ? err.message : "Erro desconhecido",
         variant: "destructive",
       });
-    } finally {
       setIsSyncingAll(false);
     }
   };

@@ -285,38 +285,87 @@ const GestorDashboard = () => {
       
       if (error) throw error;
       
-      console.log('✅ Sincronização concluída:', data);
+      console.log('✅ Sincronização iniciada:', data);
       
-      // Auto-recalcular métricas consolidadas
-      setSyncProgress({ 
-        total: data.total_accounts, 
-        current: data.successful, 
-        status: 'Recalculando métricas...' 
-      });
-      
-      const { data: metricsData, error: metricsError } = await supabase.functions.invoke(
-        'calculate-monthly-metrics', 
-        { body: {} }
-      );
-      
-      if (metricsError) {
-        console.warn('⚠️ Erro ao recalcular métricas:', metricsError);
-      } else {
-        console.log('✅ Métricas recalculadas automaticamente');
-      }
-      
-      // Aguardar 2s para garantir finalização das escritas
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Recarregar métricas
-      await loadConsolidatedMetrics();
-      
+      // Show immediate toast
       toast({
-        title: "✅ Sincronização Concluída!",
-        description: `${data.successful} contas sincronizadas, ${data.tokens_renewed} tokens renovados. Métricas atualizadas!`,
-        variant: "default",
+        title: "🚀 Sincronização Iniciada",
+        description: `Processando ${data.total_accounts} contas em background. Aguarde 1-2 minutos.`,
       });
-      
+
+      // Poll for status
+      const logId = data.log_id;
+      let pollAttempts = 0;
+      const maxPolls = 12; // 2 minutes
+
+      const pollInterval = setInterval(async () => {
+        pollAttempts++;
+        
+        try {
+          const { data: statusData, error: statusError } = await supabase.functions.invoke(
+            'ml-sync-status',
+            { body: { log_id: logId } }
+          );
+
+          if (statusError) {
+            console.warn('Status poll error:', statusError);
+            return;
+          }
+
+          // Update progress
+          setSyncProgress({
+            total: statusData.total_accounts,
+            current: statusData.successful_syncs,
+            status: statusData.status === 'completed' 
+              ? 'Finalizado' 
+              : `${statusData.successful_syncs}/${statusData.total_accounts} concluídas`
+          });
+
+          if (statusData.status === 'completed') {
+            clearInterval(pollInterval);
+            
+            // Auto-calculate metrics
+            setSyncProgress({ 
+              total: statusData.total_accounts, 
+              current: statusData.successful_syncs, 
+              status: 'Recalculando métricas...' 
+            });
+            
+            const { error: metricsError } = await supabase.functions.invoke(
+              'calculate-monthly-metrics', 
+              { body: {} }
+            );
+            
+            if (metricsError) {
+              console.warn('⚠️ Erro ao recalcular métricas:', metricsError);
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await loadConsolidatedMetrics();
+            
+            toast({
+              title: "✅ Sincronização Concluída!",
+              description: `${statusData.successful_syncs} contas sincronizadas, ${statusData.tokens_renewed} tokens renovados`,
+            });
+            
+            setSyncingAccounts(false);
+            setSyncProgress(null);
+          }
+        } catch (pollError) {
+          console.error('Poll error:', pollError);
+        }
+
+        if (pollAttempts >= maxPolls) {
+          clearInterval(pollInterval);
+          toast({
+            title: "⏱️ Sincronização em andamento",
+            description: "Recarregue a página em alguns minutos.",
+          });
+          setSyncingAccounts(false);
+          setSyncProgress(null);
+        }
+      }, 10000);
+
     } catch (error) {
       console.error('❌ Erro na sincronização:', error);
       toast({
@@ -324,7 +373,6 @@ const GestorDashboard = () => {
         description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido",
         variant: "destructive",
       });
-    } finally {
       setSyncingAccounts(false);
       setSyncProgress(null);
     }

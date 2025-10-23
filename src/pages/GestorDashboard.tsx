@@ -162,11 +162,12 @@ const GestorDashboard = () => {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Query 1: Faturamento e Vendas (últimos 30 dias)
+      // Query 1: Faturamento e Vendas (últimos 30 dias) - limite 10k para evitar timeout
       const { data: ordersData, error: ordersError } = await supabase
         .from('mercado_livre_orders')
         .select('paid_amount')
-        .gte('date_created', thirtyDaysAgo.toISOString());
+        .gte('date_created', thirtyDaysAgo.toISOString())
+        .limit(10000);
 
       if (ordersError) throw ordersError;
 
@@ -209,33 +210,38 @@ const GestorDashboard = () => {
       // Query 3: Métricas de Product Ads (últimos 30 dias)
       const { data: campaignsData, error: campaignsError } = await supabase
         .from('mercado_livre_campaigns')
-        .select('total_spend, advertised_sales, roas, acos')
+        .select('total_spend, ad_revenue, advertised_sales, roas, acos')
         .gte('synced_at', thirtyDaysAgo.toISOString());
 
       if (campaignsError) throw campaignsError;
 
       const totalSpend = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.total_spend) || 0), 0) || 0;
+      const totalAdRevenue = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.ad_revenue) || 0), 0) || 0;
       const advertisedSales = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.advertised_sales) || 0), 0) || 0;
       
-      const validRoas = campaignsData?.filter(c => c.roas != null && c.roas > 0) || [];
-      const avgRoas = validRoas.length > 0 
-        ? validRoas.reduce((sum, c) => sum + Number(c.roas), 0) / validRoas.length 
-        : 0;
-      
-      const validAcos = campaignsData?.filter(c => c.acos != null && c.acos > 0) || [];
-      const avgAcos = validAcos.length > 0 
-        ? validAcos.reduce((sum, c) => sum + Number(c.acos), 0) / validAcos.length 
-        : 0;
+      // ✅ Calcular ROAS e ACOS CORRETOS baseados nos totais consolidados
+      const avgRoas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
+      const avgAcos = totalAdRevenue > 0 ? (totalSpend / totalAdRevenue) * 100 : 0;
 
       console.log('✅ Métricas carregadas:', {
-        totalRevenue,
-        totalSales,
-        shippingStats,
-        adsMetrics: {
-          totalSpend,
-          advertisedSales,
-          avgRoas,
-          avgAcos
+        pedidos: {
+          total: ordersData?.length || 0,
+          receita: totalRevenue
+        },
+        produtos: {
+          correios: shippingStats.correios,
+          flex: shippingStats.flex,
+          agencias: shippingStats.agencias,
+          coleta: shippingStats.coleta,
+          full: shippingStats.full
+        },
+        ads: {
+          campanhas: campaignsData?.length || 0,
+          investimento: totalSpend,
+          receitaAds: totalAdRevenue,
+          vendasComAds: advertisedSales,
+          roasReal: avgRoas.toFixed(2),
+          acosReal: avgAcos.toFixed(2) + '%'
         }
       });
 

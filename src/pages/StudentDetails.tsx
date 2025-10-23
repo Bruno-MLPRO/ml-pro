@@ -1016,40 +1016,44 @@ export default function StudentDetails() {
                                   <div className="space-y-3">
                                     <Badge variant="default" className="mb-2">Ativo</Badge>
                                     
-                                    {/* Unidades */}
-                                    <div className="pb-3 border-b">
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-sm text-muted-foreground">Estoque Total</span>
-                                        <span className="font-bold">{totalStockUnits} un</span>
-                                      </div>
-                                    </div>
-                                    
-                                    {/* Financeiro */}
-                                    <div className="space-y-3">
+                                    {/* Layout em 2 colunas */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                      {/* Coluna 1: Estoque */}
                                       <div>
-                                        <div className="flex items-center gap-1 mb-1">
-                                          <DollarSign className="w-3 h-3 text-blue-600 dark:text-blue-400" />
-                                          <span className="text-xs text-muted-foreground">Faturamento Previsto</span>
+                                        <div className="flex flex-col items-center justify-center h-full">
+                                          <span className="text-xs text-muted-foreground mb-1">Estoque Total</span>
+                                          <span className="text-2xl font-bold">{totalStockUnits}</span>
+                                          <span className="text-xs text-muted-foreground">unidades</span>
                                         </div>
-                                        <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                                          {fullFinancials.totalRevenue.toLocaleString('pt-BR', { 
-                                            style: 'currency', 
-                                            currency: 'BRL' 
-                                          })}
-                                        </p>
                                       </div>
                                       
-                                      <div>
-                                        <div className="flex items-center gap-1 mb-1">
-                                          <TrendingUp className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                                          <span className="text-xs text-muted-foreground">Payout Previsto</span>
+                                      {/* Coluna 2: Financeiro */}
+                                      <div className="space-y-3 border-l pl-4">
+                                        <div>
+                                          <div className="flex items-center gap-1 mb-1">
+                                            <DollarSign className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                            <span className="text-xs text-muted-foreground">Faturamento Previsto</span>
+                                          </div>
+                                          <p className="text-base font-bold text-blue-600 dark:text-blue-400">
+                                            {fullFinancials.totalRevenue.toLocaleString('pt-BR', { 
+                                              style: 'currency', 
+                                              currency: 'BRL' 
+                                            })}
+                                          </p>
                                         </div>
-                                        <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                                          {fullFinancials.payout.toLocaleString('pt-BR', { 
-                                            style: 'currency', 
-                                            currency: 'BRL' 
-                                          })}
-                                        </p>
+                                        
+                                        <div>
+                                          <div className="flex items-center gap-1 mb-1">
+                                            <TrendingUp className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                            <span className="text-xs text-muted-foreground">Payout Previsto</span>
+                                          </div>
+                                          <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                                            {fullFinancials.payout.toLocaleString('pt-BR', { 
+                                              style: 'currency', 
+                                              currency: 'BRL' 
+                                            })}
+                                          </p>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>

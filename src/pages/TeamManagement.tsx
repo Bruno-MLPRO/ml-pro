@@ -49,6 +49,7 @@ interface Manager {
   full_name: string;
   email: string;
   phone: string | null;
+  role: 'manager' | 'administrator';
   active_students: number;
   inactive_students: number;
 }
@@ -126,11 +127,11 @@ export default function TeamManagement() {
     try {
       setLoading(true);
       
-      // Get all managers from user_roles
+      // Get all managers and administrators from user_roles
       const { data: managerRoles, error: rolesError } = await supabase
         .from('user_roles')
-        .select('user_id')
-        .eq('role', 'manager');
+        .select('user_id, role')
+        .in('role', ['manager', 'administrator']);
 
       if (rolesError) throw rolesError;
 
@@ -170,11 +171,15 @@ export default function TeamManagement() {
             (j: any) => j.profiles?.mentoria_status !== 'Ativo'
           ).length || 0;
 
+          // Get the role for this profile
+          const roleInfo = managerRoles.find(r => r.user_id === profile.id);
+
           return {
             id: profile.id,
             full_name: profile.full_name,
             email: profile.email,
             phone: profile.phone,
+            role: (roleInfo?.role || 'manager') as 'manager' | 'administrator',
             active_students: activeStudents,
             inactive_students: inactiveStudents,
           };
@@ -184,7 +189,7 @@ export default function TeamManagement() {
       setManagers(managersWithStats);
     } catch (error) {
       console.error('Error loading managers:', error);
-      toast.error('Erro ao carregar gestores');
+      toast.error('Erro ao carregar membros');
     } finally {
       setLoading(false);
     }
@@ -240,7 +245,7 @@ export default function TeamManagement() {
       loadManagers();
     } catch (error: any) {
       console.error('Error creating manager:', error);
-      toast.error(error.message || 'Erro ao criar gestor');
+      toast.error(error.message || 'Erro ao criar membro');
     }
   };
 
@@ -288,7 +293,7 @@ export default function TeamManagement() {
         await Promise.all(updates);
       }
 
-      toast.success('Gestor atualizado com sucesso');
+      toast.success('Membro atualizado com sucesso');
       setIsEditDialogOpen(false);
       setSelectedManager(null);
       setFormData({ full_name: "", email: "", phone: "", password: "", role: "manager" });
@@ -296,7 +301,7 @@ export default function TeamManagement() {
       loadManagers();
     } catch (error: any) {
       console.error('Error updating manager:', error);
-      toast.error(error.message || 'Erro ao atualizar gestor');
+      toast.error(error.message || 'Erro ao atualizar membro');
     }
   };
 
@@ -310,13 +315,13 @@ export default function TeamManagement() {
         .update({ manager_id: null })
         .eq('manager_id', selectedManager.id);
 
-      toast.success('Vínculo com alunos removido. Gestor desvinculado com sucesso.');
+      toast.success('Vínculo com alunos removido. Membro desvinculado com sucesso.');
       setIsDeleteDialogOpen(false);
       setSelectedManager(null);
       loadManagers();
     } catch (error) {
       console.error('Error deleting manager:', error);
-      toast.error('Erro ao excluir gestor');
+      toast.error('Erro ao excluir membro');
     }
   };
 
@@ -345,7 +350,7 @@ export default function TeamManagement() {
               Gestão de Equipe
             </h1>
             <p className="text-foreground-secondary">
-              Gerencie os gestores e visualize suas estatísticas
+              Gerencie os membros e visualize suas estatísticas
             </p>
           </div>
 
@@ -354,7 +359,7 @@ export default function TeamManagement() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary" />
               <Input
-                placeholder="Buscar gestor..."
+                placeholder="Buscar membro..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -373,6 +378,7 @@ export default function TeamManagement() {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead className="text-center">Tipo</TableHead>
                   <TableHead className="text-center">Alunos ativos</TableHead>
                   <TableHead className="text-center">Alunos inativos</TableHead>
                   <TableHead className="text-center">Total</TableHead>
@@ -382,8 +388,8 @@ export default function TeamManagement() {
               <TableBody>
                 {filteredManagers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-foreground-secondary">
-                      Nenhum gestor encontrado
+                    <TableCell colSpan={7} className="text-center py-8 text-foreground-secondary">
+                      Nenhum membro encontrado
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -391,6 +397,11 @@ export default function TeamManagement() {
                     <TableRow key={manager.id}>
                       <TableCell className="font-medium">{manager.full_name}</TableCell>
                       <TableCell className="text-foreground-secondary">{manager.email}</TableCell>
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-primary/10 text-primary">
+                          {manager.role === 'administrator' ? 'Administrador' : 'Gestor'}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-center">{manager.active_students}</TableCell>
                       <TableCell className="text-center">{manager.inactive_students}</TableCell>
                       <TableCell className="text-center font-medium">
@@ -403,12 +414,20 @@ export default function TeamManagement() {
                             size="icon"
                             onClick={async () => {
                               setSelectedManager(manager);
+                              
+                              // Fetch the user's role
+                              const { data: roleData } = await supabase
+                                .from('user_roles')
+                                .select('role')
+                                .eq('user_id', manager.id)
+                                .single();
+                              
                               setFormData({
                                 full_name: manager.full_name,
                                 email: manager.email,
                                 phone: manager.phone || "",
                                 password: "",
-                                role: "manager"
+                                role: (roleData?.role || "manager") as "manager" | "administrator"
                               });
 
                               // Load students assigned to this manager
@@ -559,9 +578,9 @@ export default function TeamManagement() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
-            <DialogTitle>Editar Gestor</DialogTitle>
+            <DialogTitle>Editar Membro</DialogTitle>
             <DialogDescription>
-              Atualize os dados do gestor e gerencie seus alunos
+              Atualize os dados do membro e gerencie seus alunos
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh] pr-4">
@@ -642,10 +661,10 @@ export default function TeamManagement() {
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Gestor</AlertDialogTitle>
+            <AlertDialogTitle>Excluir Membro</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja remover o gestor {selectedManager?.full_name}? 
-              Todos os alunos atribuídos a este gestor ficarão sem gestor.
+              Tem certeza que deseja remover o membro {selectedManager?.full_name}? 
+              Todos os alunos atribuídos a este membro ficarão sem gestor.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

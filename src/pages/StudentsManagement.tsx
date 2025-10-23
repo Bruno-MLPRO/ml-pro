@@ -1486,14 +1486,14 @@ export default function StudentsManagement() {
                     </TableHead>
                     <TableHead className="font-semibold text-center">
                       <div className="flex items-center justify-center gap-1.5">
-                        <Warehouse className="h-4 w-4" />
-                        <span>Full</span>
+                        <Building2 className="h-4 w-4" />
+                        <span>Agências</span>
                       </div>
                     </TableHead>
                     <TableHead className="font-semibold text-center">
                       <div className="flex items-center justify-center gap-1.5">
-                        <Building2 className="h-4 w-4" />
-                        <span>Agências</span>
+                        <Warehouse className="h-4 w-4" />
+                        <span>Full</span>
                       </div>
                     </TableHead>
                     <TableHead className="text-right font-semibold">Ações</TableHead>
@@ -1561,15 +1561,15 @@ export default function StudentsManagement() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {student.has_ml_full ? (
-                            <CheckCircle2 className="h-5 w-5 text-orange-600 dark:text-orange-400 mx-auto" />
+                          {student.has_agencies ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mx-auto" />
                           ) : (
                             <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {student.has_agencies ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mx-auto" />
+                          {student.has_ml_full ? (
+                            <CheckCircle2 className="h-5 w-5 text-orange-600 dark:text-orange-400 mx-auto" />
                           ) : (
                             <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
                           )}

@@ -11,3 +11,6 @@ verify_jwt = true
 
 [functions.ml-auto-sync-all]
 verify_jwt = false
+
+[functions.calculate-monthly-metrics]
+verify_jwt = false

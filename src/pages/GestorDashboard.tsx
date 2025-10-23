@@ -158,11 +158,53 @@ const GestorDashboard = () => {
 
   const loadConsolidatedMetrics = async () => {
     try {
-      console.log('🔍 Carregando métricas consolidadas...');
+      console.log('🔄 Carregando métricas consolidadas...');
+      
+      // Tentar buscar métricas pré-calculadas primeiro
+      const { data: preCalculated, error: preCalcError } = await supabase
+        .from('consolidated_metrics_monthly')
+        .select('*')
+        .order('reference_month', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (preCalcError) {
+        console.error('⚠️ Erro ao buscar métricas pré-calculadas:', preCalcError);
+      }
+
+      if (preCalculated) {
+        // ✅ Usar métricas pré-calculadas (super rápido)
+        console.log('✅ Usando métricas pré-calculadas:', {
+          referenceMonth: preCalculated.reference_month,
+          calculatedAt: preCalculated.calculated_at
+        });
+
+        setConsolidatedMetrics({
+          totalRevenue: Number(preCalculated.total_revenue) || 0,
+          totalSales: Number(preCalculated.total_sales) || 0,
+          shippingStats: {
+            correios: Number(preCalculated.shipping_correios) || 0,
+            flex: Number(preCalculated.shipping_flex) || 0,
+            agencias: Number(preCalculated.shipping_agencias) || 0,
+            coleta: Number(preCalculated.shipping_coleta) || 0,
+            full: Number(preCalculated.shipping_full) || 0,
+          },
+          adsMetrics: {
+            totalSpend: Number(preCalculated.ads_total_spend) || 0,
+            advertisedSales: Number(preCalculated.ads_total_sales) || 0,
+            avgRoas: Number(preCalculated.ads_roas) || 0,
+            avgAcos: Number(preCalculated.ads_acos) || 0,
+          }
+        });
+        return;
+      }
+
+      // Fallback: calcular on-demand se não houver métricas pré-calculadas
+      console.log('⚠️ Métricas pré-calculadas não encontradas. Calculando on-demand...');
+      
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Query 1: Faturamento e Vendas (últimos 30 dias) - limite 10k para evitar timeout
       const { data: ordersData, error: ordersError } = await supabase
         .from('mercado_livre_orders')
         .select('paid_amount')
@@ -171,10 +213,10 @@ const GestorDashboard = () => {
 
       if (ordersError) throw ordersError;
 
-      const totalRevenue = ordersData?.reduce((sum, order) => sum + (Number(order.paid_amount) || 0), 0) || 0;
+      const totalRevenue = ordersData?.reduce((sum, order) => 
+        sum + (Number(order.paid_amount) || 0), 0) || 0;
       const totalSales = ordersData?.length || 0;
 
-      // Query 2: Anúncios por Tipo de Envio (apenas ativos)
       const { data: productsData, error: productsError } = await supabase
         .from('mercado_livre_products')
         .select('logistic_type, shipping_mode')
@@ -183,34 +225,27 @@ const GestorDashboard = () => {
       if (productsError) throw productsError;
 
       const shippingStats = {
-        correios: 0,
-        flex: 0,
-        agencias: 0,
-        coleta: 0,
-        full: 0
+        correios: productsData?.filter(p => 
+          p.logistic_type === 'drop_off' && p.shipping_mode === 'me2'
+        ).length || 0,
+        flex: productsData?.filter(p => 
+          p.logistic_type === 'cross_docking'
+        ).length || 0,
+        agencias: productsData?.filter(p => 
+          p.logistic_type === 'drop_off' && 
+          ['custom', 'not_specified'].includes(p.shipping_mode || '')
+        ).length || 0,
+        coleta: productsData?.filter(p => 
+          p.logistic_type === 'xd_drop_off'
+        ).length || 0,
+        full: productsData?.filter(p => 
+          p.logistic_type === 'fulfillment'
+        ).length || 0,
       };
 
-      productsData?.forEach(product => {
-        const logisticType = product.logistic_type?.toLowerCase();
-        const shippingMode = product.shipping_mode?.toLowerCase();
-        
-        if (logisticType === 'fulfillment') {
-          shippingStats.full++;
-        } else if (logisticType === 'drop_off') {
-          shippingStats.agencias++;
-        } else if (logisticType === 'xd_drop_off') {
-          shippingStats.coleta++;
-        } else if (shippingMode === 'me2') {
-          shippingStats.correios++;
-        } else if (logisticType === 'not_specified' && shippingMode !== 'me2') {
-          shippingStats.flex++;
-        }
-      });
-
-      // Query 3: Métricas de Product Ads (últimos 30 dias)
       const { data: campaignsData, error: campaignsError } = await supabase
         .from('mercado_livre_campaigns')
-        .select('total_spend, ad_revenue, advertised_sales, roas, acos')
+        .select('total_spend, ad_revenue, advertised_sales')
         .gte('synced_at', thirtyDaysAgo.toISOString());
 
       if (campaignsError) throw campaignsError;
@@ -219,30 +254,16 @@ const GestorDashboard = () => {
       const totalAdRevenue = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.ad_revenue) || 0), 0) || 0;
       const advertisedSales = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.advertised_sales) || 0), 0) || 0;
       
-      // ✅ Calcular ROAS e ACOS CORRETOS baseados nos totais consolidados
       const avgRoas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
       const avgAcos = totalAdRevenue > 0 ? (totalSpend / totalAdRevenue) * 100 : 0;
 
-      console.log('✅ Métricas carregadas:', {
-        pedidos: {
-          total: ordersData?.length || 0,
-          receita: totalRevenue
-        },
-        produtos: {
-          correios: shippingStats.correios,
-          flex: shippingStats.flex,
-          agencias: shippingStats.agencias,
-          coleta: shippingStats.coleta,
-          full: shippingStats.full
-        },
-        ads: {
-          campanhas: campaignsData?.length || 0,
-          investimento: totalSpend,
-          receitaAds: totalAdRevenue,
-          vendasComAds: advertisedSales,
-          roasReal: avgRoas.toFixed(2),
-          acosReal: avgAcos.toFixed(2) + '%'
-        }
+      console.log('✅ Métricas calculadas on-demand:', {
+        totalRevenue,
+        totalSales,
+        totalSpend,
+        totalAdRevenue,
+        avgRoas: avgRoas.toFixed(2),
+        avgAcos: avgAcos.toFixed(2)
       });
 
       setConsolidatedMetrics({

@@ -89,6 +89,7 @@ const StudentDashboard = () => {
   const [productAdsMetrics, setProductAdsMetrics] = useState<ProductAdsMetrics | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<7 | 15 | 30>(30);
   const [loading, setLoading] = useState(true);
+  const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [connectingML, setConnectingML] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -256,6 +257,7 @@ const StudentDashboard = () => {
   // Recarregar quando o período mudar
   useEffect(() => {
     if (user && userRole === 'student' && mlAccounts.length > 0) {
+      console.log('🔄 Recarregando métricas por mudança de período:', selectedPeriod);
       loadMLAccounts()
     }
   }, [selectedPeriod]);
@@ -369,6 +371,7 @@ const StudentDashboard = () => {
   };
 
   const loadMLAccounts = async () => {
+    setLoadingMetrics(true);
     try {
       if (!user) return
       
@@ -383,31 +386,62 @@ const StudentDashboard = () => {
       if (accountsData?.accounts) {
         setMlAccounts(accountsData.accounts)
         
-        // Buscar TODOS os pedidos para calcular métricas dinâmicas
-        const { data: orders, error: ordersError } = await supabase
+        // ✅ Adicionar: Verificar quantas contas o aluno tem
+        console.log('🔍 Contas ML do aluno:', {
+          total: accountsData.accounts.length,
+          accounts: accountsData.accounts.map((a: any) => ({
+            id: a.id,
+            nickname: a.ml_nickname,
+            is_primary: a.is_primary
+          }))
+        });
+        
+        // Calcular período ANTES da query
+        const periodStart = new Date()
+        periodStart.setDate(periodStart.getDate() - selectedPeriod)
+
+        console.log('📅 Buscando pedidos do período:', {
+          selectedPeriod,
+          periodStart: periodStart.toISOString(),
+          periodEnd: new Date().toISOString()
+        });
+
+        // Buscar pedidos DIRETO do período (filtro no banco)
+        const { data: orders, error: ordersError, count } = await supabase
           .from('mercado_livre_orders')
-          .select('*')
+          .select('total_amount, paid_amount, date_created', { count: 'exact' })
           .eq('student_id', user.id)
           .eq('status', 'paid')
+          .gte('date_created', periodStart.toISOString())
           .order('date_created', { ascending: false })
         
         if (ordersError) {
-          console.error('Error loading orders:', ordersError)
+          console.error('❌ Error loading orders:', ordersError)
           return
         }
+
+        // ⚠️ Validação: Verificar se há mais dados do que o retornado
+        if (count && count > (orders?.length || 0)) {
+          console.warn(`⚠️ AVISO: Há ${count} pedidos no período, mas apenas ${orders?.length} foram retornados!`);
+          toast({
+            title: "Aviso: Muitos pedidos",
+            description: `Há ${count} pedidos neste período. Mostrando os ${orders?.length} mais recentes.`,
+            variant: "default",
+          });
+        }
         
-        // Filtrar pedidos pelo período selecionado
-        const periodStart = new Date()
-        periodStart.setDate(periodStart.getDate() - selectedPeriod)
-        
-        const filteredOrders = orders?.filter(order => 
-          new Date(order.date_created) >= periodStart
-        ) || []
-        
-        // Calcular métricas do período
-        const totalSales = filteredOrders.length
-        const totalRevenue = filteredOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0)
+        // Calcular métricas do período (já filtrado)
+        const totalSales = orders?.length || 0
+        const totalRevenue = orders?.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) || 0
         const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0
+
+        console.log('📊 Métricas calculadas do aluno:', {
+          selectedPeriod: `${selectedPeriod} dias`,
+          totalSales,
+          totalRevenue: totalRevenue.toFixed(2),
+          averageTicket: averageTicket.toFixed(2),
+          ordersCount: orders?.length
+        });
         
         // Pegar outras métricas da primeira conta (não dependem de período)
         const firstAccountMetrics = accountsData.accounts[0]?.metrics
@@ -437,6 +471,8 @@ const StudentDashboard = () => {
       }
     } catch (error) {
       console.error('Error loading ML accounts:', error)
+    } finally {
+      setLoadingMetrics(false);
     }
   }
 
@@ -660,7 +696,7 @@ const StudentDashboard = () => {
               <CardDescription>
                 {mlAccounts.length === 0 
                   ? 'Conecte uma conta do Mercado Livre para visualizar suas métricas'
-                  : 'Métricas consolidadas de todas as suas contas do Mercado Livre'
+                  : `Últimos ${selectedPeriod} dias a partir de hoje - ${format(new Date(Date.now() - selectedPeriod * 24 * 60 * 60 * 1000), 'dd/MM/yyyy', { locale: ptBR })} a ${format(new Date(), 'dd/MM/yyyy', { locale: ptBR })}`
                 }
               </CardDescription>
             </CardHeader>
@@ -696,6 +732,11 @@ const StudentDashboard = () => {
                   <p className="text-foreground-secondary">
                     Conecte uma conta do Mercado Livre para visualizar suas métricas
                   </p>
+                </div>
+              ) : loadingMetrics ? (
+                <div className="flex items-center justify-center gap-2 py-8">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm text-muted-foreground">Atualizando métricas...</span>
                 </div>
               ) : (
                 <>

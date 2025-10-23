@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus, Pencil, Trash2, ExternalLink, X, CheckCircle2, XCircle, User, Rocket, Package, Warehouse, RefreshCw } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, ExternalLink, X, CheckCircle2, XCircle, User, Rocket, Package, Warehouse, RefreshCw, Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Sidebar } from "@/components/Sidebar";
@@ -57,7 +57,9 @@ interface Student {
   has_ml_decola?: boolean;
   has_ml_flex?: boolean;
   has_ml_full?: boolean;
+  has_agencies?: boolean;
   manager_id?: string | null;
+  manager_name?: string;
 }
 
 interface Plan {
@@ -385,10 +387,20 @@ export default function StudentsManagement() {
         p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
       );
 
+      // Check if student has agencies (has produtos with shipping via agency)
+      const has_agencies = studentProducts.some(p => 
+        p.shipping_mode === 'custom'
+      );
+
+      // Get manager name
+      const manager = managers.find(m => m.id === journey?.manager_id);
+      const manager_name = manager?.full_name;
+
       return {
         ...profile,
         current_phase: journey?.current_phase || "Onboarding",
         manager_id: journey?.manager_id || null,
+        manager_name,
         journey_progress: progressByTemplate,
         in_progress_milestones: inProgressByTemplate,
         milestones_status: statusByTemplate,
@@ -396,6 +408,7 @@ export default function StudentsManagement() {
         has_ml_decola,
         has_ml_flex,
         has_ml_full,
+        has_agencies,
       };
     }) || [];
 
@@ -1477,6 +1490,12 @@ export default function StudentsManagement() {
                         <span>Full</span>
                       </div>
                     </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Building2 className="h-4 w-4" />
+                        <span>Agências</span>
+                      </div>
+                    </TableHead>
                     <TableHead className="text-right font-semibold">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1494,10 +1513,19 @@ export default function StudentsManagement() {
                         onClick={() => openViewDetailsDialog(student)}
                       >
                         <TableCell className="font-medium">
-                          {student.full_name}
-                          {student.mentoria_status !== "Ativo" && (
-                            <span className="text-muted-foreground italic ml-2">(Inativo)</span>
-                          )}
+                          <div>
+                            <div>
+                              {student.full_name}
+                              {student.mentoria_status !== "Ativo" && (
+                                <span className="text-muted-foreground italic ml-2">(Inativo)</span>
+                              )}
+                            </div>
+                            {student.manager_name && (
+                              <div className="text-sm text-muted-foreground/60 mt-0.5">
+                                {student.manager_name}
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{student.email}</TableCell>
                         <TableCell>
@@ -1535,6 +1563,13 @@ export default function StudentsManagement() {
                         <TableCell className="text-center">
                           {student.has_ml_full ? (
                             <CheckCircle2 className="h-5 w-5 text-orange-600 dark:text-orange-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_agencies ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mx-auto" />
                           ) : (
                             <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
                           )}

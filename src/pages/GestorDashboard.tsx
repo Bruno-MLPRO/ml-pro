@@ -15,7 +15,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-
 interface Notice {
   id: string;
   title: string;
@@ -25,7 +24,6 @@ interface Notice {
   expires_at: string | null;
   created_at: string;
 }
-
 interface ImportantLink {
   id: string;
   title: string;
@@ -34,38 +32,58 @@ interface ImportantLink {
   category: string | null;
   order_index: number;
 }
-
 interface CallSchedule {
   id: string;
   date: string;
   theme: string;
   description: string | null;
 }
-
 const GestorDashboard = () => {
-  const { user, userRole, loading: authLoading } = useAuth();
+  const {
+    user,
+    userRole,
+    loading: authLoading
+  } = useAuth();
   const [notices, setNotices] = useState<Notice[]>([]);
   const [links, setLinks] = useState<ImportantLink[]>([]);
   const [calls, setCalls] = useState<CallSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const {
+    toast
+  } = useToast();
 
   // Dialog states
   const [noticeDialogOpen, setNoticeDialogOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteItem, setDeleteItem] = useState<{ type: string; id: string } | null>(null);
+  const [deleteItem, setDeleteItem] = useState<{
+    type: string;
+    id: string;
+  } | null>(null);
 
   // Form states
   const [editingNotice, setEditingNotice] = useState<Notice | null>(null);
   const [editingLink, setEditingLink] = useState<ImportantLink | null>(null);
   const [editingCall, setEditingCall] = useState<CallSchedule | null>(null);
-
-  const [noticeForm, setNoticeForm] = useState({ title: "", content: "", is_important: false, is_active: true, expires_at: "" });
-  const [linkForm, setLinkForm] = useState({ title: "", url: "", category: "" });
-  const [callForm, setCallForm] = useState({ date: "", theme: "", description: "" });
+  const [noticeForm, setNoticeForm] = useState({
+    title: "",
+    content: "",
+    is_important: false,
+    is_active: true,
+    expires_at: ""
+  });
+  const [linkForm, setLinkForm] = useState({
+    title: "",
+    url: "",
+    category: ""
+  });
+  const [callForm, setCallForm] = useState({
+    date: "",
+    theme: "",
+    description: ""
+  });
 
   // Consolidated metrics state
   const [consolidatedMetrics, setConsolidatedMetrics] = useState({
@@ -103,53 +121,49 @@ const GestorDashboard = () => {
       console.log('⏸️ Skipping metrics reload: sync in progress');
       return;
     }
-    
     if (metricsDebounceRef.current) {
       clearTimeout(metricsDebounceRef.current);
     }
-    
     setMetricsReloadPending(true);
-    
     metricsDebounceRef.current = setTimeout(() => {
       console.log('🔄 Debounced reload: executing now');
       loadConsolidatedMetrics();
       setMetricsReloadPending(false);
     }, 3000);
   }, [syncingAccounts]);
-
   useEffect(() => {
-    if (!authLoading && (!user || (userRole !== 'manager' && userRole !== 'administrator'))) {
+    if (!authLoading && (!user || userRole !== 'manager' && userRole !== 'administrator')) {
       navigate('/auth');
       return;
     }
-
     if (user && (userRole === 'manager' || userRole === 'administrator')) {
       loadData();
 
       // Set up realtime subscriptions with debounce
-      const ordersChannel = supabase
-        .channel('orders-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_orders' }, () => {
-          console.log('🔄 Realtime: orders changed, scheduling reload...');
-          debouncedLoadMetrics();
-        })
-        .subscribe();
-
-      const productsChannel = supabase
-        .channel('products-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_products' }, () => {
-          console.log('🔄 Realtime: products changed, scheduling reload...');
-          debouncedLoadMetrics();
-        })
-        .subscribe();
-
-      const campaignsChannel = supabase
-        .channel('campaigns-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_campaigns' }, () => {
-          console.log('🔄 Realtime: campaigns changed, scheduling reload...');
-          debouncedLoadMetrics();
-        })
-        .subscribe();
+      const ordersChannel = supabase.channel('orders-changes').on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mercado_livre_orders'
+      }, () => {
+        console.log('🔄 Realtime: orders changed, scheduling reload...');
+        debouncedLoadMetrics();
+      }).subscribe();
+      const productsChannel = supabase.channel('products-changes').on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mercado_livre_products'
+      }, () => {
+        console.log('🔄 Realtime: products changed, scheduling reload...');
+        debouncedLoadMetrics();
+      }).subscribe();
+      const campaignsChannel = supabase.channel('campaigns-changes').on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mercado_livre_campaigns'
+      }, () => {
+        console.log('🔄 Realtime: campaigns changed, scheduling reload...');
+        debouncedLoadMetrics();
+      }).subscribe();
 
       // Cleanup on unmount
       return () => {
@@ -163,73 +177,77 @@ const GestorDashboard = () => {
       };
     }
   }, [user, userRole, authLoading, navigate, debouncedLoadMetrics]);
-
   const loadData = async () => {
     try {
-      const [noticesData, linksData, callsData] = await Promise.all([
-        supabase.from('notices').select('*').order('created_at', { ascending: false }),
-        supabase.from('important_links').select('*').order('order_index', { ascending: true }),
-        supabase.from('call_schedules').select('*').order('date', { ascending: true })
-      ]);
-
+      const [noticesData, linksData, callsData] = await Promise.all([supabase.from('notices').select('*').order('created_at', {
+        ascending: false
+      }), supabase.from('important_links').select('*').order('order_index', {
+        ascending: true
+      }), supabase.from('call_schedules').select('*').order('date', {
+        ascending: true
+      })]);
       if (noticesData.error) throw noticesData.error;
       if (linksData.error) throw linksData.error;
       if (callsData.error) throw callsData.error;
-
       setNotices(noticesData.data || []);
       setLinks(linksData.data || []);
       setCalls(callsData.data || []);
-      
+
       // Load consolidated metrics
       await loadConsolidatedMetrics();
     } catch (error) {
       console.error('Error loading data:', error);
-      toast({ title: "Erro ao carregar dados", variant: "destructive" });
+      toast({
+        title: "Erro ao carregar dados",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
   };
-
   const loadConsolidatedMetrics = async () => {
     try {
       console.log('🔄 Carregando métricas consolidadas...');
-      
-      const { data: preCalculated, error: preCalcError } = await supabase
-        .from('consolidated_metrics_monthly')
-        .select('*')
-        .order('reference_month', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
+      const {
+        data: preCalculated,
+        error: preCalcError
+      } = await supabase.from('consolidated_metrics_monthly').select('*').order('reference_month', {
+        ascending: false
+      }).limit(1).maybeSingle();
       if (preCalcError) {
         console.error('⚠️ Erro ao buscar métricas pré-calculadas:', preCalcError);
         throw preCalcError;
       }
-
       if (!preCalculated) {
         console.warn('⚠️ Nenhuma métrica pré-calculada encontrada');
-        
         setConsolidatedMetrics({
           totalRevenue: 0,
           totalSales: 0,
-          shippingStats: { correios: 0, flex: 0, agencias: 0, coleta: 0, full: 0 },
-          adsMetrics: { totalSpend: 0, advertisedSales: 0, avgRoas: 0, avgAcos: 0 }
+          shippingStats: {
+            correios: 0,
+            flex: 0,
+            agencias: 0,
+            coleta: 0,
+            full: 0
+          },
+          adsMetrics: {
+            totalSpend: 0,
+            advertisedSales: 0,
+            avgRoas: 0,
+            avgAcos: 0
+          }
         });
-        
         toast({
           title: "📊 Métricas não encontradas",
           description: "Clique em 'Atualizar Métricas' para calcular os dados consolidados.",
-          variant: "default",
+          variant: "default"
         });
-        
         return;
       }
-
       console.log('✅ Usando métricas pré-calculadas:', {
         referenceMonth: preCalculated.reference_month,
         calculatedAt: preCalculated.calculated_at
       });
-
       setConsolidatedMetrics({
         totalRevenue: Number(preCalculated.total_revenue) || 0,
         totalSales: Number(preCalculated.total_sales) || 0,
@@ -238,35 +256,35 @@ const GestorDashboard = () => {
           flex: Number(preCalculated.shipping_flex) || 0,
           agencias: Number(preCalculated.shipping_agencias) || 0,
           coleta: Number(preCalculated.shipping_coleta) || 0,
-          full: Number(preCalculated.shipping_full) || 0,
+          full: Number(preCalculated.shipping_full) || 0
         },
         adsMetrics: {
           totalSpend: Number(preCalculated.ads_total_spend) || 0,
           advertisedSales: Number(preCalculated.ads_total_sales) || 0,
           avgRoas: Number(preCalculated.ads_roas) || 0,
-          avgAcos: Number(preCalculated.ads_acos) || 0,
+          avgAcos: Number(preCalculated.ads_acos) || 0
         }
       });
-      
     } catch (error) {
       console.error('❌ Erro ao carregar métricas consolidadas:', error);
-      toast({ 
-        title: "Erro ao carregar métricas", 
+      toast({
+        title: "Erro ao carregar métricas",
         description: "Tente atualizar as métricas manualmente.",
-        variant: "destructive" 
+        variant: "destructive"
       });
     }
   };
 
   // Helper functions
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
   };
-
   const formatNumber = (value: number) => {
     return new Intl.NumberFormat('pt-BR').format(value);
   };
-
   const formatPercentage = (value: number) => {
     return `${value.toFixed(2)}%`;
   };
@@ -274,23 +292,26 @@ const GestorDashboard = () => {
   // Admin action handlers
   const handleSyncAllAccounts = async () => {
     setSyncingAccounts(true);
-    setSyncProgress({ total: 0, current: 0, status: 'Iniciando sincronização...' });
-    
+    setSyncProgress({
+      total: 0,
+      current: 0,
+      status: 'Iniciando sincronização...'
+    });
     try {
       console.log('🚀 Iniciando sincronização de todas as contas ML...');
-      
-      const { data, error } = await supabase.functions.invoke('ml-auto-sync-all', {
+      const {
+        data,
+        error
+      } = await supabase.functions.invoke('ml-auto-sync-all', {
         body: {}
       });
-      
       if (error) throw error;
-      
       console.log('✅ Sincronização iniciada:', data);
-      
+
       // Show immediate toast
       toast({
         title: "🚀 Sincronização Iniciada",
-        description: `Processando ${data.total_accounts} contas em background. Aguarde 1-2 minutos.`,
+        description: `Processando ${data.total_accounts} contas em background. Aguarde 1-2 minutos.`
       });
 
       // Poll for status
@@ -300,13 +321,15 @@ const GestorDashboard = () => {
 
       const pollInterval = setInterval(async () => {
         pollAttempts++;
-        
         try {
-          const { data: statusData, error: statusError } = await supabase.functions.invoke(
-            'ml-sync-status',
-            { body: { log_id: logId } }
-          );
-
+          const {
+            data: statusData,
+            error: statusError
+          } = await supabase.functions.invoke('ml-sync-status', {
+            body: {
+              log_id: logId
+            }
+          });
           if (statusError) {
             console.warn('Status poll error:', statusError);
             return;
@@ -316,97 +339,84 @@ const GestorDashboard = () => {
           setSyncProgress({
             total: statusData.total_accounts,
             current: statusData.successful_syncs,
-            status: statusData.status === 'completed' 
-              ? 'Finalizado' 
-              : `${statusData.successful_syncs}/${statusData.total_accounts} concluídas`
+            status: statusData.status === 'completed' ? 'Finalizado' : `${statusData.successful_syncs}/${statusData.total_accounts} concluídas`
           });
-
           if (statusData.status === 'completed') {
             clearInterval(pollInterval);
-            
+
             // Auto-calculate metrics
-            setSyncProgress({ 
-              total: statusData.total_accounts, 
-              current: statusData.successful_syncs, 
-              status: 'Recalculando métricas...' 
+            setSyncProgress({
+              total: statusData.total_accounts,
+              current: statusData.successful_syncs,
+              status: 'Recalculando métricas...'
             });
-            
-            const { error: metricsError } = await supabase.functions.invoke(
-              'calculate-monthly-metrics', 
-              { body: {} }
-            );
-            
+            const {
+              error: metricsError
+            } = await supabase.functions.invoke('calculate-monthly-metrics', {
+              body: {}
+            });
             if (metricsError) {
               console.warn('⚠️ Erro ao recalcular métricas:', metricsError);
             }
-            
             await new Promise(resolve => setTimeout(resolve, 2000));
             await loadConsolidatedMetrics();
-            
             toast({
               title: "✅ Sincronização Concluída!",
-              description: `${statusData.successful_syncs} contas sincronizadas, ${statusData.tokens_renewed} tokens renovados`,
+              description: `${statusData.successful_syncs} contas sincronizadas, ${statusData.tokens_renewed} tokens renovados`
             });
-            
             setSyncingAccounts(false);
             setSyncProgress(null);
           }
         } catch (pollError) {
           console.error('Poll error:', pollError);
         }
-
         if (pollAttempts >= maxPolls) {
           clearInterval(pollInterval);
           toast({
             title: "⏱️ Sincronização em andamento",
-            description: "Recarregue a página em alguns minutos.",
+            description: "Recarregue a página em alguns minutos."
           });
           setSyncingAccounts(false);
           setSyncProgress(null);
         }
       }, 10000);
-
     } catch (error) {
       console.error('❌ Erro na sincronização:', error);
       toast({
         title: "❌ Erro na Sincronização",
         description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido",
-        variant: "destructive",
+        variant: "destructive"
       });
       setSyncingAccounts(false);
       setSyncProgress(null);
     }
   };
-
   const handleUpdateMetrics = async () => {
     setUpdatingMetrics(true);
-    
     try {
       console.log('📊 Recalculando métricas consolidadas...');
-      
-      const { data, error } = await supabase.functions.invoke('calculate-monthly-metrics', {
+      const {
+        data,
+        error
+      } = await supabase.functions.invoke('calculate-monthly-metrics', {
         body: {}
       });
-      
       if (error) throw error;
-      
       console.log('✅ Métricas recalculadas:', data);
-      
       toast({
         title: "✅ Métricas Atualizadas!",
         description: `Métricas consolidadas recalculadas com sucesso. Faturamento: ${formatCurrency(data.metrics?.total_revenue || 0)}`,
-        variant: "default",
+        variant: "default"
       });
-      
+
       // Recarregar métricas
       await loadConsolidatedMetrics();
-      
     } catch (error) {
       console.error('❌ Erro ao atualizar métricas:', error);
       toast({
         title: "❌ Erro na Atualização",
         description: error instanceof Error ? error.message : "Ocorreu um erro ao recalcular as métricas",
-        variant: "destructive",
+        variant: "destructive"
       });
     } finally {
       setUpdatingMetrics(false);
@@ -417,40 +427,45 @@ const GestorDashboard = () => {
   const handleNoticeSubmit = async () => {
     try {
       if (editingNotice) {
-        const { error } = await supabase
-          .from('notices')
-          .update({
-            title: noticeForm.title,
-            content: noticeForm.content,
-            is_important: noticeForm.is_important,
-            is_active: noticeForm.is_active,
-            expires_at: noticeForm.expires_at || null
-          })
-          .eq('id', editingNotice.id);
+        const {
+          error
+        } = await supabase.from('notices').update({
+          title: noticeForm.title,
+          content: noticeForm.content,
+          is_important: noticeForm.is_important,
+          is_active: noticeForm.is_active,
+          expires_at: noticeForm.expires_at || null
+        }).eq('id', editingNotice.id);
         if (error) throw error;
-        toast({ title: "Aviso atualizado com sucesso!" });
+        toast({
+          title: "Aviso atualizado com sucesso!"
+        });
       } else {
-        const { error } = await supabase
-          .from('notices')
-          .insert({
-            title: noticeForm.title,
-            content: noticeForm.content,
-            is_important: noticeForm.is_important,
-            is_active: noticeForm.is_active,
-            expires_at: noticeForm.expires_at || null
-          });
+        const {
+          error
+        } = await supabase.from('notices').insert({
+          title: noticeForm.title,
+          content: noticeForm.content,
+          is_important: noticeForm.is_important,
+          is_active: noticeForm.is_active,
+          expires_at: noticeForm.expires_at || null
+        });
         if (error) throw error;
-        toast({ title: "Aviso criado com sucesso!" });
+        toast({
+          title: "Aviso criado com sucesso!"
+        });
       }
       setNoticeDialogOpen(false);
       resetNoticeForm();
       loadData();
     } catch (error) {
       console.error('Error saving notice:', error);
-      toast({ title: "Erro ao salvar aviso", variant: "destructive" });
+      toast({
+        title: "Erro ao salvar aviso",
+        variant: "destructive"
+      });
     }
   };
-
   const openEditNotice = (notice: Notice) => {
     setEditingNotice(notice);
     setNoticeForm({
@@ -462,48 +477,58 @@ const GestorDashboard = () => {
     });
     setNoticeDialogOpen(true);
   };
-
   const resetNoticeForm = () => {
     setEditingNotice(null);
-    setNoticeForm({ title: "", content: "", is_important: false, is_active: true, expires_at: "" });
+    setNoticeForm({
+      title: "",
+      content: "",
+      is_important: false,
+      is_active: true,
+      expires_at: ""
+    });
   };
 
   // Link handlers
   const handleLinkSubmit = async () => {
     try {
       if (editingLink) {
-        const { error } = await supabase
-          .from('important_links')
-          .update({
-            title: linkForm.title,
-            url: linkForm.url,
-            category: linkForm.category || null
-          })
-          .eq('id', editingLink.id);
+        const {
+          error
+        } = await supabase.from('important_links').update({
+          title: linkForm.title,
+          url: linkForm.url,
+          category: linkForm.category || null
+        }).eq('id', editingLink.id);
         if (error) throw error;
-        toast({ title: "Link atualizado com sucesso!" });
+        toast({
+          title: "Link atualizado com sucesso!"
+        });
       } else {
         const maxOrder = links.length > 0 ? Math.max(...links.map(l => l.order_index)) : -1;
-        const { error } = await supabase
-          .from('important_links')
-          .insert({
-            title: linkForm.title,
-            url: linkForm.url,
-            category: linkForm.category || null,
-            order_index: maxOrder + 1
-          });
+        const {
+          error
+        } = await supabase.from('important_links').insert({
+          title: linkForm.title,
+          url: linkForm.url,
+          category: linkForm.category || null,
+          order_index: maxOrder + 1
+        });
         if (error) throw error;
-        toast({ title: "Link criado com sucesso!" });
+        toast({
+          title: "Link criado com sucesso!"
+        });
       }
       setLinkDialogOpen(false);
       resetLinkForm();
       loadData();
     } catch (error) {
       console.error('Error saving link:', error);
-      toast({ title: "Erro ao salvar link", variant: "destructive" });
+      toast({
+        title: "Erro ao salvar link",
+        variant: "destructive"
+      });
     }
   };
-
   const openEditLink = (link: ImportantLink) => {
     setEditingLink(link);
     setLinkForm({
@@ -513,37 +538,42 @@ const GestorDashboard = () => {
     });
     setLinkDialogOpen(true);
   };
-
   const resetLinkForm = () => {
     setEditingLink(null);
-    setLinkForm({ title: "", url: "", category: "" });
+    setLinkForm({
+      title: "",
+      url: "",
+      category: ""
+    });
   };
-
   const moveLinkUp = async (index: number) => {
     if (index === 0) return;
     const newLinks = [...links];
     [newLinks[index - 1], newLinks[index]] = [newLinks[index], newLinks[index - 1]];
     await updateLinkOrders(newLinks);
   };
-
   const moveLinkDown = async (index: number) => {
     if (index === links.length - 1) return;
     const newLinks = [...links];
     [newLinks[index], newLinks[index + 1]] = [newLinks[index + 1], newLinks[index]];
     await updateLinkOrders(newLinks);
   };
-
   const updateLinkOrders = async (newLinks: ImportantLink[]) => {
     try {
-      const updates = newLinks.map((link, idx) => 
-        supabase.from('important_links').update({ order_index: idx }).eq('id', link.id)
-      );
+      const updates = newLinks.map((link, idx) => supabase.from('important_links').update({
+        order_index: idx
+      }).eq('id', link.id));
       await Promise.all(updates);
       setLinks(newLinks);
-      toast({ title: "Ordem atualizada!" });
+      toast({
+        title: "Ordem atualizada!"
+      });
     } catch (error) {
       console.error('Error updating order:', error);
-      toast({ title: "Erro ao atualizar ordem", variant: "destructive" });
+      toast({
+        title: "Erro ao atualizar ordem",
+        variant: "destructive"
+      });
     }
   };
 
@@ -551,36 +581,41 @@ const GestorDashboard = () => {
   const handleCallSubmit = async () => {
     try {
       if (editingCall) {
-        const { error } = await supabase
-          .from('call_schedules')
-          .update({
-            date: callForm.date,
-            theme: callForm.theme,
-            description: callForm.description || null
-          })
-          .eq('id', editingCall.id);
+        const {
+          error
+        } = await supabase.from('call_schedules').update({
+          date: callForm.date,
+          theme: callForm.theme,
+          description: callForm.description || null
+        }).eq('id', editingCall.id);
         if (error) throw error;
-        toast({ title: "Call atualizada com sucesso!" });
+        toast({
+          title: "Call atualizada com sucesso!"
+        });
       } else {
-        const { error } = await supabase
-          .from('call_schedules')
-          .insert({
-            date: callForm.date,
-            theme: callForm.theme,
-            description: callForm.description || null
-          });
+        const {
+          error
+        } = await supabase.from('call_schedules').insert({
+          date: callForm.date,
+          theme: callForm.theme,
+          description: callForm.description || null
+        });
         if (error) throw error;
-        toast({ title: "Call criada com sucesso!" });
+        toast({
+          title: "Call criada com sucesso!"
+        });
       }
       setCallDialogOpen(false);
       resetCallForm();
       loadData();
     } catch (error) {
       console.error('Error saving call:', error);
-      toast({ title: "Erro ao salvar call", variant: "destructive" });
+      toast({
+        title: "Erro ao salvar call",
+        variant: "destructive"
+      });
     }
   };
-
   const openEditCall = (call: CallSchedule) => {
     setEditingCall(call);
     setCallForm({
@@ -590,45 +625,46 @@ const GestorDashboard = () => {
     });
     setCallDialogOpen(true);
   };
-
   const resetCallForm = () => {
     setEditingCall(null);
-    setCallForm({ date: "", theme: "", description: "" });
+    setCallForm({
+      date: "",
+      theme: "",
+      description: ""
+    });
   };
 
   // Delete handler
   const handleDelete = async () => {
     if (!deleteItem) return;
     try {
-      const { error } = await supabase
-        .from(deleteItem.type === 'notice' ? 'notices' : deleteItem.type === 'link' ? 'important_links' : 'call_schedules')
-        .delete()
-        .eq('id', deleteItem.id);
+      const {
+        error
+      } = await supabase.from(deleteItem.type === 'notice' ? 'notices' : deleteItem.type === 'link' ? 'important_links' : 'call_schedules').delete().eq('id', deleteItem.id);
       if (error) throw error;
-      toast({ title: "Item excluído com sucesso!" });
+      toast({
+        title: "Item excluído com sucesso!"
+      });
       setDeleteDialogOpen(false);
       setDeleteItem(null);
       loadData();
     } catch (error) {
       console.error('Error deleting:', error);
-      toast({ title: "Erro ao excluir item", variant: "destructive" });
+      toast({
+        title: "Erro ao excluir item",
+        variant: "destructive"
+      });
     }
   };
-
-
   if (authLoading || loading) {
-    return (
-      <div className="flex min-h-screen w-full bg-background">
+    return <div className="flex min-h-screen w-full bg-background">
         <Sidebar />
         <main className="flex-1 p-8 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </main>
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="flex min-h-screen w-full bg-background">
+  return <div className="flex min-h-screen w-full bg-background">
       <Sidebar />
 
       <main className="flex-1 p-8">
@@ -644,75 +680,51 @@ const GestorDashboard = () => {
             
             <div className="flex flex-col sm:flex-row gap-3">
               {/* Botão Sincronizar Contas */}
-              <Button
-                onClick={handleSyncAllAccounts}
-                disabled={syncingAccounts}
-                variant="outline"
-                className="gap-2"
-              >
-                {syncingAccounts ? (
-                  <>
+              <Button onClick={handleSyncAllAccounts} disabled={syncingAccounts} variant="outline" className="gap-2">
+                {syncingAccounts ? <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Sincronizando...
-                  </>
-                ) : (
-                  <>
+                  </> : <>
                     <RefreshCw className="w-4 h-4" />
                     Sincronizar Contas
-                  </>
-                )}
+                  </>}
               </Button>
 
               {/* Botão Atualizar Métricas */}
-              <Button
-                onClick={handleUpdateMetrics}
-                disabled={updatingMetrics}
-                variant="default"
-                className="gap-2"
-              >
-                {updatingMetrics ? (
-                  <>
+              <Button onClick={handleUpdateMetrics} disabled={updatingMetrics} variant="default" className="gap-2">
+                {updatingMetrics ? <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Atualizando...
-                  </>
-                ) : (
-                  <>
+                  </> : <>
                     <TrendingUp className="w-4 h-4" />
                     Atualizar Métricas
-                  </>
-                )}
+                  </>}
               </Button>
             </div>
           </div>
           
           {/* Progress indicator para sincronização */}
-          {syncProgress && (
-            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          {syncProgress && <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <div className="flex items-center gap-3">
                 <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
                     {syncProgress.status}
                   </p>
-                  {syncProgress.total > 0 && (
-                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                  {syncProgress.total > 0 && <p className="text-xs text-blue-600 dark:text-blue-400">
                       {syncProgress.current} de {syncProgress.total} contas processadas
-                    </p>
-                  )}
+                    </p>}
                 </div>
               </div>
-            </div>
-          )}
+            </div>}
 
           {/* Indicador de debounce */}
-          {metricsReloadPending && !syncProgress && (
-            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-2">
+          {metricsReloadPending && !syncProgress && <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-2">
               <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
               <span className="text-sm text-blue-900 dark:text-blue-100">
                 Atualizações pendentes... recarregando em breve
               </span>
-            </div>
-          )}
+            </div>}
           
           {/* Linha 1: Faturamento e Product Ads */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -829,7 +841,10 @@ const GestorDashboard = () => {
                   <AlertCircle className="w-5 h-5 text-primary" />
                   <CardTitle>Avisos Importantes</CardTitle>
                 </div>
-                <Dialog open={noticeDialogOpen} onOpenChange={(open) => { setNoticeDialogOpen(open); if (!open) resetNoticeForm(); }}>
+                <Dialog open={noticeDialogOpen} onOpenChange={open => {
+                setNoticeDialogOpen(open);
+                if (!open) resetNoticeForm();
+              }}>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="ghost"><Plus className="w-4 h-4" /></Button>
                   </DialogTrigger>
@@ -841,29 +856,40 @@ const GestorDashboard = () => {
                     <div className="space-y-4">
                       <div>
                         <Label htmlFor="notice-title">Título</Label>
-                        <Input id="notice-title" value={noticeForm.title} onChange={(e) => setNoticeForm({ ...noticeForm, title: e.target.value })} />
+                        <Input id="notice-title" value={noticeForm.title} onChange={e => setNoticeForm({
+                        ...noticeForm,
+                        title: e.target.value
+                      })} />
                       </div>
                       <div>
                         <Label htmlFor="notice-content">Conteúdo</Label>
-                        <Textarea id="notice-content" rows={6} value={noticeForm.content} onChange={(e) => setNoticeForm({ ...noticeForm, content: e.target.value })} />
+                        <Textarea id="notice-content" rows={6} value={noticeForm.content} onChange={e => setNoticeForm({
+                        ...noticeForm,
+                        content: e.target.value
+                      })} />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="flex items-center space-x-2">
-                          <Checkbox 
-                            id="notice-important" 
-                            checked={noticeForm.is_important} 
-                            onCheckedChange={(checked) => setNoticeForm({ ...noticeForm, is_important: checked as boolean })} 
-                          />
+                          <Checkbox id="notice-important" checked={noticeForm.is_important} onCheckedChange={checked => setNoticeForm({
+                          ...noticeForm,
+                          is_important: checked as boolean
+                        })} />
                           <Label htmlFor="notice-important" className="cursor-pointer">Marcar como importante</Label>
                         </div>
                         <div>
                           <Label htmlFor="notice-expires">Expira em (opcional)</Label>
-                          <Input id="notice-expires" type="date" value={noticeForm.expires_at} onChange={(e) => setNoticeForm({ ...noticeForm, expires_at: e.target.value })} />
+                          <Input id="notice-expires" type="date" value={noticeForm.expires_at} onChange={e => setNoticeForm({
+                          ...noticeForm,
+                          expires_at: e.target.value
+                        })} />
                         </div>
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => { setNoticeDialogOpen(false); resetNoticeForm(); }}>Cancelar</Button>
+                      <Button variant="outline" onClick={() => {
+                      setNoticeDialogOpen(false);
+                      resetNoticeForm();
+                    }}>Cancelar</Button>
                       <Button onClick={handleNoticeSubmit}>Salvar</Button>
                     </DialogFooter>
                   </DialogContent>
@@ -872,19 +898,8 @@ const GestorDashboard = () => {
               <CardDescription>Últimas notificações e comunicados</CardDescription>
             </CardHeader>
             <CardContent>
-              {notices.length === 0 ? (
-                <p className="text-foreground-secondary text-sm">Nenhum aviso no momento</p>
-              ) : (
-                <div className="space-y-3">
-                  {notices.map((notice) => (
-                    <div 
-                      key={notice.id} 
-                      className={`p-3 rounded-lg border ${
-                        notice.is_important 
-                          ? 'bg-primary/10 border-primary/30 shadow-sm' 
-                          : 'bg-background-elevated border-border'
-                      }`}
-                    >
+              {notices.length === 0 ? <p className="text-foreground-secondary text-sm">Nenhum aviso no momento</p> : <div className="space-y-3">
+                  {notices.map(notice => <div key={notice.id} className={`p-3 rounded-lg border ${notice.is_important ? 'bg-primary/10 border-primary/30 shadow-sm' : 'bg-background-elevated border-border'}`}>
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2 flex-1">
                           {notice.is_important && <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />}
@@ -894,14 +909,18 @@ const GestorDashboard = () => {
                         </div>
                         <div className="flex gap-1">
                           <Button size="sm" variant="ghost" onClick={() => openEditNotice(notice)}><Pencil className="w-3 h-3" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => { setDeleteItem({ type: 'notice', id: notice.id }); setDeleteDialogOpen(true); }}><Trash2 className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => {
+                      setDeleteItem({
+                        type: 'notice',
+                        id: notice.id
+                      });
+                      setDeleteDialogOpen(true);
+                    }}><Trash2 className="w-3 h-3" /></Button>
                         </div>
                       </div>
                       <p className="text-xs text-foreground-secondary whitespace-pre-wrap">{notice.content}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    </div>)}
+                </div>}
             </CardContent>
           </Card>
 
@@ -913,7 +932,10 @@ const GestorDashboard = () => {
                   <LinkIcon className="w-5 h-5 text-primary" />
                   <CardTitle>Links Importantes</CardTitle>
                 </div>
-                <Dialog open={linkDialogOpen} onOpenChange={(open) => { setLinkDialogOpen(open); if (!open) resetLinkForm(); }}>
+                <Dialog open={linkDialogOpen} onOpenChange={open => {
+                setLinkDialogOpen(open);
+                if (!open) resetLinkForm();
+              }}>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="ghost"><Plus className="w-4 h-4" /></Button>
                   </DialogTrigger>
@@ -925,19 +947,31 @@ const GestorDashboard = () => {
                     <div className="space-y-4">
                       <div>
                         <Label htmlFor="link-title">Título</Label>
-                        <Input id="link-title" value={linkForm.title} onChange={(e) => setLinkForm({ ...linkForm, title: e.target.value })} />
+                        <Input id="link-title" value={linkForm.title} onChange={e => setLinkForm({
+                        ...linkForm,
+                        title: e.target.value
+                      })} />
                       </div>
                       <div>
                         <Label htmlFor="link-url">URL</Label>
-                        <Input id="link-url" type="url" value={linkForm.url} onChange={(e) => setLinkForm({ ...linkForm, url: e.target.value })} />
+                        <Input id="link-url" type="url" value={linkForm.url} onChange={e => setLinkForm({
+                        ...linkForm,
+                        url: e.target.value
+                      })} />
                       </div>
                       <div>
                         <Label htmlFor="link-category">Categoria (opcional)</Label>
-                        <Input id="link-category" value={linkForm.category} onChange={(e) => setLinkForm({ ...linkForm, category: e.target.value })} />
+                        <Input id="link-category" value={linkForm.category} onChange={e => setLinkForm({
+                        ...linkForm,
+                        category: e.target.value
+                      })} />
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => { setLinkDialogOpen(false); resetLinkForm(); }}>Cancelar</Button>
+                      <Button variant="outline" onClick={() => {
+                      setLinkDialogOpen(false);
+                      resetLinkForm();
+                    }}>Cancelar</Button>
                       <Button onClick={handleLinkSubmit}>Salvar</Button>
                     </DialogFooter>
                   </DialogContent>
@@ -946,12 +980,8 @@ const GestorDashboard = () => {
               <CardDescription>Acesso rápido</CardDescription>
             </CardHeader>
             <CardContent>
-              {links.length === 0 ? (
-                <p className="text-foreground-secondary text-sm">Nenhum link cadastrado</p>
-              ) : (
-                <div className="space-y-2">
-                  {links.map((link, index) => (
-                    <div key={link.id} className="flex items-center gap-2 p-2 bg-background-elevated rounded-lg border border-border">
+              {links.length === 0 ? <p className="text-foreground-secondary text-sm">Nenhum link cadastrado</p> : <div className="space-y-2">
+                  {links.map((link, index) => <div key={link.id} className="flex items-center gap-2 p-2 bg-background-elevated rounded-lg border border-border">
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => moveLinkUp(index)} disabled={index === 0}>↑</Button>
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => moveLinkDown(index)} disabled={index === links.length - 1}>↓</Button>
@@ -959,12 +989,16 @@ const GestorDashboard = () => {
                       <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 text-sm font-medium text-primary hover:underline">{link.title}</a>
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => openEditLink(link)}><Pencil className="w-3 h-3" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => { setDeleteItem({ type: 'link', id: link.id }); setDeleteDialogOpen(true); }}><Trash2 className="w-3 h-3" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => {
+                    setDeleteItem({
+                      type: 'link',
+                      id: link.id
+                    });
+                    setDeleteDialogOpen(true);
+                  }}><Trash2 className="w-3 h-3" /></Button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    </div>)}
+                </div>}
             </CardContent>
           </Card>
 
@@ -974,9 +1008,12 @@ const GestorDashboard = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-primary" />
-                  <CardTitle>Próximas Calls de Segunda-feira</CardTitle>
+                  <CardTitle>Próximas Calls</CardTitle>
                 </div>
-                <Dialog open={callDialogOpen} onOpenChange={(open) => { setCallDialogOpen(open); if (!open) resetCallForm(); }}>
+                <Dialog open={callDialogOpen} onOpenChange={open => {
+                setCallDialogOpen(open);
+                if (!open) resetCallForm();
+              }}>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="ghost"><Plus className="w-4 h-4" /></Button>
                   </DialogTrigger>
@@ -988,19 +1025,31 @@ const GestorDashboard = () => {
                     <div className="space-y-4">
                       <div>
                         <Label htmlFor="call-date">Data</Label>
-                        <Input id="call-date" type="date" value={callForm.date} onChange={(e) => setCallForm({ ...callForm, date: e.target.value })} />
+                        <Input id="call-date" type="date" value={callForm.date} onChange={e => setCallForm({
+                        ...callForm,
+                        date: e.target.value
+                      })} />
                       </div>
                       <div>
                         <Label htmlFor="call-theme">Tema</Label>
-                        <Input id="call-theme" value={callForm.theme} onChange={(e) => setCallForm({ ...callForm, theme: e.target.value })} />
+                        <Input id="call-theme" value={callForm.theme} onChange={e => setCallForm({
+                        ...callForm,
+                        theme: e.target.value
+                      })} />
                       </div>
                       <div>
                         <Label htmlFor="call-description">Descrição (opcional)</Label>
-                        <Textarea id="call-description" rows={6} value={callForm.description} onChange={(e) => setCallForm({ ...callForm, description: e.target.value })} />
+                        <Textarea id="call-description" rows={6} value={callForm.description} onChange={e => setCallForm({
+                        ...callForm,
+                        description: e.target.value
+                      })} />
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => { setCallDialogOpen(false); resetCallForm(); }}>Cancelar</Button>
+                      <Button variant="outline" onClick={() => {
+                      setCallDialogOpen(false);
+                      resetCallForm();
+                    }}>Cancelar</Button>
                       <Button onClick={handleCallSubmit}>Salvar</Button>
                     </DialogFooter>
                   </DialogContent>
@@ -1009,27 +1058,29 @@ const GestorDashboard = () => {
               <CardDescription>Temas e datas das mentorias</CardDescription>
             </CardHeader>
             <CardContent>
-              {calls.length === 0 ? (
-                <p className="text-foreground-secondary text-sm">Nenhuma call agendada no momento</p>
-              ) : (
-                <div className="space-y-3">
-                  {calls.map((call) => (
-                    <div key={call.id} className="p-4 bg-background-elevated rounded-lg border border-border">
+              {calls.length === 0 ? <p className="text-foreground-secondary text-sm">Nenhuma call agendada no momento</p> : <div className="space-y-3">
+                  {calls.map(call => <div key={call.id} className="p-4 bg-background-elevated rounded-lg border border-border">
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex items-center gap-3 flex-1">
-                          <div className="text-sm font-semibold text-primary">{format(new Date(call.date), "dd/MM/yyyy", { locale: ptBR })}</div>
+                          <div className="text-sm font-semibold text-primary">{format(new Date(call.date), "dd/MM/yyyy", {
+                        locale: ptBR
+                      })}</div>
                           <h4 className="font-semibold text-sm">{call.theme}</h4>
                         </div>
                         <div className="flex gap-1">
                           <Button size="sm" variant="ghost" onClick={() => openEditCall(call)}><Pencil className="w-3 h-3" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => { setDeleteItem({ type: 'call', id: call.id }); setDeleteDialogOpen(true); }}><Trash2 className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => {
+                      setDeleteItem({
+                        type: 'call',
+                        id: call.id
+                      });
+                      setDeleteDialogOpen(true);
+                    }}><Trash2 className="w-3 h-3" /></Button>
                         </div>
                       </div>
                       {call.description && <p className="text-xs text-foreground-secondary whitespace-pre-wrap">{call.description}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
+                    </div>)}
+                </div>}
             </CardContent>
           </Card>
         </div>
@@ -1043,13 +1094,14 @@ const GestorDashboard = () => {
             <AlertDialogDescription>Tem certeza que deseja excluir este item? Esta ação não pode ser desfeita.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => { setDeleteDialogOpen(false); setDeleteItem(null); }}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => {
+            setDeleteDialogOpen(false);
+            setDeleteItem(null);
+          }}>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
+    </div>;
 };
-
 export default GestorDashboard;

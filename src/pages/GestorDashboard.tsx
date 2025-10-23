@@ -947,7 +947,7 @@ const GestorDashboard = () => {
                       <MapPin className="w-5 h-5 text-purple-400" />
                       <span className="font-semibold">Agências</span>
                     </div>
-                    <Badge className="bg-purple-500">
+                    <Badge className="bg-purple-500 whitespace-nowrap">
                       {consolidatedMetrics.shippingStats.agencias} produto{consolidatedMetrics.shippingStats.agencias !== 1 ? 's' : ''}
                     </Badge>
                   </div>
@@ -1035,7 +1035,7 @@ const GestorDashboard = () => {
               </div>
               {consolidatedMetrics.shippingStats.correios > 0 && (
                 <div className="flex items-center justify-between text-sm mt-2">
-                  <span className="text-muted-foreground">Envio próprio (Correios)</span>
+                  <span className="text-muted-foreground">Envio próprio</span>
                   <span>{consolidatedMetrics.shippingStats.correios} ({((consolidatedMetrics.shippingStats.correios / consolidatedMetrics.shippingStats.total) * 100).toFixed(0)}%)</span>
                 </div>
               )}

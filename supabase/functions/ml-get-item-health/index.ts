@@ -232,28 +232,37 @@ serve(async (req) => {
   }
 
   try {
+    // Get and validate user (allow service role calls from other edge functions)
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const isServiceRole = authHeader?.includes(serviceRoleKey)
+
+    if (!authHeader && !isServiceRole) {
       throw new Error('Missing authorization header')
     }
-
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-      }
-    )
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { data: { user } } = await supabaseClient.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+    // Only validate user for non-service-role calls
+    if (!isServiceRole) {
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        {
+          global: {
+            headers: { Authorization: authHeader! },
+          },
+        }
+      )
+
+      const { data: { user } } = await supabaseClient.auth.getUser()
+      if (!user) {
+        throw new Error('Unauthorized')
+      }
+    }
 
     const { ml_account_id, item_id } = await req.json()
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -94,6 +94,28 @@ const GestorDashboard = () => {
     current: number;
     status: string;
   } | null>(null);
+  const [metricsReloadPending, setMetricsReloadPending] = useState(false);
+  const metricsDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced reload function
+  const debouncedLoadMetrics = useCallback(() => {
+    if (syncingAccounts) {
+      console.log('⏸️ Skipping metrics reload: sync in progress');
+      return;
+    }
+    
+    if (metricsDebounceRef.current) {
+      clearTimeout(metricsDebounceRef.current);
+    }
+    
+    setMetricsReloadPending(true);
+    
+    metricsDebounceRef.current = setTimeout(() => {
+      console.log('🔄 Debounced reload: executing now');
+      loadConsolidatedMetrics();
+      setMetricsReloadPending(false);
+    }, 3000);
+  }, [syncingAccounts]);
 
   useEffect(() => {
     if (!authLoading && (!user || (userRole !== 'manager' && userRole !== 'administrator'))) {
@@ -104,28 +126,28 @@ const GestorDashboard = () => {
     if (user && (userRole === 'manager' || userRole === 'administrator')) {
       loadData();
 
-      // Set up realtime subscriptions
+      // Set up realtime subscriptions with debounce
       const ordersChannel = supabase
         .channel('orders-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_orders' }, () => {
-          console.log('🔄 Realtime: orders changed, reloading metrics...');
-          loadConsolidatedMetrics();
+          console.log('🔄 Realtime: orders changed, scheduling reload...');
+          debouncedLoadMetrics();
         })
         .subscribe();
 
       const productsChannel = supabase
         .channel('products-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_products' }, () => {
-          console.log('🔄 Realtime: products changed, reloading metrics...');
-          loadConsolidatedMetrics();
+          console.log('🔄 Realtime: products changed, scheduling reload...');
+          debouncedLoadMetrics();
         })
         .subscribe();
 
       const campaignsChannel = supabase
         .channel('campaigns-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_campaigns' }, () => {
-          console.log('🔄 Realtime: campaigns changed, reloading metrics...');
-          loadConsolidatedMetrics();
+          console.log('🔄 Realtime: campaigns changed, scheduling reload...');
+          debouncedLoadMetrics();
         })
         .subscribe();
 
@@ -135,9 +157,12 @@ const GestorDashboard = () => {
         supabase.removeChannel(ordersChannel);
         supabase.removeChannel(productsChannel);
         supabase.removeChannel(campaignsChannel);
+        if (metricsDebounceRef.current) {
+          clearTimeout(metricsDebounceRef.current);
+        }
       };
     }
-  }, [user, userRole, authLoading, navigate]);
+  }, [user, userRole, authLoading, navigate, debouncedLoadMetrics]);
 
   const loadData = async () => {
     try {
@@ -169,7 +194,6 @@ const GestorDashboard = () => {
     try {
       console.log('🔄 Carregando métricas consolidadas...');
       
-      // Tentar buscar métricas pré-calculadas primeiro
       const { data: preCalculated, error: preCalcError } = await supabase
         .from('consolidated_metrics_monthly')
         .select('*')
@@ -179,116 +203,58 @@ const GestorDashboard = () => {
 
       if (preCalcError) {
         console.error('⚠️ Erro ao buscar métricas pré-calculadas:', preCalcError);
+        throw preCalcError;
       }
 
-      if (preCalculated) {
-        // ✅ Usar métricas pré-calculadas (super rápido)
-        console.log('✅ Usando métricas pré-calculadas:', {
-          referenceMonth: preCalculated.reference_month,
-          calculatedAt: preCalculated.calculated_at
-        });
-
+      if (!preCalculated) {
+        console.warn('⚠️ Nenhuma métrica pré-calculada encontrada');
+        
         setConsolidatedMetrics({
-          totalRevenue: Number(preCalculated.total_revenue) || 0,
-          totalSales: Number(preCalculated.total_sales) || 0,
-          shippingStats: {
-            correios: Number(preCalculated.shipping_correios) || 0,
-            flex: Number(preCalculated.shipping_flex) || 0,
-            agencias: Number(preCalculated.shipping_agencias) || 0,
-            coleta: Number(preCalculated.shipping_coleta) || 0,
-            full: Number(preCalculated.shipping_full) || 0,
-          },
-          adsMetrics: {
-            totalSpend: Number(preCalculated.ads_total_spend) || 0,
-            advertisedSales: Number(preCalculated.ads_total_sales) || 0,
-            avgRoas: Number(preCalculated.ads_roas) || 0,
-            avgAcos: Number(preCalculated.ads_acos) || 0,
-          }
+          totalRevenue: 0,
+          totalSales: 0,
+          shippingStats: { correios: 0, flex: 0, agencias: 0, coleta: 0, full: 0 },
+          adsMetrics: { totalSpend: 0, advertisedSales: 0, avgRoas: 0, avgAcos: 0 }
         });
+        
+        toast({
+          title: "📊 Métricas não encontradas",
+          description: "Clique em 'Atualizar Métricas' para calcular os dados consolidados.",
+          variant: "default",
+        });
+        
         return;
       }
 
-      // Fallback: calcular on-demand se não houver métricas pré-calculadas
-      console.log('⚠️ Métricas pré-calculadas não encontradas. Calculando on-demand...');
-      
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('mercado_livre_orders')
-        .select('paid_amount')
-        .gte('date_created', thirtyDaysAgo.toISOString())
-        .limit(10000);
-
-      if (ordersError) throw ordersError;
-
-      const totalRevenue = ordersData?.reduce((sum, order) => 
-        sum + (Number(order.paid_amount) || 0), 0) || 0;
-      const totalSales = ordersData?.length || 0;
-
-      const { data: productsData, error: productsError } = await supabase
-        .from('mercado_livre_products')
-        .select('logistic_type, shipping_mode')
-        .eq('status', 'active');
-
-      if (productsError) throw productsError;
-
-      const shippingStats = {
-        correios: productsData?.filter(p => 
-          p.logistic_type === 'drop_off' && p.shipping_mode === 'me2'
-        ).length || 0,
-        flex: productsData?.filter(p => 
-          p.logistic_type === 'cross_docking'
-        ).length || 0,
-        agencias: productsData?.filter(p => 
-          p.logistic_type === 'drop_off' && 
-          ['custom', 'not_specified'].includes(p.shipping_mode || '')
-        ).length || 0,
-        coleta: productsData?.filter(p => 
-          p.logistic_type === 'xd_drop_off'
-        ).length || 0,
-        full: productsData?.filter(p => 
-          p.logistic_type === 'fulfillment'
-        ).length || 0,
-      };
-
-      const { data: campaignsData, error: campaignsError } = await supabase
-        .from('mercado_livre_campaigns')
-        .select('total_spend, ad_revenue, advertised_sales')
-        .gte('synced_at', thirtyDaysAgo.toISOString());
-
-      if (campaignsError) throw campaignsError;
-
-      const totalSpend = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.total_spend) || 0), 0) || 0;
-      const totalAdRevenue = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.ad_revenue) || 0), 0) || 0;
-      const advertisedSales = campaignsData?.reduce((sum, campaign) => sum + (Number(campaign.advertised_sales) || 0), 0) || 0;
-      
-      const avgRoas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
-      const avgAcos = totalAdRevenue > 0 ? (totalSpend / totalAdRevenue) * 100 : 0;
-
-      console.log('✅ Métricas calculadas on-demand:', {
-        totalRevenue,
-        totalSales,
-        totalSpend,
-        totalAdRevenue,
-        avgRoas: avgRoas.toFixed(2),
-        avgAcos: avgAcos.toFixed(2)
+      console.log('✅ Usando métricas pré-calculadas:', {
+        referenceMonth: preCalculated.reference_month,
+        calculatedAt: preCalculated.calculated_at
       });
 
       setConsolidatedMetrics({
-        totalRevenue,
-        totalSales,
-        shippingStats,
+        totalRevenue: Number(preCalculated.total_revenue) || 0,
+        totalSales: Number(preCalculated.total_sales) || 0,
+        shippingStats: {
+          correios: Number(preCalculated.shipping_correios) || 0,
+          flex: Number(preCalculated.shipping_flex) || 0,
+          agencias: Number(preCalculated.shipping_agencias) || 0,
+          coleta: Number(preCalculated.shipping_coleta) || 0,
+          full: Number(preCalculated.shipping_full) || 0,
+        },
         adsMetrics: {
-          totalSpend,
-          advertisedSales,
-          avgRoas,
-          avgAcos
+          totalSpend: Number(preCalculated.ads_total_spend) || 0,
+          advertisedSales: Number(preCalculated.ads_total_sales) || 0,
+          avgRoas: Number(preCalculated.ads_roas) || 0,
+          avgAcos: Number(preCalculated.ads_acos) || 0,
         }
       });
+      
     } catch (error) {
       console.error('❌ Erro ao carregar métricas consolidadas:', error);
-      toast({ title: "Erro ao carregar métricas consolidadas", variant: "destructive" });
+      toast({ 
+        title: "Erro ao carregar métricas", 
+        description: "Tente atualizar as métricas manualmente.",
+        variant: "destructive" 
+      });
     }
   };
 
@@ -319,16 +285,37 @@ const GestorDashboard = () => {
       
       if (error) throw error;
       
-      console.log('✅ Resultado da sincronização:', data);
+      console.log('✅ Sincronização concluída:', data);
+      
+      // Auto-recalcular métricas consolidadas
+      setSyncProgress({ 
+        total: data.total_accounts, 
+        current: data.successful, 
+        status: 'Recalculando métricas...' 
+      });
+      
+      const { data: metricsData, error: metricsError } = await supabase.functions.invoke(
+        'calculate-monthly-metrics', 
+        { body: {} }
+      );
+      
+      if (metricsError) {
+        console.warn('⚠️ Erro ao recalcular métricas:', metricsError);
+      } else {
+        console.log('✅ Métricas recalculadas automaticamente');
+      }
+      
+      // Aguardar 2s para garantir finalização das escritas
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Recarregar métricas
+      await loadConsolidatedMetrics();
       
       toast({
         title: "✅ Sincronização Concluída!",
-        description: `${data.successful} contas sincronizadas com sucesso de ${data.total_accounts} total. ${data.tokens_renewed} tokens renovados.`,
+        description: `${data.successful} contas sincronizadas, ${data.tokens_renewed} tokens renovados. Métricas atualizadas!`,
         variant: "default",
       });
-      
-      // Recarregar métricas após sincronização
-      await loadConsolidatedMetrics();
       
     } catch (error) {
       console.error('❌ Erro na sincronização:', error);
@@ -666,6 +653,16 @@ const GestorDashboard = () => {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Indicador de debounce */}
+          {metricsReloadPending && !syncProgress && (
+            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+              <span className="text-sm text-blue-900 dark:text-blue-100">
+                Atualizações pendentes... recarregando em breve
+              </span>
             </div>
           )}
           

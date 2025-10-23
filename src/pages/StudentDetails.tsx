@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { 
   ArrowLeft, User, Phone, Mail, MapPin, Building2, DollarSign, Package, 
   TrendingUp, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle,
-  ExternalLink, Home, Image, Plus, RefreshCw
+  ExternalLink, Home, Image, Plus, RefreshCw, Target
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -100,6 +100,31 @@ interface MLFullStock {
   stock_status: string | null;
 }
 
+interface MLCampaign {
+  id: string;
+  campaign_id: number;
+  campaign_name: string;
+  status: string;
+  total_spend: number;
+  ad_revenue: number;
+  acos: number;
+  roas: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  products_count: number;
+  advertised_sales: number;
+}
+
+interface AdsMetrics {
+  totalSpend: number;
+  totalRevenue: number;
+  totalAcos: number;
+  totalRoas: number;
+  totalProductsInAds: number;
+  activeCampaigns: number;
+}
+
 interface StudentApp {
   id: string;
   name: string;
@@ -148,6 +173,8 @@ export default function StudentDetails() {
   const [consolidatedMetrics, setConsolidatedMetrics] = useState<MLMetrics | null>(null);
   const [products, setProducts] = useState<MLProduct[]>([]);
   const [fullStock, setFullStock] = useState<MLFullStock[]>([]);
+  const [campaigns, setCampaigns] = useState<MLCampaign[]>([]);
+  const [adsMetrics, setAdsMetrics] = useState<AdsMetrics | null>(null);
   const [studentApps, setStudentApps] = useState<StudentApp[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [availableApps, setAvailableApps] = useState<any[]>([]);
@@ -295,9 +322,39 @@ export default function StudentDetails() {
     }
   };
 
+  const calculateAdsMetrics = (campaignsData: MLCampaign[]): AdsMetrics => {
+    if (!campaignsData || campaignsData.length === 0) {
+      return {
+        totalSpend: 0,
+        totalRevenue: 0,
+        totalAcos: 0,
+        totalRoas: 0,
+        totalProductsInAds: 0,
+        activeCampaigns: 0
+      };
+    }
+
+    const activeCampaigns = campaignsData.filter(c => 
+      c.status === 'active' || c.status === 'enabled'
+    );
+
+    const totalSpend = activeCampaigns.reduce((sum, c) => sum + (c.total_spend || 0), 0);
+    const totalRevenue = activeCampaigns.reduce((sum, c) => sum + (c.ad_revenue || 0), 0);
+    const totalProductsInAds = activeCampaigns.reduce((sum, c) => sum + (c.products_count || 0), 0);
+
+    return {
+      totalSpend,
+      totalRevenue,
+      totalAcos: totalRevenue > 0 ? (totalSpend / totalRevenue) * 100 : 0,
+      totalRoas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
+      totalProductsInAds,
+      activeCampaigns: activeCampaigns.length
+    };
+  };
+
   const loadAccountData = async (accountId: string) => {
     try {
-      const [metricsResult, productsResult, stockResult] = await Promise.all([
+      const [metricsResult, productsResult, stockResult, campaignsResult] = await Promise.all([
         supabase
           .from('mercado_livre_metrics')
           .select('*')
@@ -317,12 +374,25 @@ export default function StudentDetails() {
           .from('mercado_livre_full_stock')
           .select('*')
           .eq('ml_account_id', accountId)
+          .eq('student_id', studentId),
+        
+        supabase
+          .from('mercado_livre_campaigns')
+          .select('*')
+          .eq('ml_account_id', accountId)
           .eq('student_id', studentId)
+          .order('synced_at', { ascending: false })
       ]);
 
       setMetrics(metricsResult.data);
       setProducts(productsResult.data || []);
       setFullStock(stockResult.data || []);
+      setCampaigns(campaignsResult.data || []);
+      
+      if (campaignsResult.data) {
+        const calculatedAdsMetrics = calculateAdsMetrics(campaignsResult.data);
+        setAdsMetrics(calculatedAdsMetrics);
+      }
     } catch (error: any) {
       console.error('Error loading account data:', error);
     }
@@ -948,26 +1018,27 @@ export default function StudentDetails() {
                         <>
 
                           {/* Programas Especiais */}
-                          <div className="grid md:grid-cols-2 gap-4">
+                          <div className="grid md:grid-cols-3 gap-4">
                             {/* Decola */}
                             <Card className={metrics.has_decola ? "bg-muted/50" : ""}>
                               <CardHeader>
-                                <CardTitle className="text-sm flex items-center gap-2">
-                                  <Award className="w-4 h-4" />
-                                  Programa Decola
+                                <CardTitle className="text-sm flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Award className="w-4 h-4" />
+                                    Programa Decola
+                                  </div>
+                                  {metrics.has_decola && <Badge variant="default" className="text-xs">Ativo</Badge>}
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
                                 {metrics.has_decola ? (
                                   <div className="space-y-3">
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="default">Ativo</Badge>
-                                      {metrics.real_reputation_level && (
-                                        <Badge variant="outline" className="text-xs">
-                                          Reputação Real: {getColorNameInPortuguese(metrics.real_reputation_level)}
-                                        </Badge>
-                                      )}
-                                    </div>
+                                    {metrics.real_reputation_level && (
+                                      <div>
+                                        <span className="text-xs text-muted-foreground">Reputação Real</span>
+                                        <p className="text-sm font-medium">{getColorNameInPortuguese(metrics.real_reputation_level)}</p>
+                                      </div>
+                                    )}
                                     <div>
                                       <div className="flex items-center justify-between mb-2">
                                         <span className="text-sm">Problemas</span>
@@ -989,15 +1060,87 @@ export default function StudentDetails() {
                                       />
                                     </div>
                                     {metrics.protection_end_date && (
-                                      <p className="text-xs text-muted-foreground">
-                                        Válido até: {new Date(metrics.protection_end_date).toLocaleDateString('pt-BR')}
-                                      </p>
+                                      <div>
+                                        <span className="text-xs text-muted-foreground">Válido até</span>
+                                        <p className="text-xs font-medium">
+                                          {new Date(metrics.protection_end_date).toLocaleDateString('pt-BR')}
+                                        </p>
+                                      </div>
                                     )}
                                   </div>
                                 ) : (
                                   <div className="text-center py-4">
                                     <XCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                                     <p className="text-sm text-muted-foreground">Não ativo</p>
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+
+                            {/* Product ADS */}
+                            <Card className={adsMetrics && adsMetrics.activeCampaigns > 0 ? "bg-muted/50" : ""}>
+                              <CardHeader>
+                                <CardTitle className="text-sm flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Target className="w-4 h-4" />
+                                    Product ADS
+                                  </div>
+                                  {adsMetrics && adsMetrics.activeCampaigns > 0 && (
+                                    <Badge variant="default" className="text-xs">
+                                      {adsMetrics.activeCampaigns} {adsMetrics.activeCampaigns === 1 ? 'Ativa' : 'Ativas'}
+                                    </Badge>
+                                  )}
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                {adsMetrics && adsMetrics.activeCampaigns > 0 ? (
+                                  <div className="space-y-3">
+                                    <div>
+                                      <div className="flex items-center gap-1 mb-1">
+                                        <DollarSign className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                                        <span className="text-xs text-muted-foreground">Investimento</span>
+                                      </div>
+                                      <p className="text-base font-bold text-purple-600 dark:text-purple-400">
+                                        {adsMetrics.totalSpend.toLocaleString('pt-BR', { 
+                                          style: 'currency', 
+                                          currency: 'BRL' 
+                                        })}
+                                      </p>
+                                    </div>
+
+                                    <div>
+                                      <span className="text-xs text-muted-foreground">ROAS</span>
+                                      <p className={`text-base font-bold ${
+                                        adsMetrics.totalRoas >= 3 ? 'text-green-600 dark:text-green-400' :
+                                        adsMetrics.totalRoas >= 2 ? 'text-yellow-600 dark:text-yellow-400' :
+                                        'text-red-600 dark:text-red-400'
+                                      }`}>
+                                        {adsMetrics.totalRoas.toFixed(1)}x
+                                      </p>
+                                    </div>
+
+                                    <div>
+                                      <span className="text-xs text-muted-foreground">ACOS</span>
+                                      <p className={`text-base font-bold ${
+                                        adsMetrics.totalAcos <= 25 ? 'text-green-600 dark:text-green-400' :
+                                        adsMetrics.totalAcos <= 40 ? 'text-yellow-600 dark:text-yellow-400' :
+                                        'text-red-600 dark:text-red-400'
+                                      }`}>
+                                        {adsMetrics.totalAcos.toFixed(1)}%
+                                      </p>
+                                    </div>
+
+                                    <div>
+                                      <span className="text-xs text-muted-foreground">Produtos</span>
+                                      <p className="text-sm font-medium">
+                                        {adsMetrics.totalProductsInAds} anunciados
+                                      </p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4">
+                                    <XCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                                    <p className="text-xs text-muted-foreground">Sem campanhas ativas</p>
                                   </div>
                                 )}
                               </CardContent>

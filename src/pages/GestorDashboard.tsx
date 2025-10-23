@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
-import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign, RefreshCw } from "lucide-react";
+import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign, RefreshCw, MapPin, Truck, Warehouse } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -15,6 +15,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 interface Notice {
   id: string;
   title: string;
@@ -207,69 +209,159 @@ const GestorDashboard = () => {
   };
   const loadConsolidatedMetrics = async () => {
     try {
-      console.log('🔄 Carregando métricas consolidadas...');
-      const {
-        data: preCalculated,
-        error: preCalcError
-      } = await supabase.from('consolidated_metrics_monthly').select('*').order('reference_month', {
-        ascending: false
-      }).limit(1).maybeSingle();
-      if (preCalcError) {
-        console.error('⚠️ Erro ao buscar métricas pré-calculadas:', preCalcError);
-        throw preCalcError;
-      }
-      if (!preCalculated) {
-        console.warn('⚠️ Nenhuma métrica pré-calculada encontrada');
-        setConsolidatedMetrics({
-          totalRevenue: 0,
-          totalSales: 0,
-          shippingStats: {
-            correios: 0,
-            flex: 0,
-            agencias: 0,
-            coleta: 0,
-            full: 0
-          },
-          adsMetrics: {
-            totalSpend: 0,
-            advertisedSales: 0,
-            avgRoas: 0,
-            avgAcos: 0
-          }
-        });
-        toast({
-          title: "📊 Métricas não encontradas",
-          description: "Clique em 'Atualizar Métricas' para calcular os dados consolidados.",
-          variant: "default"
-        });
-        return;
-      }
-      console.log('✅ Usando métricas pré-calculadas:', {
-        referenceMonth: preCalculated.reference_month,
-        calculatedAt: preCalculated.calculated_at
+      console.log('🔄 Carregando métricas consolidadas em tempo real...');
+      
+      // Definir período: últimos 30 dias
+      const periodEnd = new Date();
+      const periodStart = new Date();
+      periodStart.setDate(periodStart.getDate() - 30);
+
+      console.log('📅 Período:', {
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString()
       });
+
+      // 1. Buscar TODOS os pedidos pagos com paginação
+      let allOrders: any[] = [];
+      let currentPage = 0;
+      const PAGE_SIZE = 1000;
+      let hasMore = true;
+
+      console.log('🔄 Iniciando paginação de pedidos...');
+
+      while (hasMore && allOrders.length < 10000) { // limite de segurança
+        const rangeStart = currentPage * PAGE_SIZE;
+        const rangeEnd = rangeStart + PAGE_SIZE - 1;
+        
+        const { data: pageOrders, error: ordersError } = await supabase
+          .from('mercado_livre_orders')
+          .select('paid_amount, total_amount, ml_order_id')
+          .eq('status', 'paid')
+          .gte('date_created', periodStart.toISOString())
+          .lt('date_created', periodEnd.toISOString())
+          .order('date_created', { ascending: false })
+          .range(rangeStart, rangeEnd);
+        
+        if (ordersError) {
+          console.error('❌ Error loading orders:', ordersError);
+          throw ordersError;
+        }
+
+        if (!pageOrders || pageOrders.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        allOrders = [...allOrders, ...pageOrders];
+        console.log(`📦 Página ${currentPage + 1}: ${pageOrders.length} pedidos (Total: ${allOrders.length})`);
+
+        if (pageOrders.length < PAGE_SIZE) {
+          hasMore = false;
+        }
+
+        currentPage++;
+      }
+
+      const totalRevenue = allOrders.reduce((sum, order) => sum + (Number(order.paid_amount) || 0), 0);
+      const totalSales = allOrders.length;
+
+      console.log('💰 Vendas consolidadas:', { 
+        totalRevenue, 
+        totalSales,
+        totalOrders: allOrders.length 
+      });
+
+      // 2. Produtos Ativos por Tipo de Envio (CORRIGIDO)
+      const { data: productsData, error: productsError } = await supabase
+        .from('mercado_livre_products')
+        .select('shipping_mode, logistic_type')
+        .eq('status', 'active');
+
+      if (productsError) {
+        console.error('❌ Error loading products:', productsError);
+        throw productsError;
+      }
+
+      const total = productsData?.length || 0;
+      
+      // Seguir o mesmo padrão do StudentDashboard
+      const flex = productsData?.filter(p => 
+        p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+      ).length || 0;
+      
+      const agencias = productsData?.filter(p => 
+        p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
+      ).length || 0;
+      
+      const coleta = productsData?.filter(p => 
+        p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
+      ).length || 0;
+      
+      const full = productsData?.filter(p => 
+        p.shipping_mode === 'me2' && p.logistic_type === 'fulfillment'
+      ).length || 0;
+      
+      const correios = total - (flex + agencias + coleta + full);
+
+      console.log('📦 Produtos por tipo de envio:', {
+        total,
+        correios,
+        flex,
+        agencias,
+        coleta,
+        full
+      });
+
+      // 3. Métricas de Product Ads
+      const { data: campaignsData, error: campaignsError } = await supabase
+        .from('mercado_livre_campaigns')
+        .select('total_spend, ad_revenue, advertised_sales')
+        .gte('synced_at', periodStart.toISOString())
+        .lt('synced_at', periodEnd.toISOString());
+
+      if (campaignsError) {
+        console.error('❌ Error loading campaigns:', campaignsError);
+        throw campaignsError;
+      }
+
+      const totalSpend = campaignsData?.reduce((sum, c) => sum + (Number(c.total_spend) || 0), 0) || 0;
+      const totalAdRevenue = campaignsData?.reduce((sum, c) => sum + (Number(c.ad_revenue) || 0), 0) || 0;
+      const totalAdSales = campaignsData?.reduce((sum, c) => sum + (Number(c.advertised_sales) || 0), 0) || 0;
+
+      const avgRoas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
+      const avgAcos = totalAdRevenue > 0 ? (totalSpend / totalAdRevenue) * 100 : 0;
+
+      console.log('📊 Product Ads consolidadas:', {
+        totalSpend,
+        totalAdRevenue,
+        totalAdSales,
+        avgRoas: avgRoas.toFixed(2),
+        avgAcos: avgAcos.toFixed(2) + '%'
+      });
+
       setConsolidatedMetrics({
-        totalRevenue: Number(preCalculated.total_revenue) || 0,
-        totalSales: Number(preCalculated.total_sales) || 0,
+        totalRevenue,
+        totalSales,
         shippingStats: {
-          correios: Number(preCalculated.shipping_correios) || 0,
-          flex: Number(preCalculated.shipping_flex) || 0,
-          agencias: Number(preCalculated.shipping_agencias) || 0,
-          coleta: Number(preCalculated.shipping_coleta) || 0,
-          full: Number(preCalculated.shipping_full) || 0
+          correios,
+          flex,
+          agencias,
+          coleta,
+          full
         },
         adsMetrics: {
-          totalSpend: Number(preCalculated.ads_total_spend) || 0,
-          advertisedSales: Number(preCalculated.ads_total_sales) || 0,
-          avgRoas: Number(preCalculated.ads_roas) || 0,
-          avgAcos: Number(preCalculated.ads_acos) || 0
+          totalSpend,
+          advertisedSales: totalAdSales,
+          avgRoas,
+          avgAcos
         }
       });
+
     } catch (error) {
       console.error('❌ Erro ao carregar métricas consolidadas:', error);
       toast({
         title: "Erro ao carregar métricas",
-        description: "Tente atualizar as métricas manualmente.",
+        description: error instanceof Error ? error.message : "Ocorreu um erro",
         variant: "destructive"
       });
     }
@@ -391,37 +483,7 @@ const GestorDashboard = () => {
       setSyncProgress(null);
     }
   };
-  const handleUpdateMetrics = async () => {
-    setUpdatingMetrics(true);
-    try {
-      console.log('📊 Recalculando métricas consolidadas...');
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke('calculate-monthly-metrics', {
-        body: {}
-      });
-      if (error) throw error;
-      console.log('✅ Métricas recalculadas:', data);
-      toast({
-        title: "✅ Métricas Atualizadas!",
-        description: `Métricas consolidadas recalculadas com sucesso. Faturamento: ${formatCurrency(data.metrics?.total_revenue || 0)}`,
-        variant: "default"
-      });
-
-      // Recarregar métricas
-      await loadConsolidatedMetrics();
-    } catch (error) {
-      console.error('❌ Erro ao atualizar métricas:', error);
-      toast({
-        title: "❌ Erro na Atualização",
-        description: error instanceof Error ? error.message : "Ocorreu um erro ao recalcular as métricas",
-        variant: "destructive"
-      });
-    } finally {
-      setUpdatingMetrics(false);
-    }
-  };
+  // Função removida - métricas são calculadas em tempo real
 
   // Notice handlers
   const handleNoticeSubmit = async () => {
@@ -676,7 +738,7 @@ const GestorDashboard = () => {
         {/* Métricas Consolidadas */}
         <div className="mb-8 space-y-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
-            <h2 className="text-2xl font-semibold text-foreground">Métricas Consolidadas</h2>
+            <h2 className="text-2xl font-semibold text-foreground">Métricas Consolidadas (Tempo Real)</h2>
             
             <div className="flex flex-col sm:flex-row gap-3">
               {/* Botão Sincronizar Contas */}
@@ -687,17 +749,6 @@ const GestorDashboard = () => {
                   </> : <>
                     <RefreshCw className="w-4 h-4" />
                     Sincronizar Contas
-                  </>}
-              </Button>
-
-              {/* Botão Atualizar Métricas */}
-              <Button onClick={handleUpdateMetrics} disabled={updatingMetrics} variant="default" className="gap-2">
-                {updatingMetrics ? <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Atualizando...
-                  </> : <>
-                    <TrendingUp className="w-4 h-4" />
-                    Atualizar Métricas
                   </>}
               </Button>
             </div>
@@ -801,26 +852,90 @@ const GestorDashboard = () => {
               <CardDescription>Total de anúncios cadastrados</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-                <div className="text-center">
-                  <p className="text-sm text-foreground-secondary mb-1">Correios</p>
-                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.correios)}</p>
+              <div className="space-y-4">
+                {/* Correios (Próprio) */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Correios (Próprio)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.correios)}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {((consolidatedMetrics.shippingStats.correios / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
+                      </Badge>
+                    </div>
+                  </div>
+                  <Progress value={(consolidatedMetrics.shippingStats.correios / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
                 </div>
-                <div className="text-center">
-                  <p className="text-sm text-foreground-secondary mb-1">Flex</p>
-                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.flex)}</p>
+
+                {/* Flex */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Flex</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.flex)}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {((consolidatedMetrics.shippingStats.flex / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
+                      </Badge>
+                    </div>
+                  </div>
+                  <Progress value={(consolidatedMetrics.shippingStats.flex / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
                 </div>
-                <div className="text-center">
-                  <p className="text-sm text-foreground-secondary mb-1">Agências</p>
-                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.agencias)}</p>
+
+                {/* Agências */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Agências</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.agencias)}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {((consolidatedMetrics.shippingStats.agencias / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
+                      </Badge>
+                    </div>
+                  </div>
+                  <Progress value={(consolidatedMetrics.shippingStats.agencias / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
                 </div>
-                <div className="text-center">
-                  <p className="text-sm text-foreground-secondary mb-1">Coleta</p>
-                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.coleta)}</p>
+
+                {/* Coleta */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Coleta</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.coleta)}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {((consolidatedMetrics.shippingStats.coleta / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
+                      </Badge>
+                    </div>
+                  </div>
+                  <Progress value={(consolidatedMetrics.shippingStats.coleta / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
                 </div>
-                <div className="text-center">
-                  <p className="text-sm text-foreground-secondary mb-1">Full</p>
-                  <p className="text-3xl font-bold text-secondary">{formatNumber(consolidatedMetrics.shippingStats.full)}</p>
+
+                {/* Full */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Warehouse className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Full</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold">{formatNumber(consolidatedMetrics.shippingStats.full)}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {((consolidatedMetrics.shippingStats.full / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100).toFixed(1)}%
+                      </Badge>
+                    </div>
+                  </div>
+                  <Progress value={(consolidatedMetrics.shippingStats.full / (consolidatedMetrics.shippingStats.correios + consolidatedMetrics.shippingStats.flex + consolidatedMetrics.shippingStats.agencias + consolidatedMetrics.shippingStats.coleta + consolidatedMetrics.shippingStats.full || 1)) * 100} className="h-2" />
                 </div>
               </div>
             </CardContent>

@@ -89,7 +89,7 @@ export default function StudentsManagement() {
   const [journeyTemplates, setJourneyTemplates] = useState<JourneyTemplate[]>([]);
   const [selectedJourneyId, setSelectedJourneyId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("Todos");
+  const [statusFilter, setStatusFilter] = useState(userRole === 'administrator' ? "Ativo" : "Todos");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDetailsDialogOpen, setIsViewDetailsDialogOpen] = useState(false);
@@ -99,7 +99,7 @@ export default function StudentsManagement() {
   const [studentApps, setStudentApps] = useState<any[]>([]);
   const [availableApps, setAvailableApps] = useState<any[]>([]);
   const [managers, setManagers] = useState<Array<{ id: string; full_name: string }>>([]);
-  const [selectedManagerId, setSelectedManagerId] = useState<string>("current");
+  const [selectedManagerId, setSelectedManagerId] = useState<string>(userRole === 'administrator' ? "all" : "current");
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const { toast } = useToast();
 
@@ -1190,7 +1190,7 @@ export default function StudentsManagement() {
           <p className="text-muted-foreground">Gerencie os alunos da plataforma</p>
         </div>
 
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs defaultValue={userRole === 'administrator' ? "list" : "overview"} className="w-full">
           <TabsList className="mb-6">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="list">Lista</TabsTrigger>

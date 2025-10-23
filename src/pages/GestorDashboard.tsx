@@ -94,6 +94,39 @@ const GestorDashboard = () => {
 
     if (user && (userRole === 'manager' || userRole === 'administrator')) {
       loadData();
+
+      // Set up realtime subscriptions
+      const ordersChannel = supabase
+        .channel('orders-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_orders' }, () => {
+          console.log('🔄 Realtime: orders changed, reloading metrics...');
+          loadConsolidatedMetrics();
+        })
+        .subscribe();
+
+      const productsChannel = supabase
+        .channel('products-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_products' }, () => {
+          console.log('🔄 Realtime: products changed, reloading metrics...');
+          loadConsolidatedMetrics();
+        })
+        .subscribe();
+
+      const campaignsChannel = supabase
+        .channel('campaigns-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_campaigns' }, () => {
+          console.log('🔄 Realtime: campaigns changed, reloading metrics...');
+          loadConsolidatedMetrics();
+        })
+        .subscribe();
+
+      // Cleanup on unmount
+      return () => {
+        console.log('🧹 Cleaning up realtime subscriptions...');
+        supabase.removeChannel(ordersChannel);
+        supabase.removeChannel(productsChannel);
+        supabase.removeChannel(campaignsChannel);
+      };
     }
   }, [user, userRole, authLoading, navigate]);
 
@@ -125,6 +158,7 @@ const GestorDashboard = () => {
 
   const loadConsolidatedMetrics = async () => {
     try {
+      console.log('🔍 Carregando métricas consolidadas...');
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -193,7 +227,7 @@ const GestorDashboard = () => {
         ? validAcos.reduce((sum, c) => sum + Number(c.acos), 0) / validAcos.length 
         : 0;
 
-      setConsolidatedMetrics({
+      console.log('✅ Métricas carregadas:', {
         totalRevenue,
         totalSales,
         shippingStats,
@@ -205,35 +239,20 @@ const GestorDashboard = () => {
         }
       });
 
-      // Set up realtime subscriptions
-      const ordersChannel = supabase
-        .channel('orders-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_orders' }, () => {
-          loadConsolidatedMetrics();
-        })
-        .subscribe();
-
-      const productsChannel = supabase
-        .channel('products-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_products' }, () => {
-          loadConsolidatedMetrics();
-        })
-        .subscribe();
-
-      const campaignsChannel = supabase
-        .channel('campaigns-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'mercado_livre_campaigns' }, () => {
-          loadConsolidatedMetrics();
-        })
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(ordersChannel);
-        supabase.removeChannel(productsChannel);
-        supabase.removeChannel(campaignsChannel);
-      };
+      setConsolidatedMetrics({
+        totalRevenue,
+        totalSales,
+        shippingStats,
+        adsMetrics: {
+          totalSpend,
+          advertisedSales,
+          avgRoas,
+          avgAcos
+        }
+      });
     } catch (error) {
-      console.error('Error loading consolidated metrics:', error);
+      console.error('❌ Erro ao carregar métricas consolidadas:', error);
+      toast({ title: "Erro ao carregar métricas consolidadas", variant: "destructive" });
     }
   };
 

@@ -109,7 +109,7 @@ const StudentDashboard = () => {
       if (mlError.includes('callback') || mlError.includes('requested path')) {
         toast({
           title: "URL de Callback não autorizada",
-          description: "Configure https://yxlxholcipprdozohwhn.supabase.co/functions/v1/ml-oauth-callback nas URLs de Redirecionamento do seu app ML.",
+          description: "Configure https://tmacddkgqaducwdfubft.supabase.co/functions/v1/ml-oauth-callback nas URLs de Redirecionamento do seu app ML.",
           variant: "destructive",
           duration: 10000,
         });

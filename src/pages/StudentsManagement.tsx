@@ -389,15 +389,15 @@ export default function StudentsManagement() {
       const has_ml_decola = studentMetrics.some(m => m.has_decola === true);
       const has_ml_full = studentMetrics.some(m => m.has_full === true);
       
-      // FLEX: shipping_mode = 'me2' AND logistic_type = 'drop_off'
+      // FLEX: shipping_mode = 'me2' AND logistic_type = 'self_service'
       const studentProducts = mlProductsData?.filter(p => p.student_id === profile.id) || [];
       const has_ml_flex = studentProducts.some(p => 
-        p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+        p.shipping_mode === 'me2' && p.logistic_type === 'self_service'
       );
 
-      // Check if student has agencies (products with drop_off logistic type)
+      // Check if student has agencies (products with xd_drop_off logistic type)
       const has_agencies = studentProducts.some(p => 
-        p.logistic_type === 'drop_off'
+        p.logistic_type === 'xd_drop_off'
       );
 
       // Get manager name
@@ -599,131 +599,96 @@ export default function StudentsManagement() {
   };
 
   const handleDeleteStudent = async (studentId: string) => {
-    if (!confirm(
-      "⚠️ ATENÇÃO: Esta ação irá APAGAR PERMANENTEMENTE:\n\n" +
-      "• Todos os dados do Mercado Livre (contas, produtos, pedidos)\n" +
-      "• Jornada e marcos do aluno\n" +
-      "• Apps e bônus vinculados\n" +
-      "• A conta de login do aluno\n\n" +
-      "Esta ação NÃO PODE SER DESFEITA!\n\n" +
-      "Deseja continuar?"
-    )) {
+    // Buscar dados do aluno para exibir informações na confirmação
+    const { data: studentData } = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", studentId)
+      .single();
+
+    if (!studentData) {
+      toast({
+        title: "Erro",
+        description: "Aluno não encontrado",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Confirmação detalhada
+    const confirmed = confirm(
+      `🗑️ EXCLUSÃO PERMANENTE DE ALUNO\n\n` +
+      `👤 Aluno: ${studentData.full_name}\n` +
+      `📧 Email: ${studentData.email}\n\n` +
+      `⚠️ Esta ação irá APAGAR PERMANENTEMENTE:\n\n` +
+      `• Todos os dados do Mercado Livre (contas, produtos, pedidos)\n` +
+      `• Jornada e marcos do aluno\n` +
+      `• Apps e bônus vinculados\n` +
+      `• Métricas e histórico\n` +
+      `• A conta de login do aluno\n\n` +
+      `🚨 Esta ação NÃO PODE SER DESFEITA!\n\n` +
+      `Deseja continuar com a exclusão?`
+    );
+
+    if (!confirmed) {
       return;
     }
 
     const loadingToast = toast({
-      title: "Excluindo aluno...",
-      description: "Removendo todos os dados relacionados",
-      duration: Infinity,
+      title: "🗑️ Excluindo aluno...",
+      description: "Removendo todos os dados relacionados de forma segura",
+      duration: 0, // Não fecha automaticamente
     });
 
     try {
-      // ORDEM CORRETA DE DELEÇÃO (respeita foreign keys)
-      
-      // 1. Milestones (dependem de student_journeys)
-      const { data: journeys } = await supabase
-        .from("student_journeys")
-        .select("id")
-        .eq("student_id", studentId);
-      
-      if (journeys && journeys.length > 0) {
-        const journeyIds = journeys.map(j => j.id);
-        const { error: milestonesError } = await supabase
-          .from("milestones")
-          .delete()
-          .in("journey_id", journeyIds);
-        
-        if (milestonesError) throw new Error(`Erro ao deletar marcos: ${milestonesError.message}`);
-      }
+      console.log(`🗑️ === EXCLUSÃO SEGURA DE ALUNO ===`);
+      console.log(`Aluno: ${studentData.full_name} (${studentData.email})`);
+      console.log(`ID: ${studentId}`);
 
-      // 2. Student journeys
-      const { error: journeyError } = await supabase
-        .from("student_journeys")
-        .delete()
-        .eq("student_id", studentId);
-
-      if (journeyError) throw new Error(`Erro ao deletar jornada: ${journeyError.message}`);
-
-      // 3. Dados do Mercado Livre
-      
-      // 3a. Get ML account IDs first (for webhooks)
-      const { data: mlAccounts } = await supabase
-        .from("mercado_livre_accounts")
-        .select("id")
-        .eq("student_id", studentId);
-      
-      const mlAccountIds = mlAccounts?.map(acc => acc.id) || [];
-
-      // 3b. Delete ML webhooks
-      if (mlAccountIds.length > 0) {
-        const { error: webhooksError } = await supabase
-          .from("mercado_livre_webhooks")
-          .delete()
-          .in("ml_account_id", mlAccountIds);
-        
-        if (webhooksError) console.warn("Erro ao deletar webhooks:", webhooksError);
-      }
-
-      // 3c. Delete ML data (produtos, pedidos, métricas, estoque)
-      await supabase.from("mercado_livre_full_stock").delete().eq("student_id", studentId);
-      await supabase.from("mercado_livre_products").delete().eq("student_id", studentId);
-      await supabase.from("mercado_livre_orders").delete().eq("student_id", studentId);
-      await supabase.from("mercado_livre_metrics").delete().eq("student_id", studentId);
-
-      // 3d. Delete ML accounts
-      const { error: accountsError } = await supabase
-        .from("mercado_livre_accounts")
-        .delete()
-        .eq("student_id", studentId);
-      
-      if (accountsError) throw new Error(`Erro ao deletar contas ML: ${accountsError.message}`);
-
-      // 4. Apps e Bonus
-      await supabase.from("student_apps").delete().eq("student_id", studentId);
-      await supabase.from("student_bonus_delivery").delete().eq("student_id", studentId);
-
-      // 5. User roles
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .delete()
-        .eq("user_id", studentId);
-
-      if (roleError) throw new Error(`Erro ao deletar role: ${roleError.message}`);
-
-      // 6. Profile
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", studentId);
-
-      if (profileError) throw new Error(`Erro ao deletar perfil: ${profileError.message}`);
-
-      // 7. Delete user from auth (via Admin API)
-      const { error: authError } = await supabase.functions.invoke('delete-user-auth', {
-        body: { userId: studentId }
+      // Chamar função de exclusão segura
+      const { data, error } = await supabase.functions.invoke('delete-student-complete', {
+        body: { student_id: studentId }
       });
 
-      if (authError) {
-        console.error("Erro ao deletar do auth:", authError);
-        // Não bloqueia a operação - admin pode limpar manualmente depois
+      if (error) {
+        throw new Error(error.message || 'Erro na exclusão');
       }
 
       loadingToast.dismiss();
-      
+
+      // Mostrar resumo da exclusão
+      const summary = `
+✅ ALUNO EXCLUÍDO COM SUCESSO!
+
+👤 Aluno: ${data.student_name}
+📧 Email: ${data.student_email}
+📊 Total de registros deletados: ${data.total_records_deleted}
+
+🗑️ Dados removidos:
+${Object.entries(data.data_deleted)
+  .filter(([_, count]) => count > 0)
+  .map(([table, count]) => `• ${table}: ${count} registros`)
+  .join('\n')}
+      `;
+
       toast({
-        title: "✅ Aluno excluído com sucesso",
-        description: "Todos os dados relacionados foram removidos",
+        title: "✅ Aluno excluído com sucesso!",
+        description: `${data.student_name} e todos os dados relacionados foram removidos permanentemente.`,
+        variant: "default",
       });
 
+      console.log('📊 RESUMO DA EXCLUSÃO:', summary);
+
+      // Refresh the students list
       await fetchStudents();
-      
-    } catch (error: any) {
+
+    } catch (error) {
       loadingToast.dismiss();
+      console.error("❌ Erro ao excluir aluno:", error);
       
-      console.error('Error deleting student:', error);
       toast({
         title: "❌ Erro ao excluir aluno",
-        description: error.message || "Não foi possível excluir o aluno completamente",
+        description: error instanceof Error ? error.message : "Erro desconhecido na exclusão",
         variant: "destructive",
       });
     }

@@ -215,7 +215,6 @@ export default function MLAccountDashboard() {
   const [hasProductAds, setHasProductAds] = useState<boolean | null>(null);
   const [hasActiveCampaigns, setHasActiveCampaigns] = useState<boolean | null>(null);
   const [checkingProductAds, setCheckingProductAds] = useState(false);
-  const [testingConnection, setTestingConnection] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -370,7 +369,7 @@ export default function MLAccountDashboard() {
     const total = activeProducts.length;
     
     const flex = activeProducts.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+      p.shipping_mode === 'me2' && p.logistic_type === 'self_service'
     ).length;
     
     const agencies = activeProducts.filter(p => 
@@ -614,28 +613,6 @@ export default function MLAccountDashboard() {
     }
   };
 
-  const testProductAdsConnection = async () => {
-    setTestingConnection(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('ml-debug-product-ads-response', {
-        body: { ml_account_id: selectedAccountId }
-      });
-
-      if (error) throw error;
-
-      console.log('Product Ads Connection Test:', data);
-      toast.success('Conexão testada com sucesso', {
-        description: 'Verifique o console para detalhes'
-      });
-    } catch (error: any) {
-      console.error('Connection test error:', error);
-      toast.error('Erro ao testar conexão', {
-        description: error.message
-      });
-    } finally {
-      setTestingConnection(false);
-    }
-  };
 
   const verifyProductAdsStatus = async (accountId: string) => {
     setCheckingProductAds(true);
@@ -1276,6 +1253,7 @@ export default function MLAccountDashboard() {
                       </div>
                     </div>
                   )}
+
                 </>
               ) : (
                 <div className="text-center py-12">

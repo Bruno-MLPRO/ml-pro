@@ -113,6 +113,45 @@ async function syncUserInfo(account: any, accessToken: string) {
   return await response.json()
 }
 
+// Função para inferir logistic_type quando a API não retorna
+function inferLogisticType(item: any): string | null {
+  // Se não é ME2, não precisa inferir
+  if (item.shipping?.mode !== 'me2') {
+    return null;
+  }
+
+  const tags = item.shipping?.tags || [];
+
+  // 1. FULL - tem inventory_id
+  if (item.inventory_id) {
+    return 'fulfillment';
+  }
+
+  // 2. FLEX - tem tags de self_service (FLEX) - PRIORIDADE MÁXIMA
+  if (tags.includes('self_service_in') || tags.includes('self_service_out') || tags.includes('self_service_available') || tags.includes('flex')) {
+    return 'self_service';
+  }
+
+  // 3. Agências - tem 'mandatory_free_shipping' MAS não tem tags de FLEX
+  if (tags.includes('mandatory_free_shipping')) {
+    return 'xd_drop_off';
+  }
+
+  // 4. Coleta - tem 'cross_docking'
+  if (tags.includes('cross_docking')) {
+    return 'cross_docking';
+  }
+
+  // 5. Se a API retornou um valor, usar ele (mas só se não for FLEX)
+  if (item.shipping?.logistic_type && item.shipping.logistic_type !== 'self_service') {
+    return item.shipping.logistic_type;
+  }
+
+  // 6. Default para ME2 sem informações específicas: assumir FLEX
+  // (a maioria dos ME2 sem tags específicas são FLEX)
+  return 'self_service';
+}
+
 async function syncProducts(account: any, accessToken: string, supabase: any) {
   console.log('Syncing products...')
   
@@ -194,11 +233,9 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
         
         const hasTaxData = fiscalAttributesFound.length > 0 || fiscalSaleTermsFound.length > 0;
         
-        // Log para debug (produtos sem dados fiscais)
-        if (!hasTaxData) {
-          console.log(`⚠️ Item sem dados fiscais: ${item.id} - ${item.title}`);
-          console.log('  Atributos fiscais encontrados:', fiscalAttributesFound.map((a: any) => `${a.id}=${a.value_name || a.value_id}`));
-        }
+        // 🔍 Inferir logistic_type
+        const inferredLogisticType = inferLogisticType(item);
+
         
         const { error } = await supabase
           .from('mercado_livre_products')
@@ -215,7 +252,7 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
             thumbnail: item.thumbnail,
             listing_type: item.listing_type_id,
             shipping_mode: item.shipping?.mode,
-            logistic_type: item.shipping?.logistic_type,
+            logistic_type: inferredLogisticType, // ✅ Usa valor inferido
             has_description: hasDescription,
             has_tax_data: hasTaxData,
             has_low_quality_photos: hasLowQualityPhotos,
@@ -247,12 +284,7 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
     if (offset >= 500) break
   }
 
-  console.log(`[ML-SYNC] Successfully synced ${products.length} traditional (non-catalog) products`);
-  console.log(`[ML-SYNC] Summary:`)
-  console.log(`  ✅ Total synced: ${products.length}`)
-  console.log(`  📊 Active: ${products.filter(p => p.status === 'active').length}`)
-  console.log(`  ⏸️  Paused: ${products.filter(p => p.status === 'paused').length}`)
-  console.log(`  🚫 Catalog items: excluded (catalog_listing=false filter applied)`)
+  console.log(`[ML-SYNC] Successfully synced ${products.length} products`);
   return products
 }
 
@@ -315,7 +347,7 @@ async function syncOrders(account: any, accessToken: string, supabase: any) {
     if (offset >= 1000) break
   }
 
-  console.log(`Synced ${orders.length} total orders`)
+  console.log(`Synced ${orders.length} orders`);
   return orders
 }
 
@@ -378,14 +410,6 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
     hasDecola = protectionEndDate > now; // Proteção ainda ativa
   }
 
-  console.log('Decola detection:', {
-    hasRealLevel,
-    hasProtectionEndDate,
-    protectionEndDate: sellerReputation.protection_end_date,
-    hasDecola,
-    levelId: sellerReputation.level_id,
-    realLevel: sellerReputation.real_level
-  });
 
   const isMercadoLider = userInfo.seller_reputation?.power_seller_status === 'gold' ||
                          userInfo.seller_reputation?.power_seller_status === 'platinum'
@@ -422,12 +446,6 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
   const cancellationsValue = getMetricValue(metrics.cancellations, 'value');
   const cancellationsRate = getMetricValue(metrics.cancellations, 'rate');
 
-  console.log('Metrics collection:', {
-    hasDecola,
-    claims: { protected: metrics.claims?.value, real: claimsValue },
-    delayed: { protected: metrics.delayed_handling_time?.value, real: delayedValue },
-    cancellations: { protected: metrics.cancellations?.value, real: cancellationsValue }
-  });
 
   const { error } = await supabase
     .from('mercado_livre_metrics')
@@ -480,7 +498,6 @@ async function updateMetrics(account: any, userInfo: any, products: any[], order
   if (error) {
     console.error('Error updating metrics:', error)
   } else {
-    console.log('Metrics updated:', { hasFull, hasDecola, isMercadoLider, reputationColor })
   }
 }
 
@@ -501,7 +518,6 @@ async function checkSellerRecoveryStatus(account: any, supabase: any) {
       return { checked: false, error: functionError.message };
     }
 
-    console.log('Seller recovery status checked:', functionData);
     return { checked: true, has_program: functionData.has_program };
   } catch (error: any) {
     console.error('Error in checkSellerRecoveryStatus:', error);
@@ -551,7 +567,6 @@ async function validateMilestones(studentId: string, supabase: any) {
       })
       .eq('id', salesMilestone.id)
     
-    console.log('Milestone validated: 10 Vendas')
   }
 }
 
@@ -607,7 +622,6 @@ async function syncFullStock(account: any, item: any, accessToken: string, supab
     if (error) {
       console.error(`Error syncing FULL stock for ${inventoryId}:`, error)
     } else {
-      console.log(`Synced FULL stock for ${inventoryId}`)
     }
   } catch (error) {
     console.error('Error in syncFullStock:', error)
@@ -628,7 +642,6 @@ async function checkAndSyncProductAds(account: any, accessToken: string, supabas
 
     if (!advertiserResponse.ok) {
       if (advertiserResponse.status === 404) {
-        console.log('Product Ads not enabled for this account')
         await supabase
           .from('mercado_livre_accounts')
           .update({ 
@@ -654,7 +667,6 @@ async function checkAndSyncProductAds(account: any, accessToken: string, supabas
       })
       .eq('id', account.id)
 
-    console.log('Product Ads enabled, synchronizing data...')
 
     // Call the Product Ads sync function
     try {
@@ -667,7 +679,6 @@ async function checkAndSyncProductAds(account: any, accessToken: string, supabas
         return { enabled: true, synced: false, error: error.message }
       }
 
-      console.log('Product Ads data synced successfully')
       return { enabled: true, synced: true }
     } catch (syncError) {
       console.error('Error calling Product Ads sync:', syncError)

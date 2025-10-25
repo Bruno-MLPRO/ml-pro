@@ -167,17 +167,6 @@ function calculateEstimatedHealth(product: any): PerformanceResponse {
   if (score >= 0.7) level = 'professional'
   else if (score >= 0.5) level = 'standard'
   
-  // Log estrutura para debug
-  console.log('[ML-HEALTH] Goals structure:', {
-    totalGoals: actions.length,
-    sample: actions[0],
-    photoProgress: `${photoCount}/5`,
-    validStructure: actions.every(a => 
-      typeof a.progress === 'number' && 
-      typeof a.progress_max === 'number' && 
-      typeof a.apply === 'boolean'
-    )
-  })
   
   return {
     score: Math.min(score, 1.0),
@@ -222,7 +211,6 @@ async function refreshToken(account: any, supabaseAdmin: any): Promise<string> {
     })
     .eq('id', account.id)
 
-  console.log('[ML-HEALTH] Token refreshed successfully, expires at:', expiresAt)
   return tokens.access_token
 }
 
@@ -277,12 +265,6 @@ serve(async (req) => {
     if (accountError) throw accountError
     if (!account) throw new Error('ML account not found')
 
-    console.log('[ML-HEALTH] Account info:', {
-      id: ml_account_id,
-      nickname: account.ml_nickname,
-      token_expires_at: account.token_expires_at,
-      is_active: account.is_active
-    })
 
     // Check if token needs refresh (expires in less than 5 minutes)
     const tokenExpiresAt = new Date(account.token_expires_at)
@@ -319,12 +301,8 @@ serve(async (req) => {
       itemsToSync = products?.map(p => p.ml_item_id) || []
     }
 
-    console.log(`[ML-HEALTH] Found ${itemsToSync.length} items to sync`)
-    console.log(`[ML-HEALTH] Processing health for ${itemsToSync.length} traditional (non-catalog) active items`)
-    console.log(`[ML-HEALTH] Catalog listings are excluded from health analysis`)
     
     if (itemsToSync.length === 0) {
-      console.log('[ML-HEALTH] No active items found for this account')
       return new Response(
         JSON.stringify({ 
           success: true, 

@@ -292,7 +292,7 @@ const StudentDashboard = () => {
     const total = products?.length || 0;
     
     const flex = products?.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+      p.shipping_mode === 'me2' && p.logistic_type === 'self_service'
     ).length || 0;
     
     const agencies = products?.filter(p => 

@@ -291,7 +291,7 @@ const GestorDashboard = () => {
       
       // Seguir o mesmo padrão do StudentDashboard
       const flex = productsData?.filter(p => 
-        p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
+        p.shipping_mode === 'me2' && p.logistic_type === 'self_service'
       ).length || 0;
       
       const agencias = productsData?.filter(p => 

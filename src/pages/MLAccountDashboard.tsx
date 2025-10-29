@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ReputationBadge } from "@/components/ReputationBadge";
-import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3, AlertCircle, Code, Loader2 } from "lucide-react";
+import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3, AlertCircle, Code, Loader2, PlugZap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HealthDashboard } from "@/components/ml-health/HealthDashboard";
 import { HealthIndividual } from "@/components/ml-health/HealthIndividual";
@@ -20,6 +20,7 @@ import { SimpleProductsTable } from "@/components/SimpleProductsTable";
 import { SalesComparisonChart } from "@/components/SalesComparisonChart";
 import { TopPerformersCard } from "@/components/TopPerformersCard";
 import { CampaignCard } from "@/components/CampaignCard";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MLAccount {
   id: string;
@@ -215,6 +216,7 @@ export default function MLAccountDashboard() {
   const [hasProductAds, setHasProductAds] = useState<boolean | null>(null);
   const [hasActiveCampaigns, setHasActiveCampaigns] = useState<boolean | null>(null);
   const [checkingProductAds, setCheckingProductAds] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -746,6 +748,44 @@ export default function MLAccountDashboard() {
     }
   };
 
+  const testConnection = async (accountId: string) => {
+    if (!accountId) return;
+    setTestingConnection(true);
+    
+    const toastId = toast.loading('Testando conexão...', {
+      description: `Verificando token para a conta selecionada.`,
+    });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('ml-test-connection', {
+        body: { ml_account_id: accountId }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.success) {
+        toast.success('Conexão bem-sucedida!', {
+          id: toastId,
+          description: `O token de acesso para ${data.nickname} é válido.`,
+        });
+      } else {
+        toast.error('Falha na conexão', {
+          id: toastId,
+          description: data.message || 'O token de acesso é inválido ou expirou.',
+        });
+      }
+    } catch (error: any) {
+      toast.error('Erro no teste de conexão', {
+        id: toastId,
+        description: error.message || 'Ocorreu um erro desconhecido.',
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
   const handleSelectItem = (itemId: string) => {
     setSelectedItemId(itemId);
     setHealthSubTab('individual');
@@ -860,19 +900,36 @@ export default function MLAccountDashboard() {
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold">Dashboard Mercado Livre</h1>
             
-            <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="Selecione uma conta" />
-              </SelectTrigger>
-              <SelectContent>
-                {mlAccounts.map(account => (
-                  <SelectItem key={account.id} value={account.id}>
-                    @{account.ml_nickname}
-                    {account.is_primary && " (Principal)"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Selecione uma conta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mlAccounts.map(account => (
+                    <SelectItem key={account.id} value={account.id}>
+                      @{account.ml_nickname}
+                      {account.is_primary && " (Principal)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => testConnection(selectedAccountId)}
+                    disabled={testingConnection || !selectedAccountId}
+                  >
+                    <PlugZap className={`w-4 h-4 ${testingConnection ? 'animate-spin' : ''}`} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Testar Conexão com Mercado Livre</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
 
           {/* Tabs */}

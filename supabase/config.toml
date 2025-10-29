@@ -45,9 +45,6 @@ verify_jwt = true
 [functions.ml-get-product-ads-data]
 verify_jwt = true
 
-[functions.ml-debug-product-ads-response]
-verify_jwt = true
-
 [functions.ml-get-seller-recovery-status]
 verify_jwt = true
 
@@ -64,4 +61,13 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.delete-user-auth]
+verify_jwt = true
+
+[functions.consultant-analyze-product]
+verify_jwt = true
+
+[functions.ml-get-product-details]
+verify_jwt = true
+
+[functions.delete-student-complete]
 verify_jwt = true

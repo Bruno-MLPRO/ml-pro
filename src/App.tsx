@@ -18,6 +18,7 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import MLAccountPerformance from "./pages/MLAccountPerformance";
 import MLAccountDashboard from "./pages/MLAccountDashboard";
+import ConsultantBoard from "./pages/ConsultantBoard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/aluno/:id" element={<StudentProfile />} />
             <Route path="/perfil" element={<Profile />} />
             <Route path="/configuracoes" element={<Settings />} />
+            <Route path="/consultor" element={<ConsultantBoard />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

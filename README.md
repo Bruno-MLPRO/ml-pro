@@ -4,11 +4,10 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 ![Vite](https://img.shields.io/badge/Vite-Latest-purple)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.x-cyan)
-![Lovable Cloud](https://img.shields.io/badge/Backend-Lovable%20Cloud-green)
+![Supabase](https://img.shields.io/badge/Backend-Supabase-green)
+![Vercel](https://img.shields.io/badge/Deploy-Vercel-black)
 
 Sistema completo de mentoria e gestão para vendedores do Mercado Livre, com acompanhamento de jornadas, análise de qualidade de anúncios, métricas de vendas e gestão de Product Ads.
-
-**URL do Projeto**: https://lovable.dev/projects/1a053c5c-c8e1-4fa7-96c7-85f3381f9ee9
 
 ---
 
@@ -70,7 +69,7 @@ ML PRO é uma plataforma completa de mentoria que conecta gestores e alunos vend
 - **zod** - Validação de schemas
 - **react-hook-form** - Formulários
 
-### Backend (Lovable Cloud / Supabase)
+### Backend (Supabase)
 - **PostgreSQL** - Banco de dados relacional
 - **Supabase** - Backend as a Service
 - **Edge Functions (Deno)** - Serverless functions
@@ -1368,7 +1367,8 @@ for (const milestone of milestones) {
 ### Pré-requisitos
 - **Node.js** 18+ ou **Bun**
 - **Git**
-- Conta no **Lovable** (para backend)
+- Conta no **Supabase** (para backend e banco de dados)
+- Conta no **Vercel** (para deploy do frontend)
 - App no **Mercado Livre** ([criar app](https://developers.mercadolivre.com.br/pt_br/registre-sua-aplicacao))
 
 ### Passos para Instalação
@@ -1384,8 +1384,11 @@ npm install
 bun install
 
 # 3. Configure variáveis de ambiente
-# As variáveis do Supabase (.env) são geradas automaticamente pelo Lovable
-# Configure apenas os secrets do Mercado Livre no Lovable Dashboard
+# Copie o arquivo .env.example para .env e configure as variáveis do Supabase
+cp .env.example .env
+
+# Configure os secrets do Mercado Livre no Supabase
+# Dashboard > Settings > Secrets
 
 # 4. Inicie o servidor de desenvolvimento
 npm run dev
@@ -1399,39 +1402,39 @@ bun run dev
 2. Crie uma aplicação
 3. Configure a **URL de Callback**:
    ```
-   https://seu-projeto.lovable.app/functions/v1/ml-oauth-callback
+   https://seu-projeto.supabase.co/functions/v1/ml-oauth-callback
    ```
 4. Anote o **App ID** e **Secret Key**
-5. Configure os secrets no Lovable:
-   - Vá em Project > Settings > Secrets
+5. Configure os secrets no Supabase:
+   - Acesse Supabase Dashboard > Project Settings > Edge Functions > Secrets
    - Adicione `MERCADO_LIVRE_APP_ID`
    - Adicione `MERCADO_LIVRE_SECRET_KEY`
 
 ### Estrutura de Secrets
 
 ```bash
-# Backend (Lovable Cloud - configurados via Dashboard)
+# Backend (Supabase - configurados via Dashboard)
 MERCADO_LIVRE_APP_ID=seu_app_id
 MERCADO_LIVRE_SECRET_KEY=sua_secret_key
-APP_URL=https://seu-projeto.lovable.app
+APP_URL=https://seu-projeto.vercel.app
 
-# Frontend (.env - gerado automaticamente)
+# Frontend (.env)
 VITE_SUPABASE_URL=https://seu-projeto.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=eyJ...
-VITE_SUPABASE_PROJECT_ID=yxlxholcipprdozohwhn
+VITE_SUPABASE_ANON_KEY=sua_chave_anon
 ```
 
 ---
 
 ## 🚀 Deploy
 
-### Deploy com Lovable Cloud (Recomendado)
+### Deploy na Vercel
 
-1. Acesse o projeto no Lovable
-2. Clique em **Share** → **Publish**
+1. Conecte seu repositório à Vercel
+2. Configure as variáveis de ambiente do Supabase
 3. O deploy é feito automaticamente em minutos
-4. Edge Functions são deployadas automaticamente
-5. Seu app estará disponível em: `https://seu-projeto.lovable.app`
+4. Edge Functions são deployadas no Supabase
+5. Seu app estará disponível em: `https://ml-pro-five.vercel.app`
 
 **Vantagens**:
 - ✅ Zero configuração
@@ -1439,21 +1442,15 @@ VITE_SUPABASE_PROJECT_ID=yxlxholcipprdozohwhn
 - ✅ CDN global
 - ✅ Builds automáticos a cada push
 - ✅ Preview de branches
+- ✅ Analytics integrado
 
 ### Conectar Domínio Customizado
 
-1. Vá em **Project** > **Settings** > **Domains**
-2. Clique em **Connect Domain**
+1. Vá em **Project Settings** > **Domains**
+2. Clique em **Add Domain**
 3. Digite seu domínio (ex: `mlpro.com.br`)
-4. Configure os registros DNS conforme instruído:
-   ```
-   Type: CNAME
-   Name: @
-   Value: seu-projeto.lovable.app
-   ```
+4. Configure os registros DNS conforme instruído
 5. Aguarde propagação DNS (até 48h)
-
-**Requer**: Plano pago do Lovable
 
 ### Deploy Alternativo (Self-Hosting)
 
@@ -1548,7 +1545,7 @@ ml-pro/
 │   ├── index.css                # Estilos globais + design system
 │   └── vite-env.d.ts           # Types do Vite
 │
-├── supabase/                    # Backend (Lovable Cloud)
+├── supabase/                    # Backend (Supabase)
 │   │
 │   ├── functions/               # Edge Functions (Deno)
 │   │   │
@@ -1655,15 +1652,13 @@ ml-pro/
 - Erro 401 Unauthorized
 
 **Soluções**:
-1. Verifique se `MERCADO_LIVRE_APP_ID` e `MERCADO_LIVRE_SECRET_KEY` estão configurados corretamente no Lovable
+1. Verifique se `MERCADO_LIVRE_APP_ID` e `MERCADO_LIVRE_SECRET_KEY` estão configurados corretamente no Supabase
 2. Confirme que a URL de callback está correta no app do ML:
    ```
-   https://seu-projeto.lovable.app/functions/v1/ml-oauth-callback
+   https://seu-projeto.supabase.co/functions/v1/ml-oauth-callback
    ```
 3. Verifique os logs da Edge Function:
-   ```typescript
-   // No Lovable: Backend > Functions > ml-oauth-callback > Logs
-   ```
+   - No Supabase Dashboard > Edge Functions > ml-oauth-callback > Logs
 4. Tente reconectar a conta após corrigir configurações
 
 ### Problema: Métricas não atualizam
@@ -1782,12 +1777,12 @@ ml-pro/
    ```
 2. Teste recepção de webhook:
    ```bash
-   curl -X POST https://seu-projeto.lovable.app/functions/v1/ml-webhook-receiver \
+   curl -X POST https://seu-projeto.supabase.co/functions/v1/ml-webhook-receiver \
      -H "Content-Type: application/json" \
      -d '{"topic": "orders_v2", "resource": "/orders/123", "user_id": 123}'
    ```
 3. Verifique URL do webhook no ML:
-   - Deve ser: `https://seu-projeto.lovable.app/functions/v1/ml-webhook-receiver`
+   - Deve ser: `https://seu-projeto.supabase.co/functions/v1/ml-webhook-receiver`
 4. Reconfigure webhooks:
    - Desconecte e reconecte a conta ML
 
@@ -1879,9 +1874,9 @@ Uso não autorizado, reprodução ou distribuição deste software é estritamen
 ## 📞 Contato e Suporte
 
 ### Links Úteis
-- **Projeto Lovable**: https://lovable.dev/projects/1a053c5c-c8e1-4fa7-96c7-85f3381f9ee9
-- **Documentação Lovable**: https://docs.lovable.dev
 - **Mercado Livre Developers**: https://developers.mercadolivre.com.br
+- **Documentação Supabase**: https://supabase.com/docs
+- **Documentação Vercel**: https://vercel.com/docs
 
 ### Suporte
 Para questões técnicas, bugs ou sugestões:
@@ -1894,8 +1889,8 @@ Para questões técnicas, bugs ou sugestões:
 ## 🎉 Agradecimentos
 
 - **Mercado Livre** - Pela API robusta e documentação
-- **Lovable** - Pela plataforma incrível de desenvolvimento
 - **Supabase** - Pelo backend confiável
+- **Vercel** - Pela plataforma de deploy
 - **shadcn/ui** - Pelos componentes lindos
 - **Comunidade Open Source** - Pelas bibliotecas utilizadas
 

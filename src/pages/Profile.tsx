@@ -24,25 +24,8 @@ const passwordSchema = z.object({
   path: ["confirmPassword"],
 });
 
-interface ProfileData {
-  full_name: string;
-  email: string;
-  phone: string | null;
-  cpf: string | null;
-  cnpj: string | null;
-  endereco: string | null;
-  cidade: string | null;
-  estado: string | null;
-  cep: string | null;
-  turma: string | null;
-  estrutura_vendedor: string | null;
-  tipo_pj: string | null;
-  possui_contador: boolean | null;
-  caixa: number | null;
-  hub_logistico: string | null;
-  sistemas_externos: string | null;
-  mentoria_status: string | null;
-}
+// Interface removida - usando tipo centralizado de @/types/students
+import type { ProfileData } from "@/types/students";
 
 export default function Profile() {
   const { user, userRole, loading: authLoading } = useAuth();

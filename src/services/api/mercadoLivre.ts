@@ -1,0 +1,323 @@
+// Serviço de API para Mercado Livre
+
+import { supabase } from '@/integrations/supabase/client';
+import type { 
+  MLAccount, 
+  MLMetrics, 
+  MLProduct, 
+  MLOrder, 
+  MLFullStock, 
+  MLCampaign,
+  ProductHealth,
+  HealthHistory
+} from '@/types/mercadoLivre';
+import type { PaginatedOrdersResult } from '@/types/metrics';
+
+const PAGE_SIZE = 1000;
+const MAX_PAGES = 10;
+
+/**
+ * Busca todas as contas ML de um estudante
+ */
+export async function getMLAccounts(studentId: string): Promise<MLAccount[]> {
+  const { data, error } = await supabase.functions.invoke('ml-get-accounts');
+  
+  if (error) {
+    throw new Error(`Erro ao buscar contas ML: ${error.message}`);
+  }
+  
+  // A Edge Function retorna ml_nickname, garantir que está presente
+  if (!data?.accounts || data.accounts.length === 0) {
+    return [];
+  }
+
+  return data.accounts.map((acc: any) => {
+    // Garantir que ml_nickname não seja vazio - se estiver, usar fallback
+    const mlNickname = acc.ml_nickname || acc.nickname || 'Conta sem nome';
+    
+    return {
+      id: acc.id,
+      ml_nickname: mlNickname,
+      ml_user_id: acc.ml_user_id || parseInt(acc.ml_user_id?.toString() || '0', 10),
+      is_primary: acc.is_primary || false,
+      is_active: acc.is_active ?? true,
+      connected_at: acc.connected_at || acc.created_at || new Date().toISOString(),
+      last_sync_at: acc.last_sync_at || null,
+      metrics: acc.metrics || null
+    };
+  });
+}
+
+/**
+ * Busca métricas de uma conta ML
+ */
+export async function getMLMetrics(accountId: string): Promise<MLMetrics | null> {
+  const { data, error } = await supabase
+    .from('mercado_livre_metrics')
+    .select('*')
+    .eq('ml_account_id', accountId)
+    .order('last_updated', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  
+  if (error && error.code !== 'PGRST116') {
+    throw error;
+  }
+  
+  return data;
+}
+
+/**
+ * Busca produtos de uma conta ML
+ */
+export async function getMLProducts(
+  accountId: string, 
+  studentId?: string
+): Promise<MLProduct[]> {
+  let query = supabase
+    .from('mercado_livre_products')
+    .select('*')
+    .eq('ml_account_id', accountId)
+    .order('title');
+  
+  if (studentId) {
+    query = query.eq('student_id', studentId);
+  }
+  
+  const { data, error } = await query;
+  
+  if (error) {
+    throw error;
+  }
+  
+  return data || [];
+}
+
+/**
+ * Busca pedidos de um estudante com paginação
+ */
+export async function getMLOrders(
+  studentId: string,
+  periodDays: number = 30,
+  status: string = 'paid'
+): Promise<PaginatedOrdersResult> {
+  const periodStart = new Date();
+  periodStart.setDate(periodStart.getDate() - periodDays);
+  
+  let allOrders: any[] = [];
+  let currentPage = 0;
+  let hasMore = true;
+  let totalCount = 0;
+  
+  while (hasMore && currentPage < MAX_PAGES) {
+    const rangeStart = currentPage * PAGE_SIZE;
+    const rangeEnd = rangeStart + PAGE_SIZE - 1;
+    
+    const { data: pageOrders, error, count } = await supabase
+      .from('mercado_livre_orders')
+      .select('total_amount, paid_amount, date_created, ml_order_id', { count: 'exact' })
+      .eq('student_id', studentId)
+      .eq('status', status)
+      .gte('date_created', periodStart.toISOString())
+      .order('date_created', { ascending: false })
+      .range(rangeStart, rangeEnd);
+    
+    if (error) {
+      throw error;
+    }
+    
+    if (currentPage === 0) {
+      totalCount = count || 0;
+    }
+    
+    if (pageOrders && pageOrders.length > 0) {
+      allOrders = [...allOrders, ...pageOrders];
+      currentPage++;
+      
+      if (pageOrders.length < PAGE_SIZE) {
+        hasMore = false;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+  
+  return {
+    orders: allOrders,
+    totalCount,
+    hasMore: currentPage >= MAX_PAGES,
+    limitReached: currentPage >= MAX_PAGES
+  };
+}
+
+/**
+ * Busca estoque FULL de uma conta ML
+ */
+export async function getMLFullStock(accountId: string): Promise<MLFullStock[]> {
+  const { data: productsData } = await supabase
+    .from('mercado_livre_products')
+    .select('*')
+    .eq('ml_account_id', accountId);
+  
+  const { data: stockData, error } = await supabase
+    .from('mercado_livre_full_stock')
+    .select('*')
+    .eq('ml_account_id', accountId)
+    .order('ml_item_id');
+  
+  if (error) {
+    throw error;
+  }
+  
+  // Enriquecer com dados de produtos
+  const productMap = new Map((productsData || []).map(p => [p.ml_item_id, p]));
+  
+  return (stockData || []).map(stock => ({
+    ...stock,
+    mercado_livre_products: productMap.get(stock.ml_item_id) ? {
+      title: productMap.get(stock.ml_item_id)!.title,
+      thumbnail: productMap.get(stock.ml_item_id)!.thumbnail || '',
+      permalink: productMap.get(stock.ml_item_id)!.permalink || '',
+      price: productMap.get(stock.ml_item_id)!.price || 0
+    } : undefined
+  }));
+}
+
+/**
+ * Busca campanhas de Product Ads
+ */
+export async function getMLCampaigns(
+  accountId: string,
+  studentId?: string
+): Promise<MLCampaign[]> {
+  let query = supabase
+    .from('mercado_livre_campaigns')
+    .select('*')
+    .eq('ml_account_id', accountId)
+    .order('synced_at', { ascending: false });
+  
+  if (studentId) {
+    query = query.eq('student_id', studentId);
+  }
+  
+  const { data, error } = await query;
+  
+  if (error) {
+    throw error;
+  }
+  
+  return data || [];
+}
+
+/**
+ * Busca dados de qualidade (health) dos produtos
+ */
+export async function getMLProductHealth(accountId: string): Promise<ProductHealth[]> {
+  const { data, error } = await supabase
+    .from('mercado_livre_item_health')
+    .select('*')
+    .eq('ml_account_id', accountId);
+  
+  if (error) {
+    console.error('Health data error:', error);
+    return [];
+  }
+  
+  return (data || []).map(item => ({
+    health_score: item.health_score,
+    health_level: item.health_level,
+    goals: item.goals as any,
+    goals_completed: item.goals_completed || 0,
+    goals_applicable: item.goals_applicable || 0,
+    score_trend: item.score_trend,
+    previous_score: item.previous_score
+  }));
+}
+
+/**
+ * Busca histórico de qualidade dos produtos
+ */
+export async function getMLHealthHistory(
+  accountId: string,
+  days: number = 30
+): Promise<HealthHistory[]> {
+  const { data, error } = await supabase
+    .from('mercado_livre_health_history')
+    .select('*')
+    .eq('ml_account_id', accountId)
+    .gte('recorded_at', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString())
+    .order('recorded_at', { ascending: true });
+  
+  if (error) {
+    console.error('History data error:', error);
+    return [];
+  }
+  
+  const historyByDate = new Map<string, number[]>();
+  (data || []).forEach(record => {
+    const date = new Date(record.recorded_at).toLocaleDateString('pt-BR', { 
+      day: '2-digit', 
+      month: '2-digit' 
+    });
+    if (!historyByDate.has(date)) {
+      historyByDate.set(date, []);
+    }
+    historyByDate.get(date)!.push(record.health_score);
+  });
+  
+  return Array.from(historyByDate.entries()).map(([date, scores]) => ({
+    date,
+    averageScore: (scores.reduce((sum, s) => sum + s, 0) / scores.length) * 100
+  }));
+}
+
+/**
+ * Busca dados completos de uma conta ML (métricas, produtos, estoque, health)
+ */
+export async function getMLAccountData(accountId: string, studentId?: string) {
+  const [metrics, products, stock, health, history, campaigns] = await Promise.all([
+    getMLMetrics(accountId),
+    getMLProducts(accountId, studentId),
+    getMLFullStock(accountId),
+    getMLProductHealth(accountId),
+    getMLHealthHistory(accountId, 30),
+    getMLCampaigns(accountId, studentId)
+  ]);
+  
+  // Enriquecer produtos com health data
+  const healthMap = new Map(health.map(h => [h.health_score, h]));
+  
+  const productsWithHealth = products.map(product => {
+    const productHealth = health.find((_, index) => 
+      products[index]?.ml_item_id === product.ml_item_id
+    );
+    
+    return {
+      ...product,
+      health: productHealth || undefined
+    };
+  });
+  
+  return {
+    metrics,
+    products: productsWithHealth,
+    stock,
+    health,
+    history,
+    campaigns
+  };
+}
+
+/**
+ * Sincroniza dados de uma conta ML
+ */
+export async function syncMLAccount(accountId: string): Promise<void> {
+  const { error } = await supabase.functions.invoke('ml-sync-data', {
+    body: { ml_account_id: accountId }
+  });
+  
+  if (error) {
+    throw new Error(`Erro ao sincronizar conta: ${error.message}`);
+  }
+}
+

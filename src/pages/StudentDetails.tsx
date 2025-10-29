@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
+import { useStudentProfile, useStudentMLAccounts, useStudentApps, useStudentJourneys, useJourneyTemplates, useAvailableApps, useStudentBonusDeliveries, useConsolidatedAccountMetrics } from "@/hooks/queries/useStudentData";
+import { useMLAccountData } from "@/hooks/queries/useMLAccountData";
+import { calculateAdsMetrics, calculateShippingStats } from "@/lib/calculations";
 import { PlanBonusCard } from "@/components/PlanBonusCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,37 +19,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { 
   ArrowLeft, User, Phone, Mail, MapPin, Building2, DollarSign, Package, 
   TrendingUp, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle,
-  ExternalLink, Home, Image, Plus, RefreshCw, Target, Star
+  ExternalLink, Home, Image, Plus, RefreshCw, Target, Star, Send, Truck, Warehouse
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { StudentProfile, StudentApp, BonusDelivery } from "@/types/students";
+import type { Milestone } from "@/types/journeys";
+import type { MLAccount, MLProduct, MLFullStock, MLCampaign, AdsMetrics } from "@/types/mercadoLivre";
+import type { ShippingStats } from "@/types/metrics";
 
-interface StudentProfile {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string;
-  turma: string;
-  estado: string;
-  estrutura_vendedor: string;
-  tipo_pj: string | null;
-  cnpj: string;
-  possui_contador: boolean;
-  caixa: number | null;
-  hub_logistico: string;
-  sistemas_externos: string;
-  mentoria_status: string;
-}
+// Interfaces removidas - usando tipos centralizados de @/types
 
-interface MLAccount {
-  id: string;
-  ml_nickname: string;
-  ml_user_id: string;
-  is_primary: boolean;
-  is_active: boolean;
-  connected_at: string;
-  last_sync_at: string | null;
-}
-
+// MLMetrics ainda é local pois tem campos específicos diferentes do tipo centralizado
 interface MLMetrics {
   total_sales: number;
   total_revenue: number;
@@ -74,118 +58,58 @@ interface MLMetrics {
   neutral_ratings_rate: number;
 }
 
-interface MLProduct {
-  id: string;
-  ml_item_id: string;
-  title: string;
-  thumbnail: string;
-  status: string;
-  price: number;
-  has_low_quality_photos: boolean;
-  has_description: boolean;
-  has_tax_data: boolean;
-  min_photo_dimension: number | null;
-  photo_count: number;
-  permalink: string;
-}
-
-interface MLFullStock {
-  id: string;
-  ml_item_id: string;
-  inventory_id: string;
-  available_units: number;
-  reserved_units: number;
-  inbound_units: number;
-  damaged_units: number;
-  stock_status: string | null;
-}
-
-interface MLCampaign {
-  id: string;
-  campaign_id: number;
-  campaign_name: string;
-  status: string;
-  total_spend: number;
-  ad_revenue: number;
-  acos: number;
-  roas: number;
-  impressions: number;
-  clicks: number;
-  ctr: number;
-  products_count: number;
-  advertised_sales: number;
-}
-
-interface AdsMetrics {
-  totalSpend: number;
-  totalRevenue: number;
-  totalAcos: number;
-  totalRoas: number;
-  totalProductsInAds: number;
-  activeCampaigns: number;
-}
-
-interface StudentApp {
-  id: string;
-  name: string;
-  color: string;
-  student_app_id?: string;
-}
-
-interface BonusDelivery {
-  id: string;
-  bonus_id: string;
-  delivered: boolean;
-  delivered_at: string | null;
-  delivered_by: string | null;
-  notes: string | null;
-  bonus: {
-    name: string;
-    description: string | null;
-    cost: number;
-  };
-  deliveredByProfile?: {
-    full_name: string;
-  };
-}
-
-interface Milestone {
-  id: string;
-  title: string;
-  description: string;
-  status: string;
-  phase: string;
-  order_index: number;
-}
+// Todas as interfaces removidas - usando tipos centralizados de @/types/mercadoLivre, @/types/students e @/types/journeys
 
 export default function StudentDetails() {
   const { studentId } = useParams();
   const navigate = useNavigate();
   const { user, userRole } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const [loading, setLoading] = useState(true);
-  const [student, setStudent] = useState<StudentProfile | null>(null);
-  const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
+  // Hooks para buscar dados do estudante
+  const { data: student, isLoading: loadingStudent } = useStudentProfile(studentId || null);
+  const { data: mlAccountsData = [], isLoading: loadingAccounts } = useStudentMLAccounts(studentId || null);
+  const { data: studentAppsData = [], isLoading: loadingApps } = useStudentApps(studentId || null);
+  const { data: journeysData = [], isLoading: loadingJourneys } = useStudentJourneys(studentId || null);
+  const { data: journeyTemplatesData = [] } = useJourneyTemplates();
+  const { data: availableAppsData = [] } = useAvailableApps();
+  const { data: bonusDeliveriesData = [] } = useStudentBonusDeliveries(studentId || null);
+  
+  // Transformar dados para compatibilidade
+  const mlAccounts = mlAccountsData.map((acc: any) => ({
+    id: acc.id,
+    ml_nickname: acc.ml_nickname || acc.nickname || 'Sem nome',
+    ml_user_id: acc.ml_user_id.toString(),
+    is_primary: acc.is_primary,
+    is_active: acc.is_active,
+    connected_at: acc.connected_at || acc.created_at || '',
+    last_sync_at: acc.last_sync_at
+  }));
+  
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"visao-geral" | "contas-ml" | "apps" | "jornada">("visao-geral");
   const [metrics, setMetrics] = useState<MLMetrics | null>(null);
-  const [consolidatedMetrics, setConsolidatedMetrics] = useState<MLMetrics | null>(null);
   const [products, setProducts] = useState<MLProduct[]>([]);
   const [fullStock, setFullStock] = useState<MLFullStock[]>([]);
   const [campaigns, setCampaigns] = useState<MLCampaign[]>([]);
   const [adsMetrics, setAdsMetrics] = useState<AdsMetrics | null>(null);
-  const [studentApps, setStudentApps] = useState<StudentApp[]>([]);
+  const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
-  const [availableApps, setAvailableApps] = useState<any[]>([]);
   const [isAddingApp, setIsAddingApp] = useState(false);
   const [selectedAppId, setSelectedAppId] = useState<string>("");
-  const [journeys, setJourneys] = useState<any[]>([]); // student_journeys rows (likely 1)
-  const [selectedJourneyId, setSelectedJourneyId] = useState<string>(""); // student journey id
-  const [journeyTemplates, setJourneyTemplates] = useState<any[]>([]); // templates list
+  const [selectedJourneyId, setSelectedJourneyId] = useState<string>("");
   const [selectedJourneyTemplateId, setSelectedJourneyTemplateId] = useState<string>("");
-  const [bonusDeliveries, setBonusDeliveries] = useState<BonusDelivery[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  const loading = loadingStudent || loadingAccounts || loadingApps || loadingJourneys;
+  
+  // Hook para dados da conta selecionada
+  const { data: accountData } = useMLAccountData(selectedAccountId || null, studentId || null);
+  
+  // Hook para métricas consolidadas
+  const accountIds = mlAccounts.map(acc => acc.id);
+  const { data: consolidatedMetricsData } = useConsolidatedAccountMetrics(accountIds, studentId || null);
 
   useEffect(() => {
     if (userRole !== 'manager' && userRole !== 'administrator') {
@@ -193,222 +117,91 @@ export default function StudentDetails() {
       return;
     }
 
-    if (studentId) {
-      loadStudentData();
+    // Selecionar primeira conta automaticamente
+    if (mlAccounts.length > 0 && !selectedAccountId) {
+      setSelectedAccountId(mlAccounts[0].id);
     }
-  }, [studentId, userRole]);
+
+    // Selecionar primeira jornada automaticamente
+    if (journeysData.length > 0 && !selectedJourneyId) {
+      setSelectedJourneyId(journeysData[0].id);
+      
+      // Selecionar template padrão ou o primeiro
+      const defaultTemplate = journeyTemplatesData.find(t => t.is_default) || journeyTemplatesData[0];
+      if (defaultTemplate) {
+        setSelectedJourneyTemplateId(defaultTemplate.id);
+        // Carregar milestones (ainda precisa implementar)
+      }
+    }
+  }, [userRole, mlAccounts, journeysData, journeyTemplatesData]);
 
   useEffect(() => {
-    if (selectedAccountId) {
-      loadAccountData(selectedAccountId);
-    }
-  }, [selectedAccountId]);
-
-  const loadStudentData = async () => {
-    setLoading(true);
-    try {
-      // Buscar perfil do aluno
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', studentId)
-        .single();
-
-      if (profileError) throw profileError;
-      setStudent(profileData);
-
-      // Buscar contas ML do aluno
-      const { data: accountsData, error: accountsError } = await supabase
-        .from('mercado_livre_accounts')
-        .select('id, ml_nickname, ml_user_id, is_primary, is_active, connected_at, last_sync_at')
-        .eq('student_id', studentId)
-        .eq('is_active', true)
-        .order('is_primary', { ascending: false });
-
-      if (accountsError) throw accountsError;
-      setMlAccounts(accountsData || []);
-
-      if (accountsData && accountsData.length > 0) {
-        setSelectedAccountId(accountsData[0].id);
-        // Carregar métricas consolidadas de todas as contas
-        await loadConsolidatedMetrics(accountsData.map(a => a.id));
+    if (accountData) {
+      // Converter MLMetrics do hook para MLMetrics local (com campos opcionais)
+      if (accountData.metrics) {
+        const metricsData = accountData.metrics as any;
+        setMetrics({
+          total_sales: metricsData.total_sales || 0,
+          total_revenue: metricsData.total_revenue || 0,
+          average_ticket: metricsData.average_ticket || 0,
+          active_listings: metricsData.active_listings || 0,
+          paused_listings: metricsData.paused_listings || 0,
+          total_listings: metricsData.total_listings || 0,
+          reputation_color: metricsData.reputation_color || 'grey',
+          reputation_level: metricsData.reputation_level || null,
+          reputation_transactions_total: metricsData.reputation_transactions_total || 0,
+          positive_ratings_rate: metricsData.positive_ratings_rate || 0,
+          has_decola: metricsData.has_decola || false,
+          real_reputation_level: metricsData.real_reputation_level || null,
+          protection_end_date: metricsData.protection_end_date || null,
+          decola_problems_count: metricsData.decola_problems_count || 0,
+          has_full: metricsData.has_full || false,
+          is_mercado_lider: metricsData.is_mercado_lider || false,
+          mercado_lider_level: metricsData.mercado_lider_level || null,
+          claims_rate: metricsData.claims_rate || 0,
+          claims_value: metricsData.claims_value || 0,
+          delayed_handling_rate: metricsData.delayed_handling_rate || 0,
+          delayed_handling_value: metricsData.delayed_handling_value || 0,
+          cancellations_rate: metricsData.cancellations_rate || 0,
+          cancellations_value: metricsData.cancellations_value || 0,
+          negative_ratings_rate: metricsData.negative_ratings_rate || 0,
+          neutral_ratings_rate: metricsData.neutral_ratings_rate || 0,
+        } as MLMetrics);
       }
-
-      // Buscar apps do aluno
-      const { data: appsData, error: appsError } = await supabase
-        .from('student_apps')
-        .select('id, apps_extensions(id, name, color)')
-        .eq('student_id', studentId);
-
-      if (appsError) throw appsError;
-      const apps = appsData?.map(sa => ({
-        student_app_id: sa.id,
-        ...(sa.apps_extensions as any)
-      })).filter(Boolean) || [];
-      setStudentApps(apps as any);
-
-      // Buscar jornada (id) do aluno e templates disponíveis
-      const { data: journeysData, error: journeyError } = await supabase
-        .from('student_journeys')
-        .select('id, current_phase, overall_progress')
-        .eq('student_id', studentId);
-
-      const { data: templatesData, error: templatesError } = await supabase
-        .from('journey_templates')
-        .select('id, name, is_default')
-        .order('is_default', { ascending: false })
-        .order('created_at', { ascending: true });
-
-      if (templatesError) throw templatesError;
-      setJourneyTemplates(templatesData || []);
-
-      if (!journeyError && journeysData && journeysData.length > 0) {
-        setJourneys(journeysData);
-        setSelectedJourneyId(journeysData[0].id);
-
-        // Seleciona template padrão ou o primeiro
-        const defaultTemplate = (templatesData || []).find(t => t.is_default) || (templatesData || [])[0];
-        if (defaultTemplate) {
-          setSelectedJourneyTemplateId(defaultTemplate.id);
-          await loadMilestonesByTemplate(journeysData[0].id, defaultTemplate.id);
-        } else {
-          setMilestones([]);
-        }
-      } else {
-        setJourneys([]);
-        setMilestones([]);
-      }
-
-      // Buscar apps disponíveis
-      await loadAvailableApps();
+      setProducts(accountData.products || []);
+      setFullStock(accountData.stock || []);
+      setCampaigns(accountData.campaigns || []);
       
-      // Buscar bônus do aluno
-      await loadBonusDeliveries();
-    } catch (error: any) {
-      console.error('Error loading student data:', error);
-      toast({
-        title: "Erro ao carregar dados",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadConsolidatedMetrics = async (accountIds: string[]) => {
-    try {
-      const { data: allMetrics } = await supabase
-        .from('mercado_livre_metrics')
-        .select('*')
-        .eq('student_id', studentId)
-        .in('ml_account_id', accountIds);
-
-      if (allMetrics && allMetrics.length > 0) {
-        const consolidated = allMetrics.reduce((acc, m) => ({
-          total_sales: acc.total_sales + (m.total_sales || 0),
-          total_revenue: acc.total_revenue + (m.total_revenue || 0),
-          average_ticket: 0,
-        }), { total_sales: 0, total_revenue: 0, average_ticket: 0 });
-
-        consolidated.average_ticket = consolidated.total_sales > 0 
-          ? consolidated.total_revenue / consolidated.total_sales 
-          : 0;
-
-        setConsolidatedMetrics(consolidated as any);
+      // Calcular shipping stats dos produtos da conta
+      if (accountData.products && accountData.products.length > 0) {
+        const stats = calculateShippingStats(accountData.products);
+        setShippingStats(stats);
+      } else {
+        setShippingStats(null);
       }
-    } catch (error: any) {
-      console.error('Error loading consolidated metrics:', error);
+      
+      if (accountData.campaigns) {
+        const calculatedAdsMetrics = convertToAdsMetrics(calculateAdsMetrics(accountData.campaigns));
+        setAdsMetrics(calculatedAdsMetrics);
+      }
     }
-  };
+  }, [accountData]);
 
-  const calculateAdsMetrics = (campaignsData: MLCampaign[]): AdsMetrics => {
-    if (!campaignsData || campaignsData.length === 0) {
-      return {
-        totalSpend: 0,
-        totalRevenue: 0,
-        totalAcos: 0,
-        totalRoas: 0,
-        totalProductsInAds: 0,
-        activeCampaigns: 0
-      };
-    }
+  // Funções antigas removidas - agora usando hooks do React Query
 
-    const activeCampaigns = campaignsData.filter(c => 
-      c.status === 'active' || c.status === 'enabled'
-    );
-
-    const totalSpend = activeCampaigns.reduce((sum, c) => sum + (c.total_spend || 0), 0);
-    const totalRevenue = activeCampaigns.reduce((sum, c) => sum + (c.ad_revenue || 0), 0);
-    const totalProductsInAds = activeCampaigns.reduce((sum, c) => sum + (c.products_count || 0), 0);
-
+  // Função auxiliar para converter ProductAdsMetrics para AdsMetrics (formato local)
+  const convertToAdsMetrics = (productAdsMetrics: ReturnType<typeof calculateAdsMetrics>): AdsMetrics => {
     return {
-      totalSpend,
-      totalRevenue,
-      totalAcos: totalRevenue > 0 ? (totalSpend / totalRevenue) * 100 : 0,
-      totalRoas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
-      totalProductsInAds,
-      activeCampaigns: activeCampaigns.length
+      totalSpend: productAdsMetrics.totalSpend,
+      totalRevenue: productAdsMetrics.totalRevenue,
+      totalAcos: productAdsMetrics.acos,
+      totalRoas: productAdsMetrics.roas,
+      totalProductsInAds: productAdsMetrics.totalProductsInAds || 0,
+      activeCampaigns: productAdsMetrics.activeCampaigns || 0
     };
   };
 
-  const loadAccountData = async (accountId: string) => {
-    try {
-      const [metricsResult, productsResult, stockResult, campaignsResult] = await Promise.all([
-        supabase
-          .from('mercado_livre_metrics')
-          .select('*')
-          .eq('ml_account_id', accountId)
-          .eq('student_id', studentId)
-          .order('last_updated', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        
-        supabase
-          .from('mercado_livre_products')
-          .select('*')
-          .eq('ml_account_id', accountId)
-          .eq('student_id', studentId),
-        
-        supabase
-          .from('mercado_livre_full_stock')
-          .select('*')
-          .eq('ml_account_id', accountId)
-          .eq('student_id', studentId),
-        
-        supabase
-          .from('mercado_livre_campaigns')
-          .select('*')
-          .eq('ml_account_id', accountId)
-          .eq('student_id', studentId)
-          .order('synced_at', { ascending: false })
-      ]);
-
-      setMetrics(metricsResult.data);
-      setProducts(productsResult.data || []);
-      setFullStock(stockResult.data || []);
-      setCampaigns(campaignsResult.data || []);
-      
-      if (campaignsResult.data) {
-        const calculatedAdsMetrics = calculateAdsMetrics(campaignsResult.data);
-        setAdsMetrics(calculatedAdsMetrics);
-      }
-    } catch (error: any) {
-      console.error('Error loading account data:', error);
-    }
-  };
-
-  const loadAvailableApps = async () => {
-    try {
-      const { data } = await supabase
-        .from('apps_extensions')
-        .select('*')
-        .order('name');
-      setAvailableApps(data || []);
-    } catch (error: any) {
-      console.error('Error loading available apps:', error);
-    }
-  };
+  // Funções loadAccountData e loadAvailableApps removidas - agora usando hooks do React Query
 
   const addAppToStudent = async () => {
     if (!selectedAppId || !studentId) return;
@@ -427,7 +220,8 @@ export default function StudentDetails() {
     }
     
     toast({ title: "App adicionado com sucesso!" });
-    loadStudentData();
+    // Invalidar queries para recarregar dados
+    queryClient.invalidateQueries({ queryKey: ['student-apps', studentId] });
     setIsAddingApp(false);
     setSelectedAppId("");
   };
@@ -448,7 +242,10 @@ export default function StudentDetails() {
     }
     
     toast({ title: "App removido com sucesso!" });
-    loadStudentData();
+    // Invalidar queries para recarregar dados
+    if (studentId) {
+      queryClient.invalidateQueries({ queryKey: ['student-apps', studentId] });
+    }
   };
 
   const updateMilestoneStatus = async (milestoneId: string, newStatus: string) => {
@@ -473,22 +270,13 @@ export default function StudentDetails() {
     }
     
     toast({ title: "Etapa atualizada com sucesso!" });
-    loadStudentData();
-  };
-
-  const loadJourneyMilestones = async (journeyId: string) => {
-    try {
-      const { data: milestonesData } = await supabase
-        .from('milestones')
-        .select('*')
-        .eq('journey_id', journeyId)
-        .order('order_index');
-
-      setMilestones(milestonesData || []);
-    } catch (error: any) {
-      console.error('Error loading milestones:', error);
+    // Recarregar milestones manualmente após atualização
+    if (selectedJourneyId && selectedJourneyTemplateId) {
+      loadMilestonesByTemplate(selectedJourneyId, selectedJourneyTemplateId);
     }
   };
+
+  // Função loadJourneyMilestones removida - usando loadMilestonesByTemplate diretamente
 
   const getColorNameInPortuguese = (colorCode: string): string => {
     const colorMap: { [key: string]: string } = {
@@ -521,9 +309,12 @@ export default function StudentDetails() {
         description: "Os dados da conta foram atualizados com sucesso.",
       });
 
-      // Recarregar dados da conta
-      await loadAccountData(selectedAccountId);
-      await loadStudentData();
+      // Invalidar queries relacionadas para recarregar dados
+      if (studentId) {
+        queryClient.invalidateQueries({ queryKey: ['ml-account-data', selectedAccountId, studentId] });
+        queryClient.invalidateQueries({ queryKey: ['consolidated-account-metrics', accountIds, studentId] });
+        queryClient.invalidateQueries({ queryKey: ['student-ml-accounts', studentId] });
+      }
     } catch (error: any) {
       console.error('Error syncing ML account:', error);
       toast({
@@ -553,44 +344,17 @@ export default function StudentDetails() {
       if (setPrimaryError) throw setPrimaryError;
 
       toast({ title: "Conta principal atualizada" });
-      loadStudentData();
+      // Invalidar queries para recarregar dados
+      if (studentId) {
+        queryClient.invalidateQueries({ queryKey: ['student-ml-accounts', studentId] });
+      }
     } catch (error) {
       console.error('Error setting primary account:', error);
       toast({ title: "Erro ao atualizar conta principal", variant: "destructive" });
     }
   };
 
-  const loadBonusDeliveries = async () => {
-    if (!studentId) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('student_bonus_delivery')
-        .select(`
-          id,
-          bonus_id,
-          delivered,
-          delivered_at,
-          delivered_by,
-          notes,
-          bonus:bonus_id (
-            name,
-            description,
-            cost
-          ),
-          deliveredByProfile:profiles!delivered_by (
-            full_name
-          )
-        `)
-        .eq('student_id', studentId)
-        .order('delivered', { ascending: true });
-
-      if (error) throw error;
-      setBonusDeliveries(data as BonusDelivery[]);
-    } catch (error: any) {
-      console.error('Error loading bonus deliveries:', error);
-    }
-  };
+  // Função loadBonusDeliveries removida - usando hook useStudentBonusDeliveries do React Query
 
   const loadMilestonesByTemplate = async (journeyId: string, templateId: string) => {
     try {
@@ -658,25 +422,25 @@ export default function StudentDetails() {
     );
   }
 
-  const lowQualityProducts = products.filter(p => p.has_low_quality_photos);
+  const lowQualityProducts = products.filter(p => p.health?.health_level === 'critical' || (p.health?.health_score || 0) < 40);
   const noDescriptionProducts = products.filter(p => !p.has_description);
   const noTaxDataProducts = products.filter(p => !p.has_tax_data);
 
   const totalStockUnits = fullStock.reduce((sum, item) => 
-    sum + item.available_units + item.reserved_units + item.inbound_units, 0
+    sum + (item.available_quantity || 0) + (item.reserved_quantity || 0), 0
   );
 
   // Cálculos financeiros do FULL
   const calculateFullStockFinancials = () => {
     const totalUnits = fullStock.reduce((sum, item) => 
-      sum + (item.available_units || 0), 0
+      sum + (item.available_quantity || 0), 0
     );
     
     const totalRevenue = fullStock.reduce((sum, item) => {
       // Encontrar o produto correspondente pelo ml_item_id
       const product = products.find(p => p.ml_item_id === item.ml_item_id);
       const price = product?.price || 0;
-      const units = item.available_units || 0;
+      const units = item.available_quantity || 0;
       return sum + (units * price);
     }, 0);
     
@@ -707,8 +471,8 @@ export default function StudentDetails() {
                 <p className="text-muted-foreground">{student.email}</p>
               </div>
             </div>
-            <Badge variant={student.mentoria_status === 'Ativo' ? 'default' : 'secondary'}>
-              {student.mentoria_status}
+            <Badge variant={(student as any).mentoria_status === 'Ativo' ? 'default' : 'secondary'}>
+              {(student as any).mentoria_status || 'Não definido'}
             </Badge>
           </div>
 
@@ -745,22 +509,22 @@ export default function StudentDetails() {
                       <Mail className="w-4 h-4 text-muted-foreground" />
                       <span>{student.email}</span>
                     </div>
-                    {student.phone && (
+                    {(student as any).phone && (
                       <div className="flex items-center gap-2 text-sm">
                         <Phone className="w-4 h-4 text-muted-foreground" />
-                        <span>{student.phone}</span>
+                        <span>{(student as any).phone}</span>
                       </div>
                     )}
-                    {student.estado && (
+                    {(student as any).estado && (
                       <div className="flex items-center gap-2 text-sm">
                         <MapPin className="w-4 h-4 text-muted-foreground" />
-                        <span>{student.estado}</span>
+                        <span>{(student as any).estado}</span>
                       </div>
                     )}
-                    {student.turma && (
+                    {(student as any).turma && (
                       <div className="flex items-center gap-2 text-sm">
                         <Building2 className="w-4 h-4 text-muted-foreground" />
-                        <span>Turma: {student.turma}</span>
+                        <span>Turma: {(student as any).turma}</span>
                       </div>
                     )}
                   </CardContent>
@@ -777,32 +541,32 @@ export default function StudentDetails() {
                   <CardContent className="space-y-3">
                     <div>
                       <p className="text-sm text-muted-foreground">Estrutura</p>
-                      <p className="font-medium">{student.estrutura_vendedor}</p>
+                      <p className="font-medium">{(student as any).estrutura_vendedor || 'Não informado'}</p>
                     </div>
-                    {student.tipo_pj && (
+                    {(student as any).tipo_pj && (
                       <div>
                         <p className="text-sm text-muted-foreground">Tipo PJ</p>
-                        <p className="font-medium">{student.tipo_pj}</p>
+                        <p className="font-medium">{(student as any).tipo_pj}</p>
                       </div>
                     )}
-                    {student.cnpj && (
+                    {(student as any).cnpj && (
                       <div>
                         <p className="text-sm text-muted-foreground">CNPJ</p>
-                        <p className="font-medium">{student.cnpj}</p>
+                        <p className="font-medium">{(student as any).cnpj}</p>
                       </div>
                     )}
                     <div>
                       <p className="text-sm text-muted-foreground">Contador</p>
-                      <p className="font-medium">{student.possui_contador ? 'Sim' : 'Não'}</p>
+                      <p className="font-medium">{(student as any).possui_contador ? 'Sim' : 'Não'}</p>
                     </div>
-                    {student.caixa !== null && (
+                    {(student as any).caixa !== null && (student as any).caixa !== undefined && (
                       <div>
                         <p className="text-sm text-muted-foreground">Caixa</p>
                         <p className="font-medium">
                           {new Intl.NumberFormat('pt-BR', { 
                             style: 'currency', 
                             currency: 'BRL' 
-                          }).format(student.caixa)}
+                          }).format((student as any).caixa)}
                         </p>
                       </div>
                     )}
@@ -811,7 +575,7 @@ export default function StudentDetails() {
               </div>
 
               {/* Resumo de Performance ML */}
-              {consolidatedMetrics && (
+              {consolidatedMetricsData && (
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Performance Mercado Livre</h3>
                   <div className="grid md:grid-cols-3 gap-4">
@@ -820,7 +584,7 @@ export default function StudentDetails() {
                         <CardTitle className="text-sm font-medium">Vendas Totais</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{consolidatedMetrics.total_sales}</div>
+                        <div className="text-2xl font-bold">{consolidatedMetricsData.total_sales}</div>
                         <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                       </CardContent>
                     </Card>
@@ -836,7 +600,7 @@ export default function StudentDetails() {
                             currency: 'BRL',
                             minimumFractionDigits: 0,
                             maximumFractionDigits: 0
-                          }).format(consolidatedMetrics.total_revenue)}
+                          }).format(consolidatedMetricsData.total_revenue)}
                         </div>
                         <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                       </CardContent>
@@ -851,7 +615,7 @@ export default function StudentDetails() {
                           {new Intl.NumberFormat('pt-BR', { 
                             style: 'currency', 
                             currency: 'BRL' 
-                          }).format(consolidatedMetrics.average_ticket)}
+                          }).format(consolidatedMetricsData.average_ticket)}
                         </div>
                         <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                       </CardContent>
@@ -862,10 +626,15 @@ export default function StudentDetails() {
 
               {/* Bônus do Plano */}
               <PlanBonusCard
-                studentId={studentId}
-                bonusDeliveries={bonusDeliveries}
+                studentId={studentId || ''}
+                bonusDeliveries={bonusDeliveriesData as any}
                 isManager={true}
-                onUpdate={loadBonusDeliveries}
+                onUpdate={() => {
+                  // Invalidar queries para recarregar dados de bônus
+                  if (studentId) {
+                    queryClient.invalidateQueries({ queryKey: ['student-bonus-deliveries', studentId] });
+                  }
+                }}
               />
             </TabsContent>
 
@@ -1066,14 +835,14 @@ export default function StudentDetails() {
                             </div>
                           </CardHeader>
                           <CardContent className="pt-0">
-                            {studentApps.length === 0 ? (
+                            {studentAppsData.length === 0 ? (
                               <div className="text-center py-6">
                                 <Package className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                                 <p className="text-xs text-muted-foreground">Nenhum app associado</p>
                               </div>
                             ) : (
                               <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                {studentApps.map(app => (
+                                {studentAppsData.map(app => (
                                   <div
                                     key={app.id}
                                     className="p-2 border rounded-lg flex items-center justify-between hover:bg-muted/50 transition-colors"
@@ -1307,6 +1076,205 @@ export default function StudentDetails() {
                             </Card>
                           </div>
 
+                          {/* Tipos de Envio */}
+                          {shippingStats && (
+                            <Card className="border border-border hover:shadow-lg transition-shadow duration-300">
+                              <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                  <Package className="w-5 h-5 text-primary" />
+                                  Tipos de Envio
+                                </CardTitle>
+                                <p className="text-sm text-muted-foreground">
+                                  Distribuição de anúncios por modalidade de envio - Conta @{mlAccounts.find(a => a.id === selectedAccountId)?.ml_nickname || 'N/A'}
+                                </p>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                                  {/* Correios */}
+                                  {shippingStats.correios.count > 0 ? (
+                                    <div className="p-4 rounded-lg border border-cyan-500/50 bg-cyan-500/10">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Mail className="w-4 h-4 text-cyan-400" />
+                                          <span className="text-sm font-semibold">Correios</span>
+                                        </div>
+                                        <Badge className="bg-cyan-500 text-xs">
+                                          {shippingStats.correios.count}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Progress value={shippingStats.correios.percentage} className="h-1 flex-1" />
+                                        <span className="text-xs font-medium">{shippingStats.correios.percentage.toFixed(0)}%</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Mail className="w-4 h-4 text-muted-foreground" />
+                                          <span className="text-sm font-semibold text-muted-foreground">Correios</span>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* FLEX */}
+                                  {shippingStats.flex.count > 0 ? (
+                                    <div className="p-4 rounded-lg border border-blue-500/50 bg-blue-500/10">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Package className="w-4 h-4 text-blue-400" />
+                                          <span className="text-sm font-semibold">FLEX</span>
+                                        </div>
+                                        <Badge className="bg-blue-500 text-xs">
+                                          {shippingStats.flex.count}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Progress value={shippingStats.flex.percentage} className="h-1 flex-1" />
+                                        <span className="text-xs font-medium">{shippingStats.flex.percentage.toFixed(0)}%</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Package className="w-4 h-4 text-muted-foreground" />
+                                          <span className="text-sm font-semibold text-muted-foreground">FLEX</span>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Agências */}
+                                  {shippingStats.agencies.count > 0 ? (
+                                    <div className="p-4 rounded-lg border border-purple-500/50 bg-purple-500/10">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <MapPin className="w-4 h-4 text-purple-400" />
+                                          <span className="text-sm font-semibold">Agências</span>
+                                        </div>
+                                        <Badge className="bg-purple-500 text-xs">
+                                          {shippingStats.agencies.count}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Progress value={shippingStats.agencies.percentage} className="h-1 flex-1" />
+                                        <span className="text-xs font-medium">{shippingStats.agencies.percentage.toFixed(0)}%</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <MapPin className="w-4 h-4 text-muted-foreground" />
+                                          <span className="text-sm font-semibold text-muted-foreground">Agências</span>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Coleta */}
+                                  {shippingStats.collection.count > 0 ? (
+                                    <div className="p-4 rounded-lg border border-gray-500/50 bg-gray-500/10">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Truck className="w-4 h-4 text-gray-400" />
+                                          <span className="text-sm font-semibold">Coleta</span>
+                                        </div>
+                                        <Badge className="bg-gray-500 text-xs">
+                                          {shippingStats.collection.count}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Progress value={shippingStats.collection.percentage} className="h-1 flex-1" />
+                                        <span className="text-xs font-medium">{shippingStats.collection.percentage.toFixed(0)}%</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Truck className="w-4 h-4 text-muted-foreground" />
+                                          <span className="text-sm font-semibold text-muted-foreground">Coleta</span>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* FULL */}
+                                  {shippingStats.full.count > 0 ? (
+                                    <div className="p-4 rounded-lg border border-orange-500/50 bg-orange-500/10">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Warehouse className="w-4 h-4 text-orange-400" />
+                                          <span className="text-sm font-semibold">FULL</span>
+                                        </div>
+                                        <Badge className="bg-orange-500 text-xs">
+                                          {shippingStats.full.count}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Progress value={shippingStats.full.percentage} className="h-1 flex-1" />
+                                        <span className="text-xs font-medium">{shippingStats.full.percentage.toFixed(0)}%</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Warehouse className="w-4 h-4 text-muted-foreground" />
+                                          <span className="text-sm font-semibold text-muted-foreground">FULL</span>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Envio Próprio */}
+                                  {shippingStats.envio_proprio.count > 0 ? (
+                                    <div className="p-4 rounded-lg border border-indigo-500/50 bg-indigo-500/10">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Send className="w-4 h-4 text-indigo-400" />
+                                          <span className="text-sm font-semibold">Envio Próprio</span>
+                                        </div>
+                                        <Badge className="bg-indigo-500 text-xs">
+                                          {shippingStats.envio_proprio.count}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Progress value={shippingStats.envio_proprio.percentage} className="h-1 flex-1" />
+                                        <span className="text-xs font-medium">{shippingStats.envio_proprio.percentage.toFixed(0)}%</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Send className="w-4 h-4 text-muted-foreground" />
+                                          <span className="text-sm font-semibold text-muted-foreground">Envio Próprio</span>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Resumo */}
+                                <div className="mt-4 pt-4 border-t">
+                                  <p className="text-sm text-muted-foreground">
+                                    Total de anúncios ativos: <span className="font-semibold text-foreground">{shippingStats.total}</span>
+                                  </p>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
                           {/* Problemas de Anúncios */}
                           <Card className="border border-border hover:shadow-lg transition-shadow duration-300">
                             <CardHeader>
@@ -1362,7 +1330,7 @@ export default function StudentDetails() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>Jornada do Aluno</CardTitle>
-                    {journeyTemplates.length > 0 && selectedJourneyId && (
+                    {journeyTemplatesData.length > 0 && selectedJourneyId && (
                       <Select value={selectedJourneyTemplateId} onValueChange={(value) => {
                         setSelectedJourneyTemplateId(value);
                         loadMilestonesByTemplate(selectedJourneyId, value);
@@ -1371,7 +1339,7 @@ export default function StudentDetails() {
                           <SelectValue placeholder="Selecione a jornada" />
                         </SelectTrigger>
                         <SelectContent>
-                          {journeyTemplates.map(tpl => (
+                          {journeyTemplatesData.map(tpl => (
                             <SelectItem key={tpl.id} value={tpl.id}>
                               {tpl.name}
                             </SelectItem>
@@ -1470,8 +1438,8 @@ export default function StudentDetails() {
                 <SelectValue placeholder="Selecione um app" />
               </SelectTrigger>
               <SelectContent>
-                {availableApps
-                  .filter(app => !studentApps.some(sa => sa.id === app.id))
+                {availableAppsData
+                  .filter(app => !studentAppsData.some(sa => sa.id === app.id))
                   .map(app => (
                     <SelectItem key={app.id} value={app.id}>
                       {app.name}

@@ -11,28 +11,15 @@ import { Loader2, Mail, Calendar, TrendingUp, CheckCircle2, Circle, AlertCircle 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 
-interface Profile {
-  full_name: string;
-  email: string;
-  avatar_url: string | null;
-  created_at: string;
-}
+// Interfaces removidas - usando tipos centralizados de @/types/students e @/types/journeys
+import type { Profile } from "@/types/students";
+import type { Journey, Milestone } from "@/types/journeys";
 
-interface Journey {
-  overall_progress: number;
-  current_phase: string;
+// Estender Journey para incluir campos específicos desta página
+type JourneyExtended = Journey & {
   enrollment_date: string;
   last_activity: string;
-}
-
-interface Milestone {
-  id: string;
-  title: string;
-  description: string;
-  status: string;
-  progress: number;
-  phase: string;
-}
+};
 
 const StudentProfile = () => {
   const { id } = useParams<{ id: string }>();

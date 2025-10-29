@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
-import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign, RefreshCw, MapPin, Truck, Warehouse, ShoppingCart } from "lucide-react";
+import { useConsolidatedMetrics } from "@/hooks/queries/useConsolidatedMetrics";
+import { formatCurrency, formatNumber, formatPercentage } from "@/lib/formatters";
+import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign, RefreshCw, MapPin, Truck, Warehouse, ShoppingCart, Mail, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -17,29 +19,8 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-interface Notice {
-  id: string;
-  title: string;
-  content: string;
-  is_important: boolean;
-  is_active: boolean;
-  expires_at: string | null;
-  created_at: string;
-}
-interface ImportantLink {
-  id: string;
-  title: string;
-  description: string | null;
-  url: string;
-  category: string | null;
-  order_index: number;
-}
-interface CallSchedule {
-  id: string;
-  date: string;
-  theme: string;
-  description: string | null;
-}
+// Interfaces removidas - usando tipos centralizados de @/types/common
+import type { Notice, ImportantLink, CallSchedule } from "@/types/common";
 const GestorDashboard = () => {
   const {
     user,
@@ -87,8 +68,86 @@ const GestorDashboard = () => {
     description: ""
   });
 
-  // Consolidated metrics state
-  const [consolidatedMetrics, setConsolidatedMetrics] = useState({
+  // Hook para buscar métricas consolidadas (substitui useState)
+
+  // Admin actions state
+  const [syncingAccounts, setSyncingAccounts] = useState(false);
+  const [updatingMetrics, setUpdatingMetrics] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{
+    total: number;
+    current: number;
+    status: string;
+  } | null>(null);
+  const [metricsReloadPending, setMetricsReloadPending] = useState(false);
+  const metricsDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Hook para buscar métricas consolidadas (deve vir antes de debouncedRefetchMetrics)
+  const { data: consolidatedMetricsData = null, isLoading: loadingMetrics, refetch: refetchMetrics } = useConsolidatedMetrics(30);
+
+  // Debounced reload function
+  const debouncedRefetchMetrics = useCallback(() => {
+    if (syncingAccounts) {
+      console.log('⏸️ Skipping metrics reload: sync in progress');
+      return;
+    }
+    if (metricsDebounceRef.current) {
+      clearTimeout(metricsDebounceRef.current);
+    }
+    setMetricsReloadPending(true);
+    metricsDebounceRef.current = setTimeout(() => {
+      console.log('🔄 Debounced reload: executing now');
+      refetchMetrics();
+      setMetricsReloadPending(false);
+    }, 3000);
+  }, [syncingAccounts, refetchMetrics]);
+  useEffect(() => {
+    if (!authLoading && (!user || userRole !== 'manager' && userRole !== 'administrator')) {
+      navigate('/auth');
+      return;
+    }
+    if (user && (userRole === 'manager' || userRole === 'administrator')) {
+      loadData();
+
+      // Set up realtime subscriptions with debounce
+      const ordersChannel = supabase.channel('orders-changes').on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mercado_livre_orders'
+      }, () => {
+        console.log('🔄 Realtime: orders changed, scheduling reload...');
+        debouncedRefetchMetrics();
+      }).subscribe();
+      const productsChannel = supabase.channel('products-changes').on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mercado_livre_products'
+      }, () => {
+        console.log('🔄 Realtime: products changed, scheduling reload...');
+        debouncedRefetchMetrics();
+      }).subscribe();
+      const campaignsChannel = supabase.channel('campaigns-changes').on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'mercado_livre_campaigns'
+      }, () => {
+        console.log('🔄 Realtime: campaigns changed, scheduling reload...');
+        debouncedRefetchMetrics();
+      }).subscribe();
+
+      // Cleanup on unmount
+      return () => {
+        console.log('🧹 Cleaning up realtime subscriptions...');
+        supabase.removeChannel(ordersChannel);
+        supabase.removeChannel(productsChannel);
+        supabase.removeChannel(campaignsChannel);
+        if (metricsDebounceRef.current) {
+          clearTimeout(metricsDebounceRef.current);
+        }
+      };
+    }
+  }, [user, userRole, authLoading, navigate, debouncedRefetchMetrics]);
+  
+  const consolidatedMetrics = consolidatedMetricsData || {
     totalRevenue: 0,
     totalSales: 0,
     averageTicket: 0,
@@ -107,99 +166,23 @@ const GestorDashboard = () => {
       avgRoas: 0,
       avgAcos: 0
     }
-  });
+  };
 
-  // Admin actions state
-  const [syncingAccounts, setSyncingAccounts] = useState(false);
-  const [updatingMetrics, setUpdatingMetrics] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<{
-    total: number;
-    current: number;
-    status: string;
-  } | null>(null);
-  const [metricsReloadPending, setMetricsReloadPending] = useState(false);
-  const metricsDebounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Debounced reload function
-  const debouncedLoadMetrics = useCallback(() => {
-    if (syncingAccounts) {
-      console.log('⏸️ Skipping metrics reload: sync in progress');
-      return;
-    }
-    if (metricsDebounceRef.current) {
-      clearTimeout(metricsDebounceRef.current);
-    }
-    setMetricsReloadPending(true);
-    metricsDebounceRef.current = setTimeout(() => {
-      console.log('🔄 Debounced reload: executing now');
-      loadConsolidatedMetrics();
-      setMetricsReloadPending(false);
-    }, 3000);
-  }, [syncingAccounts]);
-  useEffect(() => {
-    if (!authLoading && (!user || userRole !== 'manager' && userRole !== 'administrator')) {
-      navigate('/auth');
-      return;
-    }
-    if (user && (userRole === 'manager' || userRole === 'administrator')) {
-      loadData();
-
-      // Set up realtime subscriptions with debounce
-      const ordersChannel = supabase.channel('orders-changes').on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'mercado_livre_orders'
-      }, () => {
-        console.log('🔄 Realtime: orders changed, scheduling reload...');
-        debouncedLoadMetrics();
-      }).subscribe();
-      const productsChannel = supabase.channel('products-changes').on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'mercado_livre_products'
-      }, () => {
-        console.log('🔄 Realtime: products changed, scheduling reload...');
-        debouncedLoadMetrics();
-      }).subscribe();
-      const campaignsChannel = supabase.channel('campaigns-changes').on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'mercado_livre_campaigns'
-      }, () => {
-        console.log('🔄 Realtime: campaigns changed, scheduling reload...');
-        debouncedLoadMetrics();
-      }).subscribe();
-
-      // Cleanup on unmount
-      return () => {
-        console.log('🧹 Cleaning up realtime subscriptions...');
-        supabase.removeChannel(ordersChannel);
-        supabase.removeChannel(productsChannel);
-        supabase.removeChannel(campaignsChannel);
-        if (metricsDebounceRef.current) {
-          clearTimeout(metricsDebounceRef.current);
-        }
-      };
-    }
-  }, [user, userRole, authLoading, navigate, debouncedLoadMetrics]);
   const loadData = async () => {
     try {
-      const [noticesData, linksData, callsData] = await Promise.all([supabase.from('notices').select('*').order('created_at', {
-        ascending: false
-      }), supabase.from('important_links').select('*').order('order_index', {
-        ascending: true
-      }), supabase.from('call_schedules').select('*').order('date', {
-        ascending: true
-      })]);
+      const [noticesData, linksData, callsData] = await Promise.all([
+        supabase.from('notices').select('*').order('created_at', { ascending: false }),
+        supabase.from('important_links').select('*').order('order_index', { ascending: true }),
+        supabase.from('call_schedules').select('*').order('date', { ascending: true })
+      ]);
+      
       if (noticesData.error) throw noticesData.error;
       if (linksData.error) throw linksData.error;
       if (callsData.error) throw callsData.error;
+      
       setNotices(noticesData.data || []);
       setLinks(linksData.data || []);
       setCalls(callsData.data || []);
-
-      // Load consolidated metrics
-      await loadConsolidatedMetrics();
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -209,184 +192,6 @@ const GestorDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
-  const loadConsolidatedMetrics = async () => {
-    try {
-      console.log('🔄 Carregando métricas consolidadas em tempo real...');
-      
-      // Definir período: últimos 30 dias
-      const periodEnd = new Date();
-      const periodStart = new Date();
-      periodStart.setDate(periodStart.getDate() - 30);
-
-      console.log('📅 Período:', {
-        periodStart: periodStart.toISOString(),
-        periodEnd: periodEnd.toISOString()
-      });
-
-      // 1. Buscar TODOS os pedidos pagos com paginação
-      let allOrders: any[] = [];
-      let currentPage = 0;
-      const PAGE_SIZE = 1000;
-      let hasMore = true;
-
-      console.log('🔄 Iniciando paginação de pedidos...');
-
-      while (hasMore && allOrders.length < 10000) { // limite de segurança
-        const rangeStart = currentPage * PAGE_SIZE;
-        const rangeEnd = rangeStart + PAGE_SIZE - 1;
-        
-        const { data: pageOrders, error: ordersError } = await supabase
-          .from('mercado_livre_orders')
-          .select('paid_amount, total_amount, ml_order_id')
-          .eq('status', 'paid')
-          .gte('date_created', periodStart.toISOString())
-          .lt('date_created', periodEnd.toISOString())
-          .order('date_created', { ascending: false })
-          .range(rangeStart, rangeEnd);
-        
-        if (ordersError) {
-          console.error('❌ Error loading orders:', ordersError);
-          throw ordersError;
-        }
-
-        if (!pageOrders || pageOrders.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        allOrders = [...allOrders, ...pageOrders];
-        console.log(`📦 Página ${currentPage + 1}: ${pageOrders.length} pedidos (Total: ${allOrders.length})`);
-
-        if (pageOrders.length < PAGE_SIZE) {
-          hasMore = false;
-        }
-
-        currentPage++;
-      }
-
-      const totalRevenue = allOrders.reduce((sum, order) => sum + (Number(order.paid_amount) || 0), 0);
-      const totalSales = allOrders.length;
-      const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
-
-      console.log('💰 Vendas consolidadas:', { 
-        totalRevenue, 
-        totalSales,
-        averageTicket,
-        totalOrders: allOrders.length 
-      });
-
-      // 2. Produtos Ativos por Tipo de Envio (CORRIGIDO)
-      const { data: productsData, error: productsError } = await supabase
-        .from('mercado_livre_products')
-        .select('shipping_mode, logistic_type')
-        .eq('status', 'active');
-
-      if (productsError) {
-        console.error('❌ Error loading products:', productsError);
-        throw productsError;
-      }
-
-      const total = productsData?.length || 0;
-      
-      // Seguir o mesmo padrão do StudentDashboard
-      const flex = productsData?.filter(p => 
-        p.shipping_mode === 'me2' && p.logistic_type === 'self_service'
-      ).length || 0;
-      
-      const agencias = productsData?.filter(p => 
-        p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
-      ).length || 0;
-      
-      const coleta = productsData?.filter(p => 
-        p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
-      ).length || 0;
-      
-      const full = productsData?.filter(p => 
-        p.shipping_mode === 'me2' && p.logistic_type === 'fulfillment'
-      ).length || 0;
-      
-      const correios = total - (flex + agencias + coleta + full);
-
-      console.log('📦 Produtos por tipo de envio:', {
-        total,
-        correios,
-        flex,
-        agencias,
-        coleta,
-        full
-      });
-
-      // 3. Métricas de Product Ads
-      const { data: campaignsData, error: campaignsError } = await supabase
-        .from('mercado_livre_campaigns')
-        .select('total_spend, ad_revenue, advertised_sales')
-        .gte('synced_at', periodStart.toISOString())
-        .lt('synced_at', periodEnd.toISOString());
-
-      if (campaignsError) {
-        console.error('❌ Error loading campaigns:', campaignsError);
-        throw campaignsError;
-      }
-
-      const totalSpend = campaignsData?.reduce((sum, c) => sum + (Number(c.total_spend) || 0), 0) || 0;
-      const totalAdRevenue = campaignsData?.reduce((sum, c) => sum + (Number(c.ad_revenue) || 0), 0) || 0;
-      const totalAdSales = campaignsData?.reduce((sum, c) => sum + (Number(c.advertised_sales) || 0), 0) || 0;
-
-      const avgRoas = totalSpend > 0 ? totalAdRevenue / totalSpend : 0;
-      const avgAcos = totalAdRevenue > 0 ? (totalSpend / totalAdRevenue) * 100 : 0;
-
-      console.log('📊 Product Ads consolidadas:', {
-        totalSpend,
-        totalAdRevenue,
-        totalAdSales,
-        avgRoas: avgRoas.toFixed(2),
-        avgAcos: avgAcos.toFixed(2) + '%'
-      });
-
-      setConsolidatedMetrics({
-        totalRevenue,
-        totalSales,
-        averageTicket,
-        shippingStats: {
-          correios,
-          flex,
-          agencias,
-          coleta,
-          full,
-          total
-        },
-        adsMetrics: {
-          totalSpend,
-          totalRevenue: totalAdRevenue,
-          advertisedSales: totalAdSales,
-          avgRoas,
-          avgAcos
-        }
-      });
-
-    } catch (error) {
-      console.error('❌ Erro ao carregar métricas consolidadas:', error);
-      toast({
-        title: "Erro ao carregar métricas",
-        description: error instanceof Error ? error.message : "Ocorreu um erro",
-        variant: "destructive"
-      });
-    }
-  };
-
-  // Helper functions
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
-  const formatNumber = (value: number) => {
-    return new Intl.NumberFormat('pt-BR').format(value);
-  };
-  const formatPercentage = (value: number) => {
-    return `${value.toFixed(2)}%`;
   };
 
   // Admin action handlers
@@ -459,7 +264,7 @@ const GestorDashboard = () => {
               console.warn('⚠️ Erro ao recalcular métricas:', metricsError);
             }
             await new Promise(resolve => setTimeout(resolve, 2000));
-            await loadConsolidatedMetrics();
+            refetchMetrics();
             toast({
               title: "✅ Sincronização Concluída!",
               description: `${statusData.successful_syncs} contas sincronizadas, ${statusData.tokens_renewed} tokens renovados`
@@ -909,7 +714,36 @@ const GestorDashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+              {/* Correios Badge */}
+              {consolidatedMetrics.shippingStats.correios > 0 ? (
+                <div className="p-4 rounded-lg border border-cyan-500/50 bg-cyan-500/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-5 h-5 text-cyan-400" />
+                      <span className="font-semibold">Correios</span>
+                    </div>
+                    <Badge className="bg-cyan-500">
+                      {consolidatedMetrics.shippingStats.correios} produto{consolidatedMetrics.shippingStats.correios !== 1 ? 's' : ''}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Progress value={(consolidatedMetrics.shippingStats.correios / consolidatedMetrics.shippingStats.total) * 100} className="h-1 flex-1" />
+                    <span className="text-xs font-medium">{((consolidatedMetrics.shippingStats.correios / consolidatedMetrics.shippingStats.total) * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-5 h-5 text-muted-foreground" />
+                      <span className="font-semibold text-muted-foreground">Correios</span>
+                    </div>
+                    <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                  </div>
+                </div>
+              )}
+
               {/* FLEX Badge */}
               {consolidatedMetrics.shippingStats.flex > 0 ? (
                 <div className="p-4 rounded-lg border border-blue-500/50 bg-blue-500/10">
@@ -1025,6 +859,35 @@ const GestorDashboard = () => {
                   </div>
                 </div>
               )}
+
+              {/* Envio Próprio Badge */}
+              {consolidatedMetrics.shippingStats.envio_proprio > 0 ? (
+                <div className="p-4 rounded-lg border border-indigo-500/50 bg-indigo-500/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Send className="w-5 h-5 text-indigo-400" />
+                      <span className="font-semibold">Envio Próprio</span>
+                    </div>
+                    <Badge className="bg-indigo-500">
+                      {consolidatedMetrics.shippingStats.envio_proprio} produto{consolidatedMetrics.shippingStats.envio_proprio !== 1 ? 's' : ''}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Progress value={(consolidatedMetrics.shippingStats.envio_proprio / consolidatedMetrics.shippingStats.total) * 100} className="h-1 flex-1" />
+                    <span className="text-xs font-medium">{((consolidatedMetrics.shippingStats.envio_proprio / consolidatedMetrics.shippingStats.total) * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-lg border border-border/50 bg-transparent">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Send className="w-5 h-5 text-muted-foreground" />
+                      <span className="font-semibold text-muted-foreground">Envio Próprio</span>
+                    </div>
+                    <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Resumo Total */}
@@ -1033,12 +896,6 @@ const GestorDashboard = () => {
                 <span className="text-muted-foreground">Total de anúncios ativos</span>
                 <span className="font-semibold">{consolidatedMetrics.shippingStats.total}</span>
               </div>
-              {consolidatedMetrics.shippingStats.correios > 0 && (
-                <div className="flex items-center justify-between text-sm mt-2">
-                  <span className="text-muted-foreground">Envio próprio</span>
-                  <span>{consolidatedMetrics.shippingStats.correios} ({((consolidatedMetrics.shippingStats.correios / consolidatedMetrics.shippingStats.total) * 100).toFixed(0)}%)</span>
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>

@@ -10,21 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
-interface Milestone {
-  id: string;
-  title: string;
-  description: string;
-  phase: string;
-  status: 'not_started' | 'in_progress' | 'completed' | 'blocked';
-  progress: number;
-  order_index: number;
-  isExisting?: boolean;
-}
-
-interface Journey {
-  overall_progress: number;
-  current_phase: string;
-}
+// Interfaces removidas - usando tipos centralizados de @/types/journeys
+import type { Milestone, Journey } from "@/types/journeys";
 
 const StudentJourney = () => {
   const { user, userRole, loading: authLoading } = useAuth();

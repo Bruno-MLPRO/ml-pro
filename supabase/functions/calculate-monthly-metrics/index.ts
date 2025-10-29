@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
     // Query 2: Produtos Ativos por Tipo de Envio
     const { data: productsData, error: productsError } = await supabase
       .from('mercado_livre_products')
-      .select('logistic_type, shipping_mode')
+      .select('logistic_type, shipping_mode, shipping_modes, logistic_types')
       .eq('status', 'active');
 
     if (productsError) {
@@ -91,26 +91,49 @@ Deno.serve(async (req) => {
 
     const total = productsData?.length || 0;
     
-    // Seguir padrão do StudentDashboard
-    const flex = productsData?.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'drop_off'
-    ).length || 0;
+    // 📦 Lógica atualizada: Um produto pode contar em MÚLTIPLAS categorias
+    // Exemplo: um produto pode ter ME2 (FLEX) + Custom (Correios) simultaneamente
     
-    const agencias = productsData?.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
-    ).length || 0;
-    
-    const coleta = productsData?.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
-    ).length || 0;
-    
-    const full = productsData?.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'fulfillment'
-    ).length || 0;
-    
-    const correios = total - (flex + agencias + coleta + full);
+    let flex = 0;
+    let agencias = 0;
+    let coleta = 0;
+    let full = 0;
+    let correios = 0;
+    let envio_proprio = 0;
 
-    console.log('📦 Produtos por tipo de envio:', { correios, flex, agencias, coleta, full });
+    for (const product of productsData || []) {
+      // Verificar shipping_modes (novo campo JSONB) ou fallback para shipping_mode (compatibilidade)
+      const modes = product.shipping_modes || (product.shipping_mode ? [product.shipping_mode] : []);
+      const types = product.logistic_types || (product.logistic_type ? [product.logistic_type] : []);
+
+      // Verificar se produto tem ME2 disponível
+      const hasMe2 = modes.includes('me2');
+      
+      // Se tem ME2, verificar todos os tipos logísticos
+      if (hasMe2) {
+        if (types.includes('self_service') || product.logistic_type === 'self_service') flex++;
+        if (types.includes('xd_drop_off') || product.logistic_type === 'xd_drop_off') agencias++;
+        if (types.includes('cross_docking') || product.logistic_type === 'cross_docking') coleta++;
+        if (types.includes('fulfillment') || product.logistic_type === 'fulfillment') full++;
+      }
+
+      // CORREIOS = Mercado Envios (drop_off)
+      // drop_off = vendedor leva produtos ao correio ou ponto de entrega (ME1 ou ME2 com drop_off)
+      const hasMe2 = modes.includes('me2');
+      const hasDropOffMode = modes.includes('drop_off') || product.shipping_mode === 'drop_off';
+      const hasDropOffType = types.includes('drop_off') || (hasMe2 && product.logistic_type === 'drop_off');
+      if (hasDropOffMode || hasDropOffType) {
+        correios++;
+      }
+
+      // ENVIO PRÓPRIO = Not Specified (not_specified)
+      // Not Specified = vendedor NÃO especifica preço e deve entrar em contato com comprador
+      if (modes.includes('not_specified') || product.shipping_mode === 'not_specified') {
+        envio_proprio++;
+      }
+    }
+
+    console.log('📦 Produtos por tipo de envio:', { correios, envio_proprio, flex, agencias, coleta, full });
 
     // Query 3: Métricas de Product Ads
     const { data: campaignsData, error: campaignsError } = await supabase
@@ -152,6 +175,7 @@ Deno.serve(async (req) => {
       ads_roas: roas,
       ads_acos: acos,
       shipping_correios: correios,
+      shipping_envio_proprio: envio_proprio,
       shipping_flex: flex,
       shipping_agencias: agencias,
       shipping_coleta: coleta,

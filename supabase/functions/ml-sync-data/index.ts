@@ -120,6 +120,16 @@ function inferLogisticType(item: any): string | null {
     return null;
   }
 
+  // Se a API já retornou um valor válido, usar ele (exceto se for 'self_service' que precisa verificar tags)
+  if (item.shipping?.logistic_type && item.shipping.logistic_type !== 'self_service') {
+    // Validar se o valor é conhecido
+    // drop_off é válido e representa Correios (vendedor leva ao correio)
+    const validTypes = ['fulfillment', 'xd_drop_off', 'cross_docking', 'drop_off'];
+    if (validTypes.includes(item.shipping.logistic_type)) {
+      return item.shipping.logistic_type;
+    }
+  }
+
   const tags = item.shipping?.tags || [];
 
   // 1. FULL - tem inventory_id
@@ -142,9 +152,11 @@ function inferLogisticType(item: any): string | null {
     return 'cross_docking';
   }
 
-  // 5. Se a API retornou um valor, usar ele (mas só se não for FLEX)
-  if (item.shipping?.logistic_type && item.shipping.logistic_type !== 'self_service') {
-    return item.shipping.logistic_type;
+  // 5. Se a API retornou 'self_service', mas não tem tags de FLEX, pode ser outro tipo
+  // Verificar se há outros indicadores antes de assumir FLEX
+  if (item.shipping?.logistic_type === 'self_service' && tags.length === 0) {
+    // Sem tags e sem outros indicadores, assumir FLEX mesmo assim
+    return 'self_service';
   }
 
   // 6. Default para ME2 sem informações específicas: assumir FLEX
@@ -159,6 +171,29 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
   let offset = 0
   let hasMore = true
   const limit = 50
+
+  // 📦 Buscar shipping_preferences do usuário UMA VEZ para todos os produtos
+  // Isso evita múltiplas chamadas de API por produto
+  let userShippingPreferences: any = null;
+  try {
+    const preferencesResponse = await fetch(
+      `https://api.mercadolibre.com/users/${account.ml_user_id}/shipping_preferences`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+    
+    if (preferencesResponse.ok) {
+      userShippingPreferences = await preferencesResponse.json();
+      console.log('✅ Shipping preferences carregadas para usuário:', account.ml_user_id, {
+        modes: userShippingPreferences?.modes,
+        me2Types: userShippingPreferences?.logistics?.find((log: any) => log.mode === 'me2')?.types?.map((t: any) => (typeof t === 'string' ? t : t.type)),
+        temCustom: userShippingPreferences?.modes?.includes('custom'),
+        temNotSpecified: userShippingPreferences?.modes?.includes('not_specified'),
+        logistics: userShippingPreferences?.logistics
+      });
+    }
+  } catch (e) {
+    console.log(`⚠️ Erro ao buscar shipping_preferences do usuário ${account.ml_user_id}:`, e);
+  }
   
   while (hasMore) {
     const activeResponse = await fetch(
@@ -233,8 +268,84 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
         
         const hasTaxData = fiscalAttributesFound.length > 0 || fiscalSaleTermsFound.length > 0;
         
-        // 🔍 Inferir logistic_type
+        // 🔍 Inferir logistic_type (mantém compatibilidade)
         const inferredLogisticType = inferLogisticType(item);
+
+        // 📦 Determinar TODOS os modos de envio disponíveis para este produto
+        // IMPORTANTE: Só adicionar modos que o PRODUTO ESPECÍFICO realmente tem
+        // NÃO adicionar modos baseados em userShippingPreferences gerais do vendedor
+        const shippingModes: string[] = [];
+        const logisticTypes: string[] = [];
+        
+        // 1. Adicionar o modo principal do item
+        // drop_off pode aparecer como mode (ME1) ou como logistic_type dentro de ME2
+        if (item.shipping?.mode) {
+          shippingModes.push(item.shipping.mode);
+        }
+
+        // 2. CORREIOS = Mercado Envios (drop_off)
+        // drop_off = vendedor leva produtos ao correio ou ponto de entrega
+        // Pode aparecer como: mode = 'drop_off' (ME1) OU mode = 'me2' com logistic_type = 'drop_off' (ME2)
+        // Se o item já tem drop_off como mode, já foi adicionado acima
+        // Se é ME2 e tem drop_off como logistic_type disponível, será adicionado em logisticTypes abaixo
+
+        // 3. Para produtos ME2, determinar todos os tipos logísticos disponíveis
+        if (item.shipping?.mode === 'me2') {
+          // Adicionar o tipo inferido baseado no item específico
+          if (inferredLogisticType) {
+            logisticTypes.push(inferredLogisticType);
+          }
+
+          // Usar shipping_preferences já carregadas para ver todos os tipos ME2 disponíveis
+          // IMPORTANTE: Um produto ME2 pode ter MÚLTIPLOS tipos se o vendedor tem acesso a eles
+          // Exemplo: Se o vendedor tem self_service E xd_drop_off habilitados, o produto pode oferecer AMBOS
+          if (userShippingPreferences?.logistics) {
+            const me2Logistics = userShippingPreferences.logistics.find((log: any) => log.mode === 'me2');
+            if (me2Logistics?.types && Array.isArray(me2Logistics.types)) {
+              // Adicionar TODOS os tipos que o vendedor tem acesso (pode ter self_service E xd_drop_off)
+              for (const typeObj of me2Logistics.types) {
+                // Pode ser objeto com .type ou string direta
+                const type = typeof typeObj === 'string' ? typeObj : typeObj.type;
+                if (type && !logisticTypes.includes(type) && 
+                    ['self_service', 'xd_drop_off', 'cross_docking', 'fulfillment', 'drop_off'].includes(type)) {
+                  logisticTypes.push(type);
+                }
+              }
+            }
+          }
+
+          // Se o produto tem inventory_id, tem FULL disponível (sobrescreve inferência se necessário)
+          if (item.inventory_id && !logisticTypes.includes('fulfillment')) {
+            logisticTypes.push('fulfillment');
+          }
+
+          // Se não detectou nenhum tipo, usar o tipo inferido
+          if (logisticTypes.length === 0 && inferredLogisticType) {
+            logisticTypes.push(inferredLogisticType);
+          }
+          
+          // Se ainda não tem nenhum tipo, assumir self_service (FLEX padrão)
+          if (logisticTypes.length === 0) {
+            logisticTypes.push('self_service');
+          }
+        }
+
+        // 4. ENVIO PRÓPRIO = Not Specified (not_specified)
+        // IMPORTANTE: not_specified só deve ser adicionado se o PRODUTO ESPECÍFICO tiver esse modo,
+        // NÃO baseado nas preferências gerais do vendedor
+        // Not Specified aparece quando o vendedor não especifica preço de envio para AQUELE PRODUTO ESPECÍFICO
+        // Se o item já tem not_specified como mode, foi adicionado no passo 1 acima
+        // NÃO adicionar baseado em userShippingPreferences - isso estava causando contagem incorreta
+
+        // 🔍 Debug: Log para produtos que têm múltiplos modos/tipos
+        if (shippingModes.length > 1 || logisticTypes.length > 1) {
+          console.log(`📦 Produto ${item.id} tem múltiplos tipos:`, {
+            shippingModes,
+            logisticTypes,
+            shippingModeOriginal: item.shipping?.mode,
+            inferredType: inferredLogisticType
+          });
+        }
 
         
         const { error } = await supabase
@@ -251,8 +362,10 @@ async function syncProducts(account: any, accessToken: string, supabase: any) {
             permalink: item.permalink,
             thumbnail: item.thumbnail,
             listing_type: item.listing_type_id,
-            shipping_mode: item.shipping?.mode,
-            logistic_type: inferredLogisticType, // ✅ Usa valor inferido
+            shipping_mode: item.shipping?.mode, // Mantém para compatibilidade
+            logistic_type: inferredLogisticType, // Mantém para compatibilidade
+            shipping_modes: shippingModes.length > 0 ? shippingModes : null, // ✅ Novos campos
+            logistic_types: logisticTypes.length > 0 ? logisticTypes : null, // ✅ Novos campos
             has_description: hasDescription,
             has_tax_data: hasTaxData,
             has_low_quality_photos: hasLowQualityPhotos,

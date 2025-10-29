@@ -52,11 +52,13 @@ Deno.serve(async (req) => {
 
         return {
           id: account.id,
-          ml_nickname: account.ml_nickname,
-          is_primary: account.is_primary,
-          is_active: account.is_active,
-          connected_at: account.connected_at,
+          ml_nickname: account.ml_nickname || 'Conta sem nome',
+          ml_user_id: account.ml_user_id || parseInt(account.ml_user_id?.toString() || '0', 10),
+          is_primary: account.is_primary || false,
+          is_active: account.is_active ?? true,
+          connected_at: account.connected_at || account.created_at,
           last_sync_at: account.last_sync_at,
+          site_id: account.site_id || 'MLB',
           metrics: metrics
         }
       })

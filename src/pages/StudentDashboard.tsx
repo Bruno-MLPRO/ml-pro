@@ -5,96 +5,51 @@ import { Sidebar } from '@/components/Sidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink, ShoppingCart, MapPin, Truck, Warehouse, Target } from 'lucide-react';
+import { Loader2, AlertCircle, Calendar, Link as LinkIcon, TrendingUp, DollarSign, Package, CheckCircle2, ShoppingBag, Plus, Unplug, Star, Crown, Circle, ExternalLink, ShoppingCart, MapPin, Truck, Warehouse, Target, Mail, Send } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { ReputationBadge } from '@/components/ReputationBadge';
+import { useMLAccounts, useSyncMLAccount } from '@/hooks/queries/useMLAccounts';
+import { useStudentMetrics, useStudentMonthlyMetrics } from '@/hooks/queries/useMLMetrics';
+import { useMLOrders } from '@/hooks/queries/useMLOrders';
+import { useProductAdsMetrics } from '@/hooks/queries/useConsolidatedMetrics';
+import { formatCurrency, formatDescription } from '@/lib/formatters';
+import { calculateShippingStats } from '@/lib/calculations';
+import type { MLAccount, MLMetrics } from '@/types/mercadoLivre';
+import type { ShippingStats, ProductAdsMetrics } from '@/types/metrics';
+import type { Notice, ImportantLink, CallSchedule } from '@/types/common';
 
-interface Notice {
-  id: string;
-  title: string;
-  content: string;
-  is_important: boolean;
-  created_at: string;
-}
+// Interfaces removidas - usando tipos centralizados de @/types/common e @/types/mercadoLivre
 
-interface CallSchedule {
-  id: string;
-  date: string;
-  theme: string;
-  description: string | null;
-}
-
-interface ImportantLink {
-  id: string;
-  title: string;
-  url: string;
-  description: string | null;
-  category: string | null;
-}
-
-interface MLAccount {
-  id: string;
-  ml_nickname: string;
-  is_primary: boolean;
-  is_active: boolean;
-  connected_at: string;
-  last_sync_at: string | null;
-  metrics: MLMetrics | null;
-}
-
-interface MLMetrics {
-  total_sales: number;
-  total_revenue: number;
-  average_ticket: number;
-  active_listings: number;
-  reputation_level: string | null;
-  reputation_color: string;
-  reputation_transactions_total: number;
-  positive_ratings_rate: number;
-  has_decola: boolean;
-  has_full: boolean;
-  is_mercado_lider: boolean;
-  mercado_lider_level: string | null;
-}
-
-interface ShippingStats {
-  flex: { count: number; percentage: number };
-  agencies: { count: number; percentage: number };
-  collection: { count: number; percentage: number };
-  full: { count: number; percentage: number };
-  own: { count: number; percentage: number };
-  total: number;
-}
-
-interface ProductAdsMetrics {
-  totalSpend: number;
-  totalRevenue: number;
-  totalSales: number;
-  roas: number;
-  acos: number;
-}
+// Interfaces MLMetrics, ShippingStats e ProductAdsMetrics removidas - usando tipos centralizados
 
 const StudentDashboard = () => {
   const { user, userRole, loading: authLoading } = useAuth();
   const [notices, setNotices] = useState<Notice[]>([]);
   const [callSchedules, setCallSchedules] = useState<CallSchedule[]>([]);
   const [importantLinks, setImportantLinks] = useState<ImportantLink[]>([]);
-  const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
-  const [consolidatedMetrics, setConsolidatedMetrics] = useState<MLMetrics | null>(null);
-  const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
-  const [productAdsMetrics, setProductAdsMetrics] = useState<ProductAdsMetrics | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<7 | 15 | 30>(30);
   const [loading, setLoading] = useState(true);
-  const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [connectingML, setConnectingML] = useState(false);
-  const [orderCount, setOrderCount] = useState<number | null>(null);
-  const [monthlyHistory, setMonthlyHistory] = useState<any[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  // Hooks com React Query
+  const { data: mlAccounts = [], isLoading: loadingAccounts, refetch: refetchAccounts } = useMLAccounts();
+  const { data: studentMetrics, isLoading: loadingMetrics } = useStudentMetrics(user?.id || null, selectedPeriod);
+  const { data: ordersData } = useMLOrders(user?.id || null, selectedPeriod);
+  const { data: monthlyHistory = [] } = useStudentMonthlyMetrics(user?.id || null);
+  const syncMLAccountMutation = useSyncMLAccount();
+  
+  // Calcular métricas de Product Ads
+  const accountIds = mlAccounts.map(acc => acc.id);
+  const { data: productAdsMetrics } = useProductAdsMetrics(accountIds);
+  
+  // Calcular shipping stats dos produtos ativos
+  const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
 
   // Tratar parâmetros de retorno do OAuth do ML
   useEffect(() => {
@@ -146,7 +101,7 @@ const StudentDashboard = () => {
       
       // Recarregar dados imediatamente
       if (user) {
-        loadMLAccounts();
+        refetchAccounts();
         // Auto-refresh após 2 segundos para garantir que os dados foram salvos
         setTimeout(() => {
           window.location.reload();
@@ -163,7 +118,6 @@ const StudentDashboard = () => {
 
     if (user && userRole === 'student') {
       loadDashboardData();
-      loadMLAccounts();
       
       // Configurar realtime completo para todas as tabelas ML
       const channel = supabase
@@ -180,7 +134,7 @@ const StudentDashboard = () => {
           },
           () => {
             console.log('ML metrics updated');
-            loadMLAccounts();
+            refetchAccounts();
           }
         )
         
@@ -195,7 +149,7 @@ const StudentDashboard = () => {
           },
           () => {
             console.log('ML accounts updated');
-            loadMLAccounts();
+            refetchAccounts();
           }
         )
         
@@ -214,7 +168,7 @@ const StudentDashboard = () => {
               title: "Nova venda! 🎉",
               description: "Sua conta Mercado Livre recebeu um novo pedido.",
             });
-            loadMLAccounts();
+            refetchAccounts();
           }
         )
         
@@ -229,7 +183,7 @@ const StudentDashboard = () => {
           },
           () => {
             console.log('Product updated');
-            loadMLAccounts();
+            refetchAccounts();
           }
         )
         
@@ -244,7 +198,7 @@ const StudentDashboard = () => {
           },
           () => {
             console.log('FULL stock updated');
-            loadMLAccounts();
+            refetchAccounts();
           }
         )
         
@@ -256,13 +210,24 @@ const StudentDashboard = () => {
     }
   }, [user, userRole, authLoading, navigate]);
 
-  // Recarregar quando o período mudar
+  // Calcular shipping stats quando produtos mudarem
   useEffect(() => {
-    if (user && userRole === 'student' && mlAccounts.length > 0) {
-      console.log('🔄 Recarregando métricas por mudança de período:', selectedPeriod);
-      loadMLAccounts()
+    if (mlAccounts.length > 0 && user) {
+      // Buscar produtos ativos para calcular shipping stats
+      supabase
+        .from('mercado_livre_products')
+        .select('shipping_mode, logistic_type, status')
+        .eq('student_id', user.id)
+        .eq('status', 'active')
+        .then(({ data: products }) => {
+          if (products) {
+            // calculateShippingStats já retorna o formato correto (com objetos)
+            const stats = calculateShippingStats(products as any);
+            setShippingStats(stats);
+          }
+        });
     }
-  }, [selectedPeriod]);
+  }, [mlAccounts, user]);
 
   const loadDashboardData = async () => {
     try {
@@ -281,317 +246,6 @@ const StudentDashboard = () => {
       setLoading(false);
     }
   };
-
-  const calculateShippingStats = async (studentId: string): Promise<ShippingStats> => {
-    const { data: products } = await supabase
-      .from('mercado_livre_products')
-      .select('shipping_mode, logistic_type')
-      .eq('student_id', studentId)
-      .eq('status', 'active');
-    
-    const total = products?.length || 0;
-    
-    const flex = products?.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'self_service'
-    ).length || 0;
-    
-    const agencies = products?.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
-    ).length || 0;
-    
-    const collection = products?.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
-    ).length || 0;
-    
-    const full = products?.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'fulfillment'
-    ).length || 0;
-    
-    const own = total - (flex + agencies + collection + full);
-    
-    return {
-      flex: { count: flex, percentage: total > 0 ? (flex / total) * 100 : 0 },
-      agencies: { count: agencies, percentage: total > 0 ? (agencies / total) * 100 : 0 },
-      collection: { count: collection, percentage: total > 0 ? (collection / total) * 100 : 0 },
-      full: { count: full, percentage: total > 0 ? (full / total) * 100 : 0 },
-      own: { count: own, percentage: total > 0 ? (own / total) * 100 : 0 },
-      total
-    };
-  };
-
-  const loadProductAdsMetrics = async (accountIds: string[]) => {
-    if (accountIds.length === 0) {
-      setProductAdsMetrics(null);
-      return;
-    }
-    
-    try {
-      // Calcular período
-      const periodStart = new Date();
-      periodStart.setDate(periodStart.getDate() - selectedPeriod);
-      
-      // Buscar campanhas das contas do aluno
-      const { data: campaigns, error } = await supabase
-        .from('mercado_livre_campaigns')
-        .select('total_spend, ad_revenue, advertised_sales')
-        .in('ml_account_id', accountIds)
-        .gte('synced_at', periodStart.toISOString());
-      
-      if (error) {
-        console.error('❌ Error loading product ads metrics:', error);
-        setProductAdsMetrics(null);
-        return;
-      }
-      
-      const totalSpend = campaigns?.reduce((sum, c) => sum + (Number(c.total_spend) || 0), 0) || 0;
-      const totalRevenue = campaigns?.reduce((sum, c) => sum + (Number(c.ad_revenue) || 0), 0) || 0;
-      const totalSales = campaigns?.reduce((sum, c) => sum + (Number(c.advertised_sales) || 0), 0) || 0;
-      
-      const roas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
-      const acos = totalRevenue > 0 ? (totalSpend / totalRevenue) * 100 : 0;
-      
-      console.log('📊 Métricas de Product Ads do aluno:', {
-        accountIds,
-        totalSpend,
-        totalRevenue,
-        totalSales,
-        roas: roas.toFixed(2),
-        acos: acos.toFixed(2) + '%'
-      });
-      
-      setProductAdsMetrics({
-        totalSpend,
-        totalRevenue,
-        totalSales,
-        roas,
-        acos
-      });
-    } catch (error) {
-      console.error('❌ Error loading product ads:', error);
-      setProductAdsMetrics(null);
-    }
-  };
-
-  const loadMLAccounts = async () => {
-    setLoadingMetrics(true);
-    try {
-      if (!user) return
-      
-      // Buscar contas
-      const { data: accountsData, error: accountsError } = await supabase.functions.invoke('ml-get-accounts')
-      
-      if (accountsError) {
-        console.error('Error loading ML accounts:', accountsError)
-        return
-      }
-
-      if (accountsData?.accounts) {
-        setMlAccounts(accountsData.accounts)
-        
-        // ✅ Adicionar: Verificar quantas contas o aluno tem
-        console.log('🔍 Contas ML do aluno:', {
-          total: accountsData.accounts.length,
-          accounts: accountsData.accounts.map((a: any) => ({
-            id: a.id,
-            nickname: a.ml_nickname,
-            is_primary: a.is_primary
-          }))
-        });
-        
-        // Calcular período ANTES da query
-        const periodStart = new Date()
-        periodStart.setDate(periodStart.getDate() - selectedPeriod)
-
-        console.log('📅 Buscando pedidos do período:', {
-          selectedPeriod,
-          periodStart: periodStart.toISOString(),
-          periodEnd: new Date().toISOString()
-        });
-
-        /**
-         * IMPORTANTE: Buscar TODOS os pedidos usando paginação
-         * 
-         * Problema: Supabase JS Client ignora .limit() em alguns casos
-         * Solução: Usar .range() com paginação manual
-         * 
-         * Performance:
-         * - 1.425 pedidos: ~1-2s (2 páginas)
-         * - 10.000 pedidos: ~5s (10 páginas)
-         */
-        
-        // Buscar TODOS os pedidos usando paginação
-        let allOrders: any[] = [];
-        let currentPage = 0;
-        const PAGE_SIZE = 1000;
-        let hasMore = true;
-        let totalCount = 0;
-
-        console.log('🔄 Iniciando paginação de pedidos...');
-
-        while (hasMore) {
-          const rangeStart = currentPage * PAGE_SIZE;
-          const rangeEnd = rangeStart + PAGE_SIZE - 1;
-          
-          const { data: pageOrders, error: ordersError, count } = await supabase
-            .from('mercado_livre_orders')
-            .select('total_amount, paid_amount, date_created, ml_order_id', { count: 'exact' })
-            .eq('student_id', user.id)
-            .eq('status', 'paid')
-            .gte('date_created', periodStart.toISOString())
-            .order('date_created', { ascending: false })
-            .range(rangeStart, rangeEnd);
-          
-          if (ordersError) {
-            console.error('❌ Error loading orders:', ordersError);
-            toast({
-              title: "Erro ao carregar pedidos",
-              description: ordersError.message,
-              variant: "destructive",
-            });
-            break;
-          }
-          
-          // Armazenar count total apenas na primeira iteração
-          if (currentPage === 0) {
-            totalCount = count || 0;
-            setOrderCount(totalCount);
-          }
-          
-          if (pageOrders && pageOrders.length > 0) {
-            allOrders = [...allOrders, ...pageOrders];
-            currentPage++;
-            
-            console.log(`📦 Página ${currentPage} carregada: ${pageOrders.length} pedidos (Total: ${allOrders.length}/${totalCount})`);
-            
-            // Se retornou menos que PAGE_SIZE, não há mais páginas
-            if (pageOrders.length < PAGE_SIZE) {
-              hasMore = false;
-            }
-          } else {
-            hasMore = false;
-          }
-          
-          // Limite de segurança (máximo 10 páginas = 10k pedidos)
-          if (currentPage >= 10) {
-            console.warn('⚠️ Limite de 10 páginas atingido');
-            toast({
-              title: "⚠️ Limite de dados atingido",
-              description: `Há ${totalCount.toLocaleString('pt-BR')} pedidos, mas apenas ${allOrders.length.toLocaleString('pt-BR')} foram carregados. Entre em contato com o suporte.`,
-              variant: "destructive",
-              duration: 10000,
-            });
-            hasMore = false;
-          }
-        }
-
-        const orders = allOrders;
-
-        console.log('✅ Total de pedidos carregados:', {
-          totalOrders: orders.length,
-          expectedCount: totalCount,
-          percentageLoaded: totalCount > 0 ? ((orders.length / totalCount) * 100).toFixed(1) + '%' : '100%'
-        });
-        
-        // Calcular métricas do período (já filtrado)
-        const totalSales = orders.length
-        const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0)
-        const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0
-
-        console.log('📊 Métricas calculadas do aluno:', {
-          selectedPeriod: `${selectedPeriod} dias`,
-          periodStart: periodStart.toISOString(),
-          periodEnd: new Date().toISOString(),
-          totalOrders: orders.length,
-          totalCount: totalCount,
-          totalSales,
-          totalRevenue: totalRevenue.toFixed(2),
-          averageTicket: averageTicket.toFixed(2),
-          limitReached: totalCount > orders.length,
-          percentageLoaded: totalCount > 0 ? ((orders.length / totalCount) * 100).toFixed(1) + '%' : '100%'
-        });
-
-        // Validar se há valores suspeitos
-        const suspiciousOrders = orders.filter(o => 
-          !o.total_amount || 
-          o.total_amount <= 0 || 
-          o.total_amount > 100000
-        );
-
-        if (suspiciousOrders.length > 0) {
-          console.warn('⚠️ Pedidos com valores suspeitos encontrados:', suspiciousOrders);
-          toast({
-            title: "⚠️ Valores suspeitos detectados",
-            description: `${suspiciousOrders.length} pedidos com valores incomuns. Verifique os dados.`,
-            variant: "destructive",
-          });
-        }
-
-        // Verificar duplicidades
-        const orderIds = orders.map(o => o.ml_order_id);
-        const uniqueOrderIds = new Set(orderIds);
-
-        if (orderIds.length !== uniqueOrderIds.size) {
-          const duplicates = orderIds.length - uniqueOrderIds.size;
-          console.error('🚨 DUPLICIDADES DETECTADAS!', {
-            totalOrders: orderIds.length,
-            uniqueOrders: uniqueOrderIds.size,
-            duplicates
-          });
-          
-          toast({
-            title: "⚠️ Dados duplicados detectados",
-            description: `${duplicates} pedidos duplicados encontrados. Entre em contato com o suporte.`,
-            variant: "destructive",
-          });
-        }
-        
-        // Pegar outras métricas da primeira conta (não dependem de período)
-        const firstAccountMetrics = accountsData.accounts[0]?.metrics
-        
-        setConsolidatedMetrics({
-          total_sales: totalSales,
-          total_revenue: totalRevenue,
-          average_ticket: averageTicket,
-          active_listings: firstAccountMetrics?.active_listings || 0,
-          reputation_level: firstAccountMetrics?.reputation_level || null,
-          reputation_color: firstAccountMetrics?.reputation_color || 'gray',
-          reputation_transactions_total: firstAccountMetrics?.reputation_transactions_total || 0,
-          positive_ratings_rate: firstAccountMetrics?.positive_ratings_rate || 0,
-          has_decola: firstAccountMetrics?.has_decola || false,
-          has_full: firstAccountMetrics?.has_full || false,
-          is_mercado_lider: firstAccountMetrics?.is_mercado_lider || false,
-          mercado_lider_level: firstAccountMetrics?.mercado_lider_level || null
-        })
-        
-        // Carregar estatísticas de envio
-        const stats = await calculateShippingStats(user.id);
-        setShippingStats(stats);
-
-        // Carregar métricas de Product Ads
-        const accountIds = accountsData.accounts.map((a: any) => a.id);
-        await loadProductAdsMetrics(accountIds);
-
-        // Buscar histórico mensal
-        const { data: monthlyHistoryData, error: historyError } = await supabase
-          .from('student_monthly_metrics')
-          .select('*')
-          .eq('student_id', user.id)
-          .order('reference_month', { ascending: false })
-          .limit(12);
-
-        if (historyError) {
-          console.error('Error loading monthly history:', historyError);
-        } else {
-          setMonthlyHistory(monthlyHistoryData || []);
-          console.log('📅 Histórico mensal carregado:', monthlyHistoryData?.length || 0, 'meses');
-        }
-      }
-    } catch (error) {
-      console.error('Error loading ML accounts:', error)
-    } finally {
-      setLoadingMetrics(false);
-    }
-  }
 
   const testMLConnection = async () => {
     try {
@@ -671,9 +325,14 @@ const StudentDashboard = () => {
         body: { ml_account_id: accountId }
       })
       
-      loadMLAccounts()
+      refetchAccounts();
     } catch (error) {
       console.error('Error disconnecting ML account:', error)
+      toast({
+        title: "Erro ao desconectar",
+        description: "Não foi possível desconectar a conta.",
+        variant: "destructive",
+      });
     }
   }
 
@@ -700,7 +359,7 @@ const StudentDashboard = () => {
         description: "Esta conta foi definida como sua conta principal.",
       });
 
-      loadMLAccounts();
+      refetchAccounts();
     } catch (error) {
       console.error('Error setting primary account:', error);
       toast({
@@ -716,62 +375,41 @@ const StudentDashboard = () => {
       toast({
         title: "Sincronizando...",
         description: "Buscando dados do Mercado Livre. Isso pode levar alguns segundos.",
-      })
+      });
 
-      const { error } = await supabase.functions.invoke('ml-sync-data', {
-        body: { ml_account_id: accountId }
-      })
-
-      if (error) throw error
+      await syncMLAccountMutation.mutateAsync(accountId);
 
       toast({
         title: "Sincronização concluída",
         description: "Os dados foram atualizados com sucesso.",
-      })
-
-      loadMLAccounts()
+      });
     } catch (error) {
-      console.error('Error syncing account:', error)
+      console.error('Error syncing account:', error);
       toast({
         title: "Erro ao sincronizar",
         description: "Não foi possível sincronizar os dados. Tente novamente.",
         variant: "destructive",
-      })
+      });
     }
-  }
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value)
-  }
-
-
-  const formatDescription = (description: string) => {
-    // Split by lines and check if it's a list format
-    const lines = description.split('\n').map(line => line.trim()).filter(line => line);
-    const hasListItems = lines.some(line => line.startsWith('-'));
-    
-    if (hasListItems) {
-      return (
-        <ul className="text-xs text-foreground-secondary space-y-1 mt-2 list-disc list-inside">
-          {lines.map((line, index) => {
-            if (line.startsWith('-')) {
-              return (
-                <li key={index} className="ml-3">
-                  {line.substring(1).trim()}
-                </li>
-              );
-            }
-            return <p key={index} className="mt-1">{line}</p>;
-          })}
-        </ul>
-      );
-    }
-    
-    return <p className="text-xs text-foreground-secondary">{description}</p>;
   };
+
+  // Métricas consolidadas a partir dos hooks
+  const consolidatedMetrics = mlAccounts.length > 0 && studentMetrics ? {
+    total_sales: studentMetrics.totalSales,
+    total_revenue: studentMetrics.totalRevenue,
+    average_ticket: studentMetrics.averageTicket,
+    active_listings: mlAccounts[0]?.metrics?.active_listings || 0,
+    reputation_level: mlAccounts[0]?.metrics?.reputation_level || null,
+    reputation_color: mlAccounts[0]?.metrics?.reputation_color || 'gray',
+    reputation_transactions_total: mlAccounts[0]?.metrics?.reputation_transactions_total || 0,
+    positive_ratings_rate: mlAccounts[0]?.metrics?.positive_ratings_rate || 0,
+    has_decola: mlAccounts[0]?.metrics?.has_decola || false,
+    has_full: mlAccounts[0]?.metrics?.has_full || false,
+    is_mercado_lider: mlAccounts[0]?.metrics?.is_mercado_lider || false,
+    mercado_lider_level: mlAccounts[0]?.metrics?.mercado_lider_level || null
+  } : null;
+  
+  const orderCount = ordersData?.totalCount || null;
 
   if (authLoading || loading) {
     return (
@@ -788,7 +426,7 @@ const StudentDashboard = () => {
     <div className="flex min-h-screen">
       <Sidebar />
       <main className="flex-1 p-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-[1600px] mx-auto">
           <h1 className="text-4xl font-display font-bold text-foreground mb-2">
             Dashboard
           </h1>
@@ -992,124 +630,184 @@ const StudentDashboard = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* FLEX Badge */}
-                  {shippingStats.flex.count > 0 ? (
-                    <div className="p-4 rounded-lg border border-blue-500/50 bg-blue-500/10">
-                      <div className="flex items-center justify-between mb-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-5">
+                  {/* Correios Badge */}
+                  {shippingStats.correios.count > 0 ? (
+                    <div className="p-5 rounded-lg border border-cyan-500/50 bg-cyan-500/10 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <Package className="w-5 h-5 text-blue-400" />
-                          <span className="font-semibold">FLEX</span>
+                          <Mail className="w-5 h-5 text-cyan-400" />
+                          <span className="font-semibold text-sm">Correios</span>
                         </div>
-                        <Badge className="bg-blue-500">
-                          {shippingStats.flex.count} produto{shippingStats.flex.count !== 1 ? 's' : ''}
+                        <Badge className="bg-cyan-500 text-xs">
+                          {shippingStats.correios.count}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Progress value={shippingStats.flex.percentage} className="h-1 flex-1" />
+                        <Progress value={shippingStats.correios.percentage} className="h-2 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.correios.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-sm text-muted-foreground">Correios</span>
+                        </div>
+                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                      </div>
+                      <div className="h-2"></div>
+                    </div>
+                  )}
+
+                  {/* FLEX Badge */}
+                  {shippingStats.flex.count > 0 ? (
+                    <div className="p-5 rounded-lg border border-blue-500/50 bg-blue-500/10 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-5 h-5 text-blue-400" />
+                          <span className="font-semibold text-sm">FLEX</span>
+                        </div>
+                        <Badge className="bg-blue-500 text-xs">
+                          {shippingStats.flex.count}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.flex.percentage} className="h-2 flex-1" />
                         <span className="text-xs font-medium">{shippingStats.flex.percentage.toFixed(0)}%</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
-                      <div className="flex items-center justify-between mb-2">
+                    <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Package className="w-5 h-5 text-muted-foreground" />
-                          <span className="font-semibold text-muted-foreground">FLEX</span>
+                          <span className="font-semibold text-sm text-muted-foreground">FLEX</span>
                         </div>
-                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
                       </div>
-                      
+                      <div className="h-2"></div>
                     </div>
                   )}
 
                   {/* Agências Badge */}
                   {shippingStats.agencies.count > 0 ? (
-                    <div className="p-4 rounded-lg border border-purple-500/50 bg-purple-500/10">
-                      <div className="flex items-center justify-between mb-2">
+                    <div className="p-5 rounded-lg border border-purple-500/50 bg-purple-500/10 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <MapPin className="w-5 h-5 text-purple-400" />
-                          <span className="font-semibold">Agências</span>
+                          <span className="font-semibold text-sm">Agências</span>
                         </div>
-                        <Badge className="bg-purple-500">
-                          {shippingStats.agencies.count} produto{shippingStats.agencies.count !== 1 ? 's' : ''}
+                        <Badge className="bg-purple-500 text-xs">
+                          {shippingStats.agencies.count}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Progress value={shippingStats.agencies.percentage} className="h-1 flex-1" />
+                        <Progress value={shippingStats.agencies.percentage} className="h-2 flex-1" />
                         <span className="text-xs font-medium">{shippingStats.agencies.percentage.toFixed(0)}%</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
-                      <div className="flex items-center justify-between mb-2">
+                    <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <MapPin className="w-5 h-5 text-muted-foreground" />
-                          <span className="font-semibold text-muted-foreground">Agências</span>
+                          <span className="font-semibold text-sm text-muted-foreground">Agências</span>
                         </div>
-                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
                       </div>
-                      
+                      <div className="h-2"></div>
                     </div>
                   )}
 
                   {/* Coleta Badge */}
                   {shippingStats.collection.count > 0 ? (
-                    <div className="p-4 rounded-lg border border-green-500/50 bg-green-500/10">
-                      <div className="flex items-center justify-between mb-2">
+                    <div className="p-5 rounded-lg border border-green-500/50 bg-green-500/10 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Truck className="w-5 h-5 text-green-400" />
-                          <span className="font-semibold">Coleta</span>
+                          <span className="font-semibold text-sm">Coleta</span>
                         </div>
-                        <Badge className="bg-green-500">
-                          {shippingStats.collection.count} produto{shippingStats.collection.count !== 1 ? 's' : ''}
+                        <Badge className="bg-green-500 text-xs">
+                          {shippingStats.collection.count}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Progress value={shippingStats.collection.percentage} className="h-1 flex-1" />
+                        <Progress value={shippingStats.collection.percentage} className="h-2 flex-1" />
                         <span className="text-xs font-medium">{shippingStats.collection.percentage.toFixed(0)}%</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
-                      <div className="flex items-center justify-between mb-2">
+                    <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Truck className="w-5 h-5 text-muted-foreground" />
-                          <span className="font-semibold text-muted-foreground">Coleta</span>
+                          <span className="font-semibold text-sm text-muted-foreground">Coleta</span>
                         </div>
-                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
                       </div>
-                      
+                      <div className="h-2"></div>
                     </div>
                   )}
 
                   {/* FULL Badge */}
                   {shippingStats.full.count > 0 ? (
-                    <div className="p-4 rounded-lg border border-orange-500/50 bg-orange-500/10">
-                      <div className="flex items-center justify-between mb-2">
+                    <div className="p-5 rounded-lg border border-orange-500/50 bg-orange-500/10 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Warehouse className="w-5 h-5 text-orange-400" />
-                          <span className="font-semibold">FULL</span>
+                          <span className="font-semibold text-sm">FULL</span>
                         </div>
-                        <Badge className="bg-orange-500">
-                          {shippingStats.full.count} produto{shippingStats.full.count !== 1 ? 's' : ''}
+                        <Badge className="bg-orange-500 text-xs">
+                          {shippingStats.full.count}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Progress value={shippingStats.full.percentage} className="h-1 flex-1" />
+                        <Progress value={shippingStats.full.percentage} className="h-2 flex-1" />
                         <span className="text-xs font-medium">{shippingStats.full.percentage.toFixed(0)}%</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg border border-border/50 bg-transparent">
-                      <div className="flex items-center justify-between mb-2">
+                    <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Warehouse className="w-5 h-5 text-muted-foreground" />
-                          <span className="font-semibold text-muted-foreground">FULL</span>
+                          <span className="font-semibold text-sm text-muted-foreground">FULL</span>
                         </div>
-                        <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
                       </div>
-                      
+                      <div className="h-2"></div>
+                    </div>
+                  )}
+
+                  {/* Envio Próprio Badge */}
+                  {shippingStats.envio_proprio.count > 0 ? (
+                    <div className="p-5 rounded-lg border border-indigo-500/50 bg-indigo-500/10 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Send className="w-5 h-5 text-indigo-400" />
+                          <span className="font-semibold text-sm">Envio Próprio</span>
+                        </div>
+                        <Badge className="bg-indigo-500 text-xs">
+                          {shippingStats.envio_proprio.count}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Progress value={shippingStats.envio_proprio.percentage} className="h-2 flex-1" />
+                        <span className="text-xs font-medium">{shippingStats.envio_proprio.percentage.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Send className="w-5 h-5 text-muted-foreground" />
+                          <span className="font-semibold text-sm text-muted-foreground">Envio Próprio</span>
+                        </div>
+                        <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                      </div>
+                      <div className="h-2"></div>
                     </div>
                   )}
                 </div>
@@ -1120,12 +818,6 @@ const StudentDashboard = () => {
                     <span className="text-muted-foreground">Total de anúncios ativos</span>
                     <span className="font-semibold">{shippingStats.total}</span>
                   </div>
-                  {shippingStats.own.count > 0 && (
-                    <div className="flex items-center justify-between text-sm mt-2">
-                      <span className="text-muted-foreground">Envio próprio</span>
-                      <span>{shippingStats.own.count} ({shippingStats.own.percentage.toFixed(0)}%)</span>
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>

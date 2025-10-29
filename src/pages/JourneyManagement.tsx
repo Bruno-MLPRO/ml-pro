@@ -42,23 +42,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-interface MilestoneTemplate {
-  id?: string;
-  title: string;
-  description: string;
-  phase: string;
-  order_index: number;
-}
-
-interface JourneyTemplate {
-  id: string;
-  name: string;
-  description: string;
-  is_default: boolean;
-}
+// Interfaces removidas - usando tipos centralizados de @/types/journeys
+import type { MilestoneTemplate, JourneyTemplate } from "@/types/journeys";
 
 const PHASES = ['Onboarding', 'Estrutura Inicial', 'Profissionalização'];
 
+// SortableMilestoneProps local estendido com campos específicos desta página
 interface SortableMilestoneProps {
   milestone: MilestoneTemplate;
   isLast: boolean;

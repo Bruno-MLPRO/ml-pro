@@ -36,57 +36,25 @@ import { Sidebar } from "@/components/Sidebar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type { Student, Plan } from "@/types/students";
+import type { JourneyTemplate, StudentWithJourney } from "@/types/journeys";
 
-interface Student {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string;
-  turma: string;
-  cpf: string | null;
-  cnpj: string | null;
-  estrutura_vendedor: string;
-  tipo_pj: string | null;
-  possui_contador: boolean;
-  caixa: number | null;
-  hub_logistico: string;
-  sistemas_externos: string;
-  mentoria_status: string;
-  current_phase?: string;
-  overall_progress?: number;
-  has_ml_decola?: boolean;
-  has_ml_flex?: boolean;
-  has_ml_full?: boolean;
-  has_agencies?: boolean;
-  manager_id?: string | null;
-  manager_name?: string;
-}
+// Interfaces removidas - usando tipos centralizados de @/types/students e @/types/journeys
 
-interface Plan {
-  id: string;
-  name: string;
-  price: number;
-}
-
-interface JourneyTemplate {
-  id: string;
-  name: string;
-  is_default: boolean;
-}
-
-interface StudentWithJourney extends Student {
+// Estender StudentWithJourney para incluir campos específicos desta página
+type StudentWithJourneyExtended = StudentWithJourney & {
   journey_progress?: Record<string, number>;
   in_progress_milestones?: Record<string, Array<{ title: string }>>;
   milestones_status?: Record<string, 'not_started' | 'in_progress' | 'completed'>;
   student_apps?: Array<{ id: string; name: string; color: string }>;
-}
+};
 
 const DEFAULT_PASSWORD = "12345678";
 
 export default function StudentsManagement() {
   const { user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [students, setStudents] = useState<StudentWithJourney[]>([]);
+  const [students, setStudents] = useState<StudentWithJourneyExtended[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [journeyTemplates, setJourneyTemplates] = useState<JourneyTemplate[]>([]);
   const [selectedJourneyId, setSelectedJourneyId] = useState<string>("");

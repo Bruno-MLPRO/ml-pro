@@ -4,6 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Sidebar } from "@/components/Sidebar";
+import { useMLAccounts } from "@/hooks/queries/useMLAccounts";
+import { useMLAccountData } from "@/hooks/queries/useMLAccountData";
+import { calculateShippingStats, calculateShippingStatsSimple } from "@/lib/calculations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ReputationBadge } from "@/components/ReputationBadge";
-import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3, AlertCircle, Code, Loader2, PlugZap } from "lucide-react";
+import { Home, Image, Package, TrendingUp, DollarSign, ShoppingCart, Award, CheckCircle2, XCircle, AlertTriangle, ExternalLink, FileText, Receipt, MapPin, Truck, Warehouse, Megaphone, RefreshCw, Zap, Target, Eye, MousePointer, BarChart3, AlertCircle, Code, Loader2, PlugZap, Mail, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HealthDashboard } from "@/components/ml-health/HealthDashboard";
 import { HealthIndividual } from "@/components/ml-health/HealthIndividual";
@@ -22,20 +25,10 @@ import { TopPerformersCard } from "@/components/TopPerformersCard";
 import { CampaignCard } from "@/components/CampaignCard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-interface MLAccount {
-  id: string;
-  ml_nickname: string;
-  is_primary: boolean;
-  is_active: boolean;
-  connected_at: string;
-  last_sync_at: string | null;
-  token_expires_at: string;
-  has_product_ads_enabled: boolean | null;
-  advertiser_id: string | null;
-  has_active_campaigns: boolean | null;
-  site_id: string | null;
-}
+// Interfaces removidas - usando tipos centralizados de @/types/mercadoLivre
+import type { MLAccount, MLSellerRecovery, ItemHealth, Campaign, ProductAd, MLFullStock, MLProduct, HealthGoal } from "@/types/mercadoLivre";
 
+// MLMetrics local ainda necessário pois tem campos específicos diferentes do tipo centralizado
 interface MLMetrics {
   total_sales: number;
   total_revenue: number;
@@ -67,145 +60,52 @@ interface MLMetrics {
   recovery_program_status: string | null;
 }
 
-interface MLSellerRecovery {
-  id: string;
-  ml_account_id: string;
-  program_type: 'NEWBIE_GRNTEE' | 'RECOVERY_GRNTEE';
-  status: string;
-  current_level: string;
-  site_id: string;
-  max_issues_allowed: number;
-  protection_days_limit: number;
-  guarantee_price: number | null;
-  advertising_amount: number | null;
-  guarantee_status: string | null;
-  is_renewal: boolean;
-  warning: string | null;
-  init_date: string | null;
-  end_date: string | null;
-  protection_days: number | null;
-  start_level: string | null;
-  end_level: string | null;
-  orders_qty: number;
-  total_issues: number;
-  claims_qty: number;
-  cancel_qty: number;
-  delay_qty: number;
-  last_checked_at: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface HealthGoal {
-  id: string;
-  name: string;
-  progress: number;
-  progress_max: number;
-  apply: boolean;
-  completed?: string;
-}
-
-interface ItemHealth {
-  health_score: number;
-  health_level: string;
-  goals: HealthGoal[];
-  goals_completed: number;
-  goals_applicable: number;
-  score_trend: string;
-  previous_score?: number;
-}
-
-interface MLProduct {
-  id: string;
-  ml_item_id: string;
-  title: string;
-  thumbnail: string;
-  status: string;
-  has_low_quality_photos: boolean;
-  has_description: boolean;
-  has_tax_data: boolean;
-  min_photo_dimension: number | null;
-  photo_count: number;
-  permalink: string;
-  shipping_mode: string | null;
-  logistic_type: string | null;
-  health?: ItemHealth;
-}
-
-interface MLFullStock {
-  id: string;
-  ml_item_id: string;
-  inventory_id: string;
-  available_units: number;
-  reserved_units: number;
-  inbound_units: number;
-  damaged_units: number;
-  stock_status: string | null;
-  mercado_livre_products?: {
-    title: string;
-    thumbnail: string;
-    permalink: string;
-    price?: number;
-  };
-}
-
-interface ShippingStats {
-  flex: number;
-  agencies: number;
-  collection: number;
-  full: number;
-  own: number;
-  total: number;
-}
-
-interface Campaign {
-  id: string;
-  campaign_id: number;
-  campaign_name: string;
-  status: string;
-  strategy: string;
-  budget: number;
-  acos_target: number;
-  total_spend: number;
-  ad_revenue: number;
-  organic_revenue: number;
-  total_revenue: number;
-  advertised_sales: number;
-  organic_sales: number;
-  total_sales: number;
-  impressions: number;
-  clicks: number;
-  ctr: number | null;
-  roas: number | null;
-  acos: number | null;
-  products_count: number;
-  synced_at: string;
-}
-
-interface ProductAd {
-  id: string;
+// ProductAd local estendido com campos adicionais específicos desta página
+interface ProductAdExtended extends ProductAd {
   ml_item_id: string;
   title: string;
   thumbnail: string | null;
-  status: string;
   is_recommended: boolean;
-  campaign_id: number | null;
-  campaign_name: string | null;
   price: number;
 }
 
 export default function MLAccountDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [mlAccounts, setMlAccounts] = useState<MLAccount[]>([]);
+  // Hook para buscar contas ML - já retorna MLAccount com ml_nickname correto
+  const { data: mlAccountsData = [], isLoading: loadingAccounts, refetch: refetchAccounts } = useMLAccounts();
+  
+  // Transformar para o formato esperado pelo componente (compatibilidade com interface local)
+  const mlAccounts = mlAccountsData.map(acc => ({
+    id: acc.id,
+    ml_nickname: acc.ml_nickname || 'Sem nome',
+    is_primary: acc.is_primary,
+    is_active: acc.is_active,
+    connected_at: acc.connected_at || '',
+    last_sync_at: acc.last_sync_at,
+    token_expires_at: acc.token_expires_at || '',
+    has_product_ads_enabled: null,
+    advertiser_id: null,
+    has_active_campaigns: null,
+    site_id: acc.site_id || ''
+  }));
+  
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"geral" | "anuncios" | "estoque" | "publicidade">("geral");
   const [metrics, setMetrics] = useState<MLMetrics | null>(null);
   const [products, setProducts] = useState<MLProduct[]>([]);
   const [fullStock, setFullStock] = useState<MLFullStock[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [adsFilter, setAdsFilter] = useState<'low_quality_photos' | 'no_description' | 'no_tax_data'>('low_quality_photos');
-  const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
+  const [shippingStats, setShippingStats] = useState<{
+    flex: { count: number; percentage: number };
+    agencies: { count: number; percentage: number };
+    collection: { count: number; percentage: number };
+    full: { count: number; percentage: number };
+    correios: { count: number; percentage: number };
+    envio_proprio: { count: number; percentage: number };
+    total: number;
+  } | null>(null);
   const [healthSubTab, setHealthSubTab] = useState<'dashboard' | 'individual'>('dashboard');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [healthHistory, setHealthHistory] = useState<any[]>([]);
@@ -219,10 +119,10 @@ export default function MLAccountDashboard() {
   const [testingConnection, setTestingConnection] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      loadMLAccounts();
+    if (mlAccounts.length > 0 && !selectedAccountId) {
+      setSelectedAccountId(mlAccounts[0].id);
     }
-  }, [user]);
+  }, [mlAccounts]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -238,7 +138,7 @@ export default function MLAccountDashboard() {
       window.history.replaceState({}, '', window.location.pathname);
       
       setTimeout(() => {
-        loadMLAccounts();
+        refetchAccounts();
       }, 1000);
     }
     
@@ -260,10 +160,49 @@ export default function MLAccountDashboard() {
     }
   }, []);
 
+  // Hook para buscar dados completos da conta selecionada
+  const { data: accountData, isLoading: loadingAccountData, refetch: refetchAccountData } = useMLAccountData(selectedAccountId || null, user?.id || null);
+
   useEffect(() => {
-    if (selectedAccountId) {
-      loadAccountData(selectedAccountId);
-      loadProductAds(selectedAccountId);
+    if (accountData) {
+      setMetrics(accountData.metrics);
+      setProducts(accountData.products || []);
+      setFullStock(accountData.stock || []);
+      
+      // Calcular shipping stats
+      if (accountData.products) {
+        const stats = calculateShippingStats(accountData.products);
+        setShippingStats(stats);
+      } else {
+        setShippingStats(null);
+      }
+      
+      // Processar histórico de saúde
+      if (accountData.history) {
+        const historyByDate = new Map<string, number[]>();
+        accountData.history.forEach(record => {
+          const date = new Date(record.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+          if (!historyByDate.has(date)) {
+            historyByDate.set(date, []);
+          }
+          historyByDate.get(date)!.push(record.score / 100);
+        });
+        
+        const aggregatedHistory = Array.from(historyByDate.entries()).map(([date, scores]) => ({
+          date,
+          averageScore: (scores.reduce((sum, s) => sum + s, 0) / scores.length) * 100
+        }));
+        
+        setHealthHistory(aggregatedHistory);
+      }
+      
+      // Processar campanhas
+      setCampaigns(accountData.campaigns || []);
+      
+      // Carregar Product Ads
+      if (selectedAccountId) {
+        loadProductAds(selectedAccountId);
+      }
       
       // Verify Product Ads status if not yet checked
       const account = mlAccounts.find(acc => acc.id === selectedAccountId);
@@ -271,7 +210,7 @@ export default function MLAccountDashboard() {
         verifyProductAdsStatus(selectedAccountId);
       }
     }
-  }, [selectedAccountId, mlAccounts]);
+  }, [accountData, selectedAccountId, mlAccounts]);
 
   useEffect(() => {
     if (!selectedAccountId) return;
@@ -284,7 +223,7 @@ export default function MLAccountDashboard() {
         table: 'mercado_livre_metrics',
         filter: `ml_account_id=eq.${selectedAccountId}`
       }, () => {
-        loadAccountData(selectedAccountId);
+        refetchAccountData();
       })
       .subscribe();
 
@@ -296,7 +235,7 @@ export default function MLAccountDashboard() {
         table: 'mercado_livre_products',
         filter: `ml_account_id=eq.${selectedAccountId}`
       }, () => {
-        loadAccountData(selectedAccountId);
+        refetchAccountData();
       })
       .subscribe();
 
@@ -308,7 +247,7 @@ export default function MLAccountDashboard() {
         table: 'mercado_livre_full_stock',
         filter: `ml_account_id=eq.${selectedAccountId}`
       }, () => {
-        loadAccountData(selectedAccountId);
+        refetchAccountData();
       })
       .subscribe();
 
@@ -341,7 +280,7 @@ export default function MLAccountDashboard() {
           });
         }
         
-        loadAccountData(selectedAccountId);
+        refetchAccountData();
       })
       .subscribe();
 
@@ -366,205 +305,7 @@ export default function MLAccountDashboard() {
     };
   }, [selectedAccountId]);
 
-  const calculateShippingStats = (products: MLProduct[]): ShippingStats => {
-    const activeProducts = products.filter(p => p.status === 'active');
-    const total = activeProducts.length;
-    
-    const flex = activeProducts.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'self_service'
-    ).length;
-    
-    const agencies = activeProducts.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
-    ).length;
-    
-    const collection = activeProducts.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
-    ).length;
-    
-    const full = activeProducts.filter(p => 
-      p.shipping_mode === 'me2' && p.logistic_type === 'fulfillment'
-    ).length;
-    
-    const own = total - (flex + agencies + collection + full);
-    
-    return { flex, agencies, collection, full, own, total };
-  };
 
-  const loadMLAccounts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('mercado_livre_accounts')
-        .select('id, ml_nickname, is_primary, is_active, connected_at, last_sync_at, token_expires_at, has_product_ads_enabled, advertiser_id, has_active_campaigns, site_id')
-        .eq('student_id', user?.id)
-        .eq('is_active', true)
-        .order('is_primary', { ascending: false });
-
-      if (error) throw error;
-
-      setMlAccounts(data || []);
-      
-      if (data && data.length > 0 && !selectedAccountId) {
-        setSelectedAccountId(data[0].id);
-      }
-    } catch (error: any) {
-      console.error('Error loading ML accounts:', error);
-      toast.error('Erro ao carregar contas do Mercado Livre');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadAccountData = async (accountId: string) => {
-    setLoading(true);
-    try {
-      console.log('Loading account data for:', accountId);
-      
-      const [metricsResult, productsResult, stockResult, healthResult, historyResult] = await Promise.all([
-        supabase
-          .from('mercado_livre_metrics')
-          .select('*')
-          .eq('ml_account_id', accountId)
-          .order('last_updated', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        
-        supabase
-          .from('mercado_livre_products')
-          .select('*')
-          .eq('ml_account_id', accountId)
-          .order('title'),
-        
-        supabase
-          .from('mercado_livre_full_stock')
-          .select('*')
-          .eq('ml_account_id', accountId)
-          .order('ml_item_id'),
-        
-        supabase
-          .from('mercado_livre_item_health')
-          .select('*')
-          .eq('ml_account_id', accountId),
-        
-        supabase
-          .from('mercado_livre_health_history')
-          .select('*')
-          .eq('ml_account_id', accountId)
-          .gte('recorded_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-          .order('recorded_at', { ascending: true })
-      ]);
-
-      console.log('Query results:', {
-        metricsCount: metricsResult.data ? 1 : 0,
-        productsCount: productsResult.data?.length || 0,
-        stockCount: stockResult.data?.length || 0,
-        healthCount: healthResult.data?.length || 0,
-        historyCount: historyResult.data?.length || 0,
-        errors: {
-          metrics: metricsResult.error,
-          products: productsResult.error,
-          stock: stockResult.error,
-          health: healthResult.error,
-          history: historyResult.error
-        }
-      });
-
-      if (metricsResult.error && metricsResult.error.code !== 'PGRST116') throw metricsResult.error;
-      if (productsResult.error) throw productsResult.error;
-      if (stockResult.error) throw stockResult.error;
-      if (healthResult.error) console.error('Health data error:', healthResult.error);
-      if (historyResult.error) console.error('History data error:', historyResult.error);
-
-      let enrichedStock = [];
-      
-      try {
-        // Create a map of products by ml_item_id for quick lookup
-        const productMap = new Map((productsResult.data || []).map(p => [p.ml_item_id, p]));
-
-        // Enrich stock data with product information
-        enrichedStock = (stockResult.data || []).map(stock => {
-          const product = productMap.get(stock.ml_item_id);
-          
-          if (!product) {
-            console.warn(`Product not found for stock item: ${stock.ml_item_id}`);
-          }
-          
-          return {
-            ...stock,
-            mercado_livre_products: product ? {
-              title: product.title,
-              thumbnail: product.thumbnail || '',
-              permalink: product.permalink || '',
-              price: product.price || 0
-            } : undefined
-          };
-        });
-      } catch (enrichError) {
-        console.error('Error enriching stock data:', enrichError);
-        enrichedStock = [];
-      }
-
-      const healthMap = new Map((healthResult.data || []).map(h => [h.ml_item_id, h]));
-      
-      const productsWithHealth = (productsResult.data || []).map(product => ({
-        ...product,
-        health: healthMap.get(product.ml_item_id) ? {
-          health_score: healthMap.get(product.ml_item_id)!.health_score,
-          health_level: healthMap.get(product.ml_item_id)!.health_level,
-          goals: healthMap.get(product.ml_item_id)!.goals as unknown as HealthGoal[],
-          goals_completed: healthMap.get(product.ml_item_id)!.goals_completed,
-          goals_applicable: healthMap.get(product.ml_item_id)!.goals_applicable,
-          score_trend: healthMap.get(product.ml_item_id)!.score_trend,
-          previous_score: healthMap.get(product.ml_item_id)!.previous_score,
-        } : undefined
-      }));
-
-      setMetrics(metricsResult.data || null);
-      setProducts(productsWithHealth);
-      setFullStock(enrichedStock);
-      
-      const stats = calculateShippingStats(productsWithHealth);
-      setShippingStats(stats);
-      
-      const historyByDate = new Map<string, number[]>();
-      (historyResult.data || []).forEach(record => {
-        const date = new Date(record.recorded_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-        if (!historyByDate.has(date)) {
-          historyByDate.set(date, []);
-        }
-        historyByDate.get(date)!.push(record.health_score);
-      });
-      
-      const aggregatedHistory = Array.from(historyByDate.entries()).map(([date, scores]) => ({
-        date,
-        averageScore: (scores.reduce((sum, s) => sum + s, 0) / scores.length) * 100
-      }));
-      
-      setHealthHistory(aggregatedHistory);
-      
-      if (selectedItemId) {
-        const itemHistoryData = (historyResult.data || [])
-          .filter(h => h.ml_item_id === selectedItemId)
-          .map(h => ({
-            date: new Date(h.recorded_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-            score: h.health_score * 100
-          }));
-        setItemHistory(itemHistoryData);
-      }
-    } catch (error: any) {
-      console.error('Error loading account data:', {
-        error,
-        accountId,
-        errorCode: error?.code,
-        errorMessage: error?.message,
-        errorDetails: error?.details,
-        errorHint: error?.hint
-      });
-      toast.error('Erro ao carregar dados da conta');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadProductAds = async (accountId: string) => {
     try {
@@ -1167,148 +908,207 @@ export default function MLAccountDashboard() {
 
                   {/* Tipos de Envio */}
                   {shippingStats && (
-                    <div className="mt-6">
-                      <h3 className="text-lg font-semibold mb-4">Tipos de Envio</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Distribuição de anúncios por modalidade de envio Mercado Livre
-                      </p>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {/* Badge FLEX */}
-                        {shippingStats.flex > 0 ? (
-                          <div className="p-4 rounded-lg border border-blue-500/50 bg-blue-500/10">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <Package className="w-5 h-5 text-blue-400" />
-                                <span className="font-semibold">FLEX</span>
+                    <Card className="mt-6 border border-border hover:shadow-lg transition-shadow duration-300">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Package className="w-5 h-5 text-primary" />
+                          Tipos de Envio
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          Distribuição de anúncios por modalidade de envio Mercado Livre
+                        </p>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-5">
+                          {/* Correios */}
+                          {shippingStats.correios.count > 0 ? (
+                            <div className="p-5 rounded-lg border border-cyan-500/50 bg-cyan-500/10 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Mail className="w-5 h-5 text-cyan-400" />
+                                  <span className="font-semibold text-sm">Correios</span>
+                                </div>
+                                <Badge className="bg-cyan-500 text-xs">
+                                  {shippingStats.correios.count}
+                                </Badge>
                               </div>
-                              <Badge className="bg-blue-500">
-                                {shippingStats.flex} produto{shippingStats.flex !== 1 ? 's' : ''}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Progress value={(shippingStats.flex / shippingStats.total) * 100} className="h-1 flex-1" />
-                              <span className="text-xs font-medium">{((shippingStats.flex / shippingStats.total) * 100).toFixed(0)}%</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-4 rounded-lg border border-border/50 bg-transparent">
-                            <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                <Package className="w-5 h-5 text-muted-foreground" />
-                                <span className="font-semibold text-muted-foreground">FLEX</span>
+                                <Progress value={shippingStats.correios.percentage} className="h-2 flex-1" />
+                                <span className="text-xs font-medium">{shippingStats.correios.percentage.toFixed(0)}%</span>
                               </div>
-                              <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                             </div>
-                            
-                          </div>
-                        )}
-                        
-                        {/* Badge Agências */}
-                        {shippingStats.agencies > 0 ? (
-                          <div className="p-4 rounded-lg border border-purple-500/50 bg-purple-500/10">
-                            <div className="flex items-center justify-between mb-2">
+                          ) : (
+                            <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Mail className="w-5 h-5 text-muted-foreground" />
+                                  <span className="font-semibold text-sm text-muted-foreground">Correios</span>
+                                </div>
+                                <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                              </div>
+                              <div className="h-2"></div>
+                            </div>
+                          )}
+
+                          {/* FLEX */}
+                          {shippingStats.flex.count > 0 ? (
+                            <div className="p-5 rounded-lg border border-blue-500/50 bg-blue-500/10 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Package className="w-5 h-5 text-blue-400" />
+                                  <span className="font-semibold text-sm">FLEX</span>
+                                </div>
+                                <Badge className="bg-blue-500 text-xs">
+                                  {shippingStats.flex.count}
+                                </Badge>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <MapPin className="w-5 h-5 text-purple-400" />
-                                <span className="font-semibold">Agências</span>
+                                <Progress value={shippingStats.flex.percentage} className="h-2 flex-1" />
+                                <span className="text-xs font-medium">{shippingStats.flex.percentage.toFixed(0)}%</span>
                               </div>
-                              <Badge className="bg-purple-500">
-                                {shippingStats.agencies} produto{shippingStats.agencies !== 1 ? 's' : ''}
-                              </Badge>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Progress value={(shippingStats.agencies / shippingStats.total) * 100} className="h-1 flex-1" />
-                              <span className="text-xs font-medium">{((shippingStats.agencies / shippingStats.total) * 100).toFixed(0)}%</span>
+                          ) : (
+                            <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Package className="w-5 h-5 text-muted-foreground" />
+                                  <span className="font-semibold text-sm text-muted-foreground">FLEX</span>
+                                </div>
+                                <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                              </div>
+                              <div className="h-2"></div>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="p-4 rounded-lg border border-border/50 bg-transparent">
-                            <div className="flex items-center justify-between mb-2">
+                          )}
+
+                          {/* Agências */}
+                          {shippingStats.agencies.count > 0 ? (
+                            <div className="p-5 rounded-lg border border-purple-500/50 bg-purple-500/10 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="w-5 h-5 text-purple-400" />
+                                  <span className="font-semibold text-sm">Agências</span>
+                                </div>
+                                <Badge className="bg-purple-500 text-xs">
+                                  {shippingStats.agencies.count}
+                                </Badge>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <MapPin className="w-5 h-5 text-muted-foreground" />
-                                <span className="font-semibold text-muted-foreground">Agências</span>
+                                <Progress value={shippingStats.agencies.percentage} className="h-2 flex-1" />
+                                <span className="text-xs font-medium">{shippingStats.agencies.percentage.toFixed(0)}%</span>
                               </div>
-                              <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                             </div>
-                            
-                          </div>
-                        )}
-                        
-                        {/* Badge Coleta */}
-                        {shippingStats.collection > 0 ? (
-                          <div className="p-4 rounded-lg border border-green-500/50 bg-green-500/10">
-                            <div className="flex items-center justify-between mb-2">
+                          ) : (
+                            <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="w-5 h-5 text-muted-foreground" />
+                                  <span className="font-semibold text-sm text-muted-foreground">Agências</span>
+                                </div>
+                                <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                              </div>
+                              <div className="h-2"></div>
+                            </div>
+                          )}
+
+                          {/* Coleta */}
+                          {shippingStats.collection.count > 0 ? (
+                            <div className="p-5 rounded-lg border border-green-500/50 bg-green-500/10 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Truck className="w-5 h-5 text-green-400" />
+                                  <span className="font-semibold text-sm">Coleta</span>
+                                </div>
+                                <Badge className="bg-green-500 text-xs">
+                                  {shippingStats.collection.count}
+                                </Badge>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <Truck className="w-5 h-5 text-green-400" />
-                                <span className="font-semibold">Coleta</span>
+                                <Progress value={shippingStats.collection.percentage} className="h-2 flex-1" />
+                                <span className="text-xs font-medium">{shippingStats.collection.percentage.toFixed(0)}%</span>
                               </div>
-                              <Badge className="bg-green-500">
-                                {shippingStats.collection} produto{shippingStats.collection !== 1 ? 's' : ''}
-                              </Badge>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Progress value={(shippingStats.collection / shippingStats.total) * 100} className="h-1 flex-1" />
-                              <span className="text-xs font-medium">{((shippingStats.collection / shippingStats.total) * 100).toFixed(0)}%</span>
+                          ) : (
+                            <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Truck className="w-5 h-5 text-muted-foreground" />
+                                  <span className="font-semibold text-sm text-muted-foreground">Coleta</span>
+                                </div>
+                                <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                              </div>
+                              <div className="h-2"></div>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="p-4 rounded-lg border border-border/50 bg-transparent">
-                            <div className="flex items-center justify-between mb-2">
+                          )}
+
+                          {/* FULL */}
+                          {shippingStats.full.count > 0 ? (
+                            <div className="p-5 rounded-lg border border-orange-500/50 bg-orange-500/10 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Warehouse className="w-5 h-5 text-orange-400" />
+                                  <span className="font-semibold text-sm">FULL</span>
+                                </div>
+                                <Badge className="bg-orange-500 text-xs">
+                                  {shippingStats.full.count}
+                                </Badge>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <Truck className="w-5 h-5 text-muted-foreground" />
-                                <span className="font-semibold text-muted-foreground">Coleta</span>
+                                <Progress value={shippingStats.full.percentage} className="h-2 flex-1" />
+                                <span className="text-xs font-medium">{shippingStats.full.percentage.toFixed(0)}%</span>
                               </div>
-                              <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
                             </div>
-                            
-                          </div>
-                        )}
-                        
-                        {/* Badge FULL */}
-                        {shippingStats.full > 0 ? (
-                          <div className="p-4 rounded-lg border border-orange-500/50 bg-orange-500/10">
-                            <div className="flex items-center justify-between mb-2">
+                          ) : (
+                            <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Warehouse className="w-5 h-5 text-muted-foreground" />
+                                  <span className="font-semibold text-sm text-muted-foreground">FULL</span>
+                                </div>
+                                <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
+                              </div>
+                              <div className="h-2"></div>
+                            </div>
+                          )}
+
+                          {/* Envio Próprio */}
+                          {shippingStats.envio_proprio.count > 0 ? (
+                            <div className="p-5 rounded-lg border border-indigo-500/50 bg-indigo-500/10 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Send className="w-5 h-5 text-indigo-400" />
+                                  <span className="font-semibold text-sm">Envio Próprio</span>
+                                </div>
+                                <Badge className="bg-indigo-500 text-xs">
+                                  {shippingStats.envio_proprio.count}
+                                </Badge>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <Warehouse className="w-5 h-5 text-orange-400" />
-                                <span className="font-semibold">FULL</span>
+                                <Progress value={shippingStats.envio_proprio.percentage} className="h-2 flex-1" />
+                                <span className="text-xs font-medium">{shippingStats.envio_proprio.percentage.toFixed(0)}%</span>
                               </div>
-                              <Badge className="bg-orange-500">
-                                {shippingStats.full} produto{shippingStats.full !== 1 ? 's' : ''}
-                              </Badge>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Progress value={(shippingStats.full / shippingStats.total) * 100} className="h-1 flex-1" />
-                              <span className="text-xs font-medium">{((shippingStats.full / shippingStats.total) * 100).toFixed(0)}%</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-4 rounded-lg border border-border/50 bg-transparent">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <Warehouse className="w-5 h-5 text-muted-foreground" />
-                                <span className="font-semibold text-muted-foreground">FULL</span>
+                          ) : (
+                            <div className="p-5 rounded-lg border border-border/50 bg-muted/30 min-h-[110px] flex flex-col justify-between">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Send className="w-5 h-5 text-muted-foreground" />
+                                  <span className="font-semibold text-sm text-muted-foreground">Envio Próprio</span>
+                                </div>
+                                <Badge variant="outline" className="text-xs text-muted-foreground">Inativo</Badge>
                               </div>
-                              <Badge variant="outline" className="text-muted-foreground">Inativo</Badge>
+                              <div className="h-2"></div>
                             </div>
-                            
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Resumo */}
-                      <div className="mt-4 pt-4 border-t">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Total de anúncios ativos</span>
-                          <span className="font-semibold">{shippingStats.total}</span>
+                          )}
                         </div>
-                        {shippingStats.own > 0 && (
-                          <div className="flex items-center justify-between text-sm mt-2">
-                            <span className="text-muted-foreground">Envio próprio</span>
-                            <span>{shippingStats.own} ({((shippingStats.own / shippingStats.total) * 100).toFixed(0)}%)</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                        
+                        {/* Resumo */}
+                        <div className="mt-4 pt-4 border-t">
+                          <p className="text-sm text-muted-foreground">
+                            Total de anúncios ativos: <span className="font-semibold text-foreground">{shippingStats.total}</span>
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
                   )}
 
                 </>

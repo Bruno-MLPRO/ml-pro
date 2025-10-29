@@ -44,20 +44,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface Manager {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  role: 'manager' | 'administrator';
-  active_students: number;
-  inactive_students: number;
-}
+// Interfaces removidas - usando tipos centralizados de @/types/students
+import type { Manager, Student } from "@/types/students";
 
-interface Student {
-  id: string;
-  full_name: string;
-  email: string;
+interface StudentWithJourneyId extends Student {
   journey_id: string;
 }
 

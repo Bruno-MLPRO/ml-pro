@@ -1,9 +1,12 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/Sidebar";
 import { useConsolidatedMetrics } from "@/hooks/queries/useConsolidatedMetrics";
+import { useDashboardData } from "@/hooks/useDashboardData";
+import { useAdminDialogs } from "@/hooks/useAdminDialogs";
+import { useAdminActions } from "@/hooks/useAdminActions";
 import { formatCurrency, formatNumber, formatPercentage } from "@/lib/formatters";
 import { Loader2, AlertCircle, Link as LinkIcon, Calendar, Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Target, Package, DollarSign, RefreshCw, MapPin, Truck, Warehouse, ShoppingCart, Mail, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,67 +24,85 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 // Interfaces removidas - usando tipos centralizados de @/types/common
 import type { Notice, ImportantLink, CallSchedule } from "@/types/common";
+
 const GestorDashboard = () => {
   const {
     user,
     userRole,
     loading: authLoading
   } = useAuth();
-  const [notices, setNotices] = useState<Notice[]>([]);
-  const [links, setLinks] = useState<ImportantLink[]>([]);
-  const [calls, setCalls] = useState<CallSchedule[]>([]);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  // ✅ Hooks consolidados para gerenciamento de estado
   const {
-    toast
-  } = useToast();
+    notices,
+    importantLinks: links,
+    callSchedules: calls,
+    loading,
+    refetch: refetchDashboardData,
+    setNotices,
+    setImportantLinks: setLinks,
+    setCallSchedules: setCalls
+  } = useDashboardData(user?.id, userRole);
 
-  // Dialog states
-  const [noticeDialogOpen, setNoticeDialogOpen] = useState(false);
-  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [callDialogOpen, setCallDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteItem, setDeleteItem] = useState<{
-    type: string;
-    id: string;
-  } | null>(null);
+  const {
+    // Dialog states
+    noticeDialogOpen,
+    linkDialogOpen,
+    callDialogOpen,
+    deleteDialogOpen,
+    deleteItem,
+    // Editing states
+    editingNotice,
+    editingLink,
+    editingCall,
+    // Form data
+    noticeForm,
+    linkForm,
+    callForm,
+    // Form setters
+    setNoticeForm,
+    setLinkForm,
+    setCallForm,
+    // Open handlers
+    openNoticeDialog,
+    openLinkDialog,
+    openCallDialog,
+    openNoticeEditDialog,
+    openLinkEditDialog,
+    openCallEditDialog,
+    openDeleteDialog,
+    // Close handlers
+    closeNoticeDialog,
+    closeLinkDialog,
+    closeCallDialog,
+    closeDeleteDialog,
+    // Direct setters
+    setNoticeDialogOpen,
+    setLinkDialogOpen,
+    setCallDialogOpen,
+    setDeleteDialogOpen,
+    setDeleteItem,
+  } = useAdminDialogs();
 
-  // Form states
-  const [editingNotice, setEditingNotice] = useState<Notice | null>(null);
-  const [editingLink, setEditingLink] = useState<ImportantLink | null>(null);
-  const [editingCall, setEditingCall] = useState<CallSchedule | null>(null);
-  const [noticeForm, setNoticeForm] = useState({
-    title: "",
-    content: "",
-    is_important: false,
-    is_active: true,
-    expires_at: ""
-  });
-  const [linkForm, setLinkForm] = useState({
-    title: "",
-    url: "",
-    category: ""
-  });
-  const [callForm, setCallForm] = useState({
-    date: "",
-    theme: "",
-    description: ""
-  });
+  const {
+    syncingAccounts,
+    updatingMetrics,
+    syncProgress,
+    metricsReloadPending,
+    metricsDebounceRef,
+    startSync,
+    updateSyncProgress,
+    finishSync,
+    startMetricsUpdate,
+    finishMetricsUpdate,
+    cleanup: cleanupAdminActions,
+    setSyncingAccounts,
+    setSyncProgress,
+  } = useAdminActions();
 
-  // Hook para buscar métricas consolidadas (substitui useState)
-
-  // Admin actions state
-  const [syncingAccounts, setSyncingAccounts] = useState(false);
-  const [updatingMetrics, setUpdatingMetrics] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<{
-    total: number;
-    current: number;
-    status: string;
-  } | null>(null);
-  const [metricsReloadPending, setMetricsReloadPending] = useState(false);
-  const metricsDebounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Hook para buscar métricas consolidadas (deve vir antes de debouncedRefetchMetrics)
+  // Hook para buscar métricas consolidadas
   const { data: consolidatedMetricsData = null, isLoading: loadingMetrics, refetch: refetchMetrics } = useConsolidatedMetrics(30);
 
   // Debounced reload function
@@ -106,7 +127,7 @@ const GestorDashboard = () => {
       return;
     }
     if (user && (userRole === 'manager' || userRole === 'administrator')) {
-      loadData();
+      // ✅ Dados do dashboard são carregados automaticamente pelo hook useDashboardData
 
       // Set up realtime subscriptions with debounce
       const ordersChannel = supabase.channel('orders-changes').on('postgres_changes', {
@@ -140,12 +161,10 @@ const GestorDashboard = () => {
         supabase.removeChannel(ordersChannel);
         supabase.removeChannel(productsChannel);
         supabase.removeChannel(campaignsChannel);
-        if (metricsDebounceRef.current) {
-          clearTimeout(metricsDebounceRef.current);
-        }
+        cleanupAdminActions();
       };
     }
-  }, [user, userRole, authLoading, navigate, debouncedRefetchMetrics]);
+  }, [user, userRole, authLoading, navigate, debouncedRefetchMetrics, cleanupAdminActions]);
   
   const consolidatedMetrics = consolidatedMetricsData || {
     totalRevenue: 0,
@@ -172,31 +191,7 @@ const GestorDashboard = () => {
   console.log('📊 GestorDashboard - consolidatedMetrics (com fallback):', consolidatedMetrics);
   console.log('⏳ GestorDashboard - loadingMetrics:', loadingMetrics);
 
-  const loadData = async () => {
-    try {
-      const [noticesData, linksData, callsData] = await Promise.all([
-        supabase.from('notices').select('*').order('created_at', { ascending: false }),
-        supabase.from('important_links').select('*').order('order_index', { ascending: true }),
-        supabase.from('call_schedules').select('*').order('date', { ascending: true })
-      ]);
-      
-      if (noticesData.error) throw noticesData.error;
-      if (linksData.error) throw linksData.error;
-      if (callsData.error) throw callsData.error;
-      
-      setNotices(noticesData.data || []);
-      setLinks(linksData.data || []);
-      setCalls(callsData.data || []);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      toast({
-        title: "Erro ao carregar dados",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ✅ Função loadData removida - dados carregados automaticamente pelo hook useDashboardData
 
   // Admin action handlers
   const handleSyncAllAccounts = async () => {
@@ -334,9 +329,8 @@ const GestorDashboard = () => {
           title: "Aviso criado com sucesso!"
         });
       }
-      setNoticeDialogOpen(false);
-      resetNoticeForm();
-      loadData();
+      closeNoticeDialog();
+      refetchDashboardData();
     } catch (error) {
       console.error('Error saving notice:', error);
       toast({
@@ -345,27 +339,7 @@ const GestorDashboard = () => {
       });
     }
   };
-  const openEditNotice = (notice: Notice) => {
-    setEditingNotice(notice);
-    setNoticeForm({
-      title: notice.title,
-      content: notice.content,
-      is_important: notice.is_important,
-      is_active: notice.is_active,
-      expires_at: notice.expires_at || ""
-    });
-    setNoticeDialogOpen(true);
-  };
-  const resetNoticeForm = () => {
-    setEditingNotice(null);
-    setNoticeForm({
-      title: "",
-      content: "",
-      is_important: false,
-      is_active: true,
-      expires_at: ""
-    });
-  };
+  // ✅ openEditNotice e resetNoticeForm movidos para o hook useAdminDialogs
 
   // Link handlers
   const handleLinkSubmit = async () => {
@@ -397,9 +371,8 @@ const GestorDashboard = () => {
           title: "Link criado com sucesso!"
         });
       }
-      setLinkDialogOpen(false);
-      resetLinkForm();
-      loadData();
+      closeLinkDialog();
+      refetchDashboardData();
     } catch (error) {
       console.error('Error saving link:', error);
       toast({
@@ -408,23 +381,7 @@ const GestorDashboard = () => {
       });
     }
   };
-  const openEditLink = (link: ImportantLink) => {
-    setEditingLink(link);
-    setLinkForm({
-      title: link.title,
-      url: link.url,
-      category: link.category || ""
-    });
-    setLinkDialogOpen(true);
-  };
-  const resetLinkForm = () => {
-    setEditingLink(null);
-    setLinkForm({
-      title: "",
-      url: "",
-      category: ""
-    });
-  };
+  // ✅ openEditLink e resetLinkForm movidos para o hook useAdminDialogs
   const moveLinkUp = async (index: number) => {
     if (index === 0) return;
     const newLinks = [...links];
@@ -484,9 +441,8 @@ const GestorDashboard = () => {
           title: "Call criada com sucesso!"
         });
       }
-      setCallDialogOpen(false);
-      resetCallForm();
-      loadData();
+      closeCallDialog();
+      refetchDashboardData();
     } catch (error) {
       console.error('Error saving call:', error);
       toast({
@@ -495,23 +451,7 @@ const GestorDashboard = () => {
       });
     }
   };
-  const openEditCall = (call: CallSchedule) => {
-    setEditingCall(call);
-    setCallForm({
-      date: call.date,
-      theme: call.theme,
-      description: call.description || ""
-    });
-    setCallDialogOpen(true);
-  };
-  const resetCallForm = () => {
-    setEditingCall(null);
-    setCallForm({
-      date: "",
-      theme: "",
-      description: ""
-    });
-  };
+  // ✅ openEditCall e resetCallForm movidos para o hook useAdminDialogs
 
   // Delete handler
   const handleDelete = async () => {
@@ -524,9 +464,8 @@ const GestorDashboard = () => {
       toast({
         title: "Item excluído com sucesso!"
       });
-      setDeleteDialogOpen(false);
-      setDeleteItem(null);
-      loadData();
+      closeDeleteDialog();
+      refetchDashboardData();
     } catch (error) {
       console.error('Error deleting:', error);
       toast({
@@ -920,7 +859,7 @@ const GestorDashboard = () => {
                 </div>
                 <Dialog open={noticeDialogOpen} onOpenChange={open => {
                 setNoticeDialogOpen(open);
-                if (!open) resetNoticeForm();
+                if (!open) closeNoticeDialog();
               }}>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="ghost"><Plus className="w-4 h-4" /></Button>
@@ -965,7 +904,7 @@ const GestorDashboard = () => {
                     <DialogFooter>
                       <Button variant="outline" onClick={() => {
                       setNoticeDialogOpen(false);
-                      resetNoticeForm();
+                      closeNoticeDialog();
                     }}>Cancelar</Button>
                       <Button onClick={handleNoticeSubmit}>Salvar</Button>
                     </DialogFooter>
@@ -985,7 +924,7 @@ const GestorDashboard = () => {
                           </h4>
                         </div>
                         <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => openEditNotice(notice)}><Pencil className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => openNoticeEditDialog(notice)}><Pencil className="w-3 h-3" /></Button>
                           <Button size="sm" variant="ghost" onClick={() => {
                       setDeleteItem({
                         type: 'notice',
@@ -1011,7 +950,7 @@ const GestorDashboard = () => {
                 </div>
                 <Dialog open={linkDialogOpen} onOpenChange={open => {
                 setLinkDialogOpen(open);
-                if (!open) resetLinkForm();
+                if (!open) closeLinkDialog();
               }}>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="ghost"><Plus className="w-4 h-4" /></Button>
@@ -1047,7 +986,7 @@ const GestorDashboard = () => {
                     <DialogFooter>
                       <Button variant="outline" onClick={() => {
                       setLinkDialogOpen(false);
-                      resetLinkForm();
+                      closeLinkDialog();
                     }}>Cancelar</Button>
                       <Button onClick={handleLinkSubmit}>Salvar</Button>
                     </DialogFooter>
@@ -1065,7 +1004,7 @@ const GestorDashboard = () => {
                       </div>
                       <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 text-sm font-medium text-primary hover:underline">{link.title}</a>
                       <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => openEditLink(link)}><Pencil className="w-3 h-3" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => openLinkEditDialog(link)}><Pencil className="w-3 h-3" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => {
                     setDeleteItem({
                       type: 'link',
@@ -1089,7 +1028,7 @@ const GestorDashboard = () => {
                 </div>
                 <Dialog open={callDialogOpen} onOpenChange={open => {
                 setCallDialogOpen(open);
-                if (!open) resetCallForm();
+                if (!open) closeCallDialog();
               }}>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="ghost"><Plus className="w-4 h-4" /></Button>
@@ -1125,7 +1064,7 @@ const GestorDashboard = () => {
                     <DialogFooter>
                       <Button variant="outline" onClick={() => {
                       setCallDialogOpen(false);
-                      resetCallForm();
+                      closeCallDialog();
                     }}>Cancelar</Button>
                       <Button onClick={handleCallSubmit}>Salvar</Button>
                     </DialogFooter>
@@ -1145,7 +1084,7 @@ const GestorDashboard = () => {
                           <h4 className="font-semibold text-sm">{call.theme}</h4>
                         </div>
                         <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => openEditCall(call)}><Pencil className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => openCallEditDialog(call)}><Pencil className="w-3 h-3" /></Button>
                           <Button size="sm" variant="ghost" onClick={() => {
                       setDeleteItem({
                         type: 'call',

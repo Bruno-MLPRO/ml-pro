@@ -17,10 +17,10 @@ import { useStudentMetrics, useStudentMonthlyMetrics } from '@/hooks/queries/use
 import { useMLOrders } from '@/hooks/queries/useMLOrders';
 import { useProductAdsMetrics } from '@/hooks/queries/useConsolidatedMetrics';
 import { useShippingStats } from '@/hooks/queries/useShippingStats';
+import { useDashboardData } from '@/hooks/useDashboardData';
 import { formatCurrency, formatDescription } from '@/lib/formatters';
 import type { MLAccount, MLMetrics } from '@/types/mercadoLivre';
 import type { ShippingStats, ProductAdsMetrics } from '@/types/metrics';
-import type { Notice, ImportantLink, CallSchedule } from '@/types/common';
 
 // Interfaces removidas - usando tipos centralizados de @/types/common e @/types/mercadoLivre
 
@@ -28,14 +28,19 @@ import type { Notice, ImportantLink, CallSchedule } from '@/types/common';
 
 const StudentDashboard = () => {
   const { user, userRole, loading: authLoading } = useAuth();
-  const [notices, setNotices] = useState<Notice[]>([]);
-  const [callSchedules, setCallSchedules] = useState<CallSchedule[]>([]);
-  const [importantLinks, setImportantLinks] = useState<ImportantLink[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<7 | 15 | 30>(30);
-  const [loading, setLoading] = useState(true);
   const [connectingML, setConnectingML] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  // ✅ Hook consolidado para dados do dashboard (avisos, links, agendamentos)
+  const {
+    notices,
+    importantLinks,
+    callSchedules,
+    loading,
+    refetch: refetchDashboardData
+  } = useDashboardData(user?.id, userRole);
   
   // Hooks com React Query
   const { data: mlAccounts = [], isLoading: loadingAccounts, refetch: refetchAccounts } = useMLAccounts();
@@ -117,7 +122,7 @@ const StudentDashboard = () => {
     }
 
     if (user && userRole === 'student') {
-      loadDashboardData();
+      // ✅ Dados do dashboard são carregados automaticamente pelo hook useDashboardData
       
       // Configurar realtime completo para todas as tabelas ML
       const channel = supabase
@@ -208,25 +213,7 @@ const StudentDashboard = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [user, userRole, authLoading, navigate]);
-
-  const loadDashboardData = async () => {
-    try {
-      const [noticesData, callSchedulesData, linksData] = await Promise.all([
-        supabase.from('notices').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(5),
-        supabase.from('call_schedules').select('*').gte('date', new Date().toISOString().split('T')[0]).order('date', { ascending: true }).limit(4),
-        supabase.from('important_links').select('*').order('order_index', { ascending: true })
-      ]);
-
-      if (noticesData.data) setNotices(noticesData.data);
-      if (callSchedulesData.data) setCallSchedules(callSchedulesData.data);
-      if (linksData.data) setImportantLinks(linksData.data);
-    } catch (error) {
-      console.error('Error loading dashboard:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [user, userRole, authLoading, navigate, refetchAccounts, toast]);
 
   const testMLConnection = async () => {
     try {

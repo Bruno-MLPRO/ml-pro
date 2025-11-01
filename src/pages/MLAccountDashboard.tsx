@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Sidebar } from "@/components/Sidebar";
 import { useMLAccounts } from "@/hooks/queries/useMLAccounts";
-import { useMLAccountData } from "@/hooks/queries/useMLAccountData";
+import { useMLAccountData, usePrefetchMLAccountsData } from "@/hooks/queries/useMLAccountData";
 import { calculateShippingStats, calculateShippingStatsSimple } from "@/lib/calculations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -98,6 +98,10 @@ export default function MLAccountDashboard() {
   const [fullStock, setFullStock] = useState<MLFullStock[]>([]);
   const [sellerRecovery, setSellerRecovery] = useState<MLSellerRecovery | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Prefetch de dados das outras contas para troca rápida
+  const accountIds = useMemo(() => mlAccounts.map(acc => acc.id), [mlAccounts]);
+  usePrefetchMLAccountsData(accountIds, user?.id || null);
   const [adsFilter, setAdsFilter] = useState<'low_quality_photos' | 'no_description' | 'no_tax_data'>('low_quality_photos');
   const [shippingStats, setShippingStats] = useState<{
     flex: { count: number; percentage: number };
@@ -225,10 +229,14 @@ export default function MLAccountDashboard() {
   }, []);
 
   // Hook para buscar dados completos da conta selecionada
-  const { data: accountData, isLoading: loadingAccountData, refetch: refetchAccountData } = useMLAccountData(selectedAccountId || null, user?.id || null);
+  const { data: accountData, isLoading: loadingAccountData, isFetching: isFetchingAccountData, refetch: refetchAccountData } = useMLAccountData(selectedAccountId || null, user?.id || null);
+
+  // Indicador de transição suave - mostra skeleton apenas se não tem dados em cache
+  const isTransitioning = loadingAccountData && !accountData;
 
   useEffect(() => {
     if (accountData) {
+      // Atualiza os dados imediatamente (pode ser cache)
       setMetrics(accountData.metrics);
       setProducts(accountData.products || []);
       setFullStock(accountData.stock || []);
@@ -707,7 +715,7 @@ export default function MLAccountDashboard() {
             <h1 className="text-3xl font-bold">Dashboard Mercado Livre</h1>
             
             <div className="flex items-center gap-2">
-              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+              <Select value={selectedAccountId} onValueChange={setSelectedAccountId} disabled={isFetchingAccountData}>
                 <SelectTrigger className="w-64">
                   <SelectValue placeholder="Selecione uma conta" />
                 </SelectTrigger>
@@ -720,6 +728,11 @@ export default function MLAccountDashboard() {
                   ))}
                 </SelectContent>
               </Select>
+              
+              {/* Indicador sutil de carregamento ao trocar de conta */}
+              {isFetchingAccountData && !isTransitioning && (
+                <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

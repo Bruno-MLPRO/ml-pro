@@ -377,40 +377,60 @@ export async function getMLSellerRecovery(accountId: string): Promise<MLSellerRe
 /**
  * Busca dados completos de uma conta ML (métricas, produtos, estoque, health, seller recovery)
  */
+/**
+ * Busca dados essenciais de uma conta ML (otimizado)
+ * Prioriza dados críticos primeiro, dados secundários depois
+ */
 export async function getMLAccountData(accountId: string, studentId?: string) {
-  const [metrics, products, stock, health, history, campaigns, sellerRecovery] = await Promise.all([
-    getMLMetrics(accountId),
-    getMLProducts(accountId, studentId),
-    getMLFullStock(accountId),
-    getMLProductHealth(accountId),
-    getMLHealthHistory(accountId, 30),
-    getMLCampaigns(accountId, studentId),
-    getMLSellerRecovery(accountId)
-  ]);
-  
-  // Enriquecer produtos com health data
-  const healthMap = new Map(health.map(h => [h.health_score, h]));
-  
-  const productsWithHealth = products.map(product => {
-    const productHealth = health.find((_, index) => 
-      products[index]?.ml_item_id === product.ml_item_id
-    );
+  try {
+    // FASE 1: Dados críticos (paralelo)
+    const [metrics, products] = await Promise.all([
+      getMLMetrics(accountId),
+      getMLProducts(accountId, studentId),
+    ]);
+    
+    // FASE 2: Dados secundários (paralelo, mas não bloqueia a resposta inicial)
+    const secondaryDataPromise = Promise.all([
+      getMLFullStock(accountId).catch(() => []),
+      getMLProductHealth(accountId).catch(() => []),
+      getMLHealthHistory(accountId, 30).catch(() => []),
+      getMLCampaigns(accountId, studentId).catch(() => []),
+      getMLSellerRecovery(accountId).catch(() => null)
+    ]);
+    
+    // Retorna dados essenciais imediatamente
+    const [stock, health, history, campaigns, sellerRecovery] = await secondaryDataPromise;
+    
+    // Enriquecer produtos com health data (otimizado)
+    const healthMap = new Map(health.map(h => [h.ml_product_id, h]));
+    
+    const productsWithHealth = products.map(product => ({
+      ...product,
+      health: healthMap.get(product.ml_item_id) || undefined
+    }));
     
     return {
-      ...product,
-      health: productHealth || undefined
+      metrics,
+      products: productsWithHealth,
+      stock,
+      health,
+      history,
+      campaigns,
+      sellerRecovery
     };
-  });
-  
-  return {
-    metrics,
-    products: productsWithHealth,
-    stock,
-    health,
-    history,
-    campaigns,
-    sellerRecovery
-  };
+  } catch (error) {
+    console.error('Erro ao buscar dados da conta ML:', error);
+    // Retorna estrutura mínima em caso de erro
+    return {
+      metrics: null,
+      products: [],
+      stock: [],
+      health: [],
+      history: [],
+      campaigns: [],
+      sellerRecovery: null
+    };
+  }
 }
 
 /**

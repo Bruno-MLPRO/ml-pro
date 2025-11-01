@@ -10,11 +10,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, User as UserIcon, Lock, Check } from "lucide-react";
+import { Loader2, User as UserIcon, Lock, Check, Package, Plus, X, ExternalLink } from "lucide-react";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
 import InputMask from "react-input-mask";
+import { getAvailableApps, getMyStudentApps, addAppToMyProfile, removeAppFromMyProfile } from "@/services/api/students";
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Senha atual é obrigatória"),
@@ -56,6 +59,13 @@ export default function Profile() {
     estado: "",
     cep: "",
   });
+  
+  // Estados para Apps e Extensões
+  const [myApps, setMyApps] = useState<any[]>([]);
+  const [availableApps, setAvailableApps] = useState<any[]>([]);
+  const [isAddingApp, setIsAddingApp] = useState(false);
+  const [selectedAppId, setSelectedAppId] = useState<string>("");
+  const [loadingApps, setLoadingApps] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -65,8 +75,12 @@ export default function Profile() {
 
     if (user) {
       loadProfile();
+      if (userRole === 'student') {
+        loadMyApps();
+        loadAvailableApps();
+      }
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, userRole, navigate]);
 
   const loadProfile = async () => {
     try {
@@ -101,6 +115,75 @@ export default function Profile() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMyApps = async () => {
+    try {
+      const apps = await getMyStudentApps();
+      setMyApps(apps);
+    } catch (error) {
+      console.error('Error loading my apps:', error);
+      // Não mostra toast para não incomodar o usuário
+      // Apenas deixa a lista vazia
+      setMyApps([]);
+    }
+  };
+
+  const loadAvailableApps = async () => {
+    try {
+      const apps = await getAvailableApps();
+      setAvailableApps(apps);
+    } catch (error) {
+      console.error('Error loading available apps:', error);
+      // Não mostra toast, apenas deixa a lista vazia
+      setAvailableApps([]);
+    }
+  };
+
+  const handleAddApp = async () => {
+    if (!selectedAppId) return;
+
+    try {
+      setLoadingApps(true);
+      await addAppToMyProfile(selectedAppId);
+      toast({
+        title: "✅ App adicionado!",
+        description: "O app foi adicionado ao seu perfil com sucesso",
+      });
+      await loadMyApps();
+      setIsAddingApp(false);
+      setSelectedAppId("");
+    } catch (error: any) {
+      console.error('Error adding app:', error);
+      toast({
+        title: "Erro ao adicionar app",
+        description: error.message || "Não foi possível adicionar o app",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingApps(false);
+    }
+  };
+
+  const handleRemoveApp = async (studentAppId: string) => {
+    try {
+      setLoadingApps(true);
+      await removeAppFromMyProfile(studentAppId);
+      toast({
+        title: "App removido",
+        description: "O app foi removido do seu perfil",
+      });
+      await loadMyApps();
+    } catch (error: any) {
+      console.error('Error removing app:', error);
+      toast({
+        title: "Erro ao remover app",
+        description: error.message || "Não foi possível remover o app",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingApps(false);
     }
   };
 
@@ -584,6 +667,167 @@ export default function Profile() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Apps e Extensões Card - apenas para alunos */}
+            {userRole === 'student' && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Package className="w-5 h-5 text-primary" />
+                        <CardTitle>Apps e Extensões</CardTitle>
+                      </div>
+                      <CardDescription>
+                        Selecione os apps e extensões que você utiliza
+                      </CardDescription>
+                    </div>
+                    <Button onClick={() => setIsAddingApp(true)} size="sm">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar App
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {myApps.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p>Você ainda não selecionou nenhum app</p>
+                      <p className="text-sm">Clique em "Adicionar App" para começar</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {myApps.map((studentApp: any) => {
+                        const app = studentApp.apps_extensions;
+                        return (
+                          <div 
+                            key={studentApp.id}
+                            className="flex items-start justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-semibold">{app.name}</h4>
+                                {app.tag && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {app.tag}
+                                  </Badge>
+                                )}
+                              </div>
+                              {app.description && (
+                                <p className="text-sm text-muted-foreground mb-2">
+                                  {app.description}
+                                </p>
+                              )}
+                              {app.url && (
+                                <a
+                                  href={app.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                                >
+                                  Acessar
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveApp(studentApp.id)}
+                              disabled={loadingApps}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Dialog para Adicionar App */}
+            <Dialog open={isAddingApp} onOpenChange={setIsAddingApp}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Adicionar App/Extensão</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Selecione um app</Label>
+                    <Select value={selectedAppId} onValueChange={setSelectedAppId}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Escolha um app" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableApps
+                          .filter(app => !myApps.some((ma: any) => ma.app_id === app.id))
+                          .map(app => (
+                            <SelectItem key={app.id} value={app.id}>
+                              <div className="flex items-center gap-2">
+                                <span>{app.name}</span>
+                                {app.tag && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {app.tag}
+                                  </Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedAppId && (
+                      <div className="mt-3 p-3 bg-accent/50 rounded-lg">
+                        {(() => {
+                          const selectedApp = availableApps.find(a => a.id === selectedAppId);
+                          return selectedApp ? (
+                            <>
+                              <p className="text-sm font-medium">{selectedApp.name}</p>
+                              {selectedApp.description && (
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {selectedApp.description}
+                                </p>
+                              )}
+                              {selectedApp.price && (
+                                <p className="text-sm text-primary mt-2">
+                                  Valor: R$ {Number(selectedApp.price).toFixed(2)}
+                                </p>
+                              )}
+                            </>
+                          ) : null;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setIsAddingApp(false);
+                        setSelectedAppId("");
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button 
+                      onClick={handleAddApp} 
+                      disabled={!selectedAppId || loadingApps}
+                    >
+                      {loadingApps ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Adicionando...
+                        </>
+                      ) : (
+                        'Adicionar'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             {/* Change Password Card */}
             <Card>

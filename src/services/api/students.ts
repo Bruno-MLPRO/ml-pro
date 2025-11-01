@@ -147,20 +147,26 @@ export async function getJourneyTemplates(): Promise<JourneyTemplate[]> {
 }
 
 /**
- * Busca apps disponíveis (não atribuídos)
+ * Busca apps disponíveis
  */
 export async function getAvailableApps(): Promise<any[]> {
   const { data, error } = await supabase
     .from('apps_extensions')
     .select('*')
-    .eq('is_active', true)
     .order('name');
 
   if (error) {
+    console.error('Error loading available apps:', error);
     throw error;
   }
 
-  return data || [];
+  // Filtra por is_active se a coluna existir
+  const filteredData = data?.filter(app => {
+    // Se is_active existe, usa; se não, considera ativo
+    return app.is_active === undefined || app.is_active === true;
+  }) || [];
+
+  return filteredData;
 }
 
 /**
@@ -235,5 +241,76 @@ export async function getConsolidatedAccountMetrics(
     : 0;
 
   return consolidated;
+}
+
+/**
+ * Busca apps atribuídos a um estudante (para próprio aluno visualizar)
+ */
+export async function getMyStudentApps(): Promise<any[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  
+  if (!userData.user) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('student_apps')
+    .select(`
+      id,
+      app_id,
+      created_at,
+      apps_extensions!student_apps_app_id_fkey (
+        id,
+        name,
+        description,
+        url,
+        price,
+        tag
+      )
+    `)
+    .eq('student_id', userData.user.id);
+
+  if (error) {
+    console.error('Error loading my apps:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+/**
+ * Adiciona um app para o próprio estudante
+ */
+export async function addAppToMyProfile(appId: string): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  
+  if (!userData.user) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  const { error } = await supabase
+    .from('student_apps')
+    .insert({
+      student_id: userData.user.id,
+      app_id: appId
+    });
+
+  if (error) {
+    throw error;
+  }
+}
+
+/**
+ * Remove um app do próprio estudante
+ */
+export async function removeAppFromMyProfile(studentAppId: string): Promise<void> {
+  const { error } = await supabase
+    .from('student_apps')
+    .delete()
+    .eq('id', studentAppId);
+
+  if (error) {
+    throw error;
+  }
 }
 

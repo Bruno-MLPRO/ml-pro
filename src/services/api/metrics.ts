@@ -1,11 +1,14 @@
 // Serviço de API para métricas
+// ⚠️ REFATORADO: Agora usa a camada de domínio para cálculos de shipping
 
 import { supabase } from '@/integrations/supabase/client';
 import { calculateSalesMetrics, calculateAdsMetrics } from '@/lib/calculations';
+import { productMapper } from '@/domain/mappers/ProductMapper';
+import { shippingCalculator } from '@/domain/services/ShippingCalculator';
 import type { ConsolidatedMetrics, MonthlyMetrics, ProductAdsMetrics } from '@/types/metrics';
 import { getMLOrders } from './mercadoLivre';
 import { getMLCampaigns } from './mercadoLivre';
-import type { MLCampaign } from '@/types/mercadoLivre';
+import type { MLCampaign, MLProduct } from '@/types/mercadoLivre';
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
@@ -16,6 +19,7 @@ const MAX_PAGES = 10;
 export async function getConsolidatedMetrics(
   periodDays: number = 30
 ): Promise<ConsolidatedMetrics> {
+  console.log('🚀 getConsolidatedMetrics: Iniciando busca de métricas consolidadas...');
   const periodEnd = new Date();
   const periodStart = new Date();
   periodStart.setDate(periodStart.getDate() - periodDays);
@@ -56,61 +60,57 @@ export async function getConsolidatedMetrics(
     currentPage++;
   }
 
+  console.log(`📊 Total de pedidos encontrados: ${allOrders.length}`);
+
   // Calcular métricas de vendas
   const salesMetrics = calculateSalesMetrics(allOrders);
+  console.log('💰 Métricas de vendas calculadas:', salesMetrics);
 
   // 2. Produtos por tipo de envio
+  // ✅ REFATORADO: Agora usa ShippingCalculator da camada de domínio
+  // Query simplificada: apenas campos necessários para cálculo de shipping
   const { data: productsData, error: productsError } = await supabase
     .from('mercado_livre_products')
-    .select('shipping_mode, logistic_type, shipping_modes, logistic_types')
+    .select('id, status, shipping_mode, logistic_type, shipping_modes, logistic_types')
     .eq('status', 'active');
-
+  
+  console.log(`📦 Total de produtos ativos encontrados: ${productsData?.length || 0}`);
+  
   if (productsError) {
-    throw productsError;
+    console.error('❌ Erro ao buscar produtos:', productsError);
+    // Se houver erro, continuar com shipping stats zerados ao invés de quebrar
+    return {
+      totalRevenue: salesMetrics.totalRevenue,
+      totalSales: salesMetrics.totalSales,
+      averageTicket: salesMetrics.averageTicket,
+      shippingStats: {
+        correios: 0,
+        envio_proprio: 0,
+        flex: 0,
+        agencias: 0,
+        coleta: 0,
+        full: 0,
+        total: 0
+      },
+      adsMetrics: {
+        totalSpend: 0,
+        totalRevenue: 0,
+        advertisedSales: 0,
+        avgRoas: 0,
+        avgAcos: 0
+      }
+    };
   }
 
-  const total = productsData?.length || 0;
+  // Converter produtos para modelos de domínio e calcular estatísticas
+  // Cast para MLProduct[] com campos mínimos necessários
+  const domainProducts = productMapper.toDomainArray((productsData || []) as any as MLProduct[]);
+  console.log(`🔄 Produtos convertidos para domínio: ${domainProducts.length}`);
   
-  // 📦 Lógica atualizada: Um produto pode contar em MÚLTIPLAS categorias
-  // Exemplo: um produto pode ter ME2 (FLEX) + Custom (Correios) simultaneamente
+  const shippingStats = shippingCalculator.calculateSimple(domainProducts);
+  console.log('📊 Estatísticas de shipping calculadas:', shippingStats);
   
-  let flex = 0;
-  let agencias = 0;
-  let coleta = 0;
-  let full = 0;
-  let correios = 0;
-  let envio_proprio = 0;
-
-  for (const product of productsData || []) {
-    // Verificar shipping_modes (novo campo JSONB) ou fallback para shipping_mode (compatibilidade)
-    const modes = product.shipping_modes || (product.shipping_mode ? [product.shipping_mode] : []);
-    const types = product.logistic_types || (product.logistic_type ? [product.logistic_type] : []);
-
-    // Verificar se produto tem ME2 disponível
-    const hasMe2 = modes.includes('me2');
-    
-    // Se tem ME2, verificar todos os tipos logísticos
-    if (hasMe2) {
-      if (types.includes('self_service') || product.logistic_type === 'self_service') flex++;
-      if (types.includes('xd_drop_off') || product.logistic_type === 'xd_drop_off') agencias++;
-      if (types.includes('cross_docking') || product.logistic_type === 'cross_docking') coleta++;
-      if (types.includes('fulfillment') || product.logistic_type === 'fulfillment') full++;
-    }
-
-      // CORREIOS = Mercado Envios (drop_off)
-      // drop_off = vendedor leva produtos ao correio ou ponto de entrega (ME1 ou ME2 com drop_off)
-      const hasDropOffMode = modes.includes('drop_off') || product.shipping_mode === 'drop_off';
-      const hasDropOffType = types.includes('drop_off') || (modes.includes('me2') && product.logistic_type === 'drop_off');
-      if (hasDropOffMode || hasDropOffType) {
-        correios++;
-      }
-
-      // ENVIO PRÓPRIO = Not Specified (not_specified)
-      // Not Specified = vendedor NÃO especifica preço e deve entrar em contato com comprador
-      if (modes.includes('not_specified') || product.shipping_mode === 'not_specified') {
-        envio_proprio++;
-      }
-  }
+  const { flex, agencies: agencias, collection: coleta, full, correios, envio_proprio, total } = shippingStats;
 
   // 3. Métricas de Product Ads
   // As métricas já são calculadas para os últimos 30 dias quando sincronizadas
@@ -166,7 +166,7 @@ export async function getConsolidatedMetrics(
     total 
   });
 
-  return {
+  const result = {
     totalRevenue: salesMetrics.totalRevenue,
     totalSales: salesMetrics.totalSales,
     averageTicket: salesMetrics.averageTicket,
@@ -187,6 +187,9 @@ export async function getConsolidatedMetrics(
       avgAcos: adsMetrics.acos
     }
   };
+
+  console.log('✅ Métricas consolidadas finais:', result);
+  return result;
 }
 
 /**

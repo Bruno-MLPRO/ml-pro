@@ -9,7 +9,12 @@ import { getConsolidatedMetrics, getProductAdsMetrics } from '@/services/api/met
 export function useConsolidatedMetrics(periodDays: number = 30) {
   return useQuery({
     queryKey: ['consolidated-metrics', periodDays],
-    queryFn: () => getConsolidatedMetrics(periodDays),
+    queryFn: async () => {
+      console.log('🔍 Hook useConsolidatedMetrics: Iniciando busca...');
+      const result = await getConsolidatedMetrics(periodDays);
+      console.log('📥 Hook useConsolidatedMetrics: Dados recebidos:', result);
+      return result;
+    },
     staleTime: 2 * 60 * 1000, // 2 minutos
     refetchOnWindowFocus: false
   });

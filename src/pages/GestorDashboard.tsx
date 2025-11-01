@@ -168,6 +168,10 @@ const GestorDashboard = () => {
     }
   };
 
+  console.log('📊 GestorDashboard - consolidatedMetricsData:', consolidatedMetricsData);
+  console.log('📊 GestorDashboard - consolidatedMetrics (com fallback):', consolidatedMetrics);
+  console.log('⏳ GestorDashboard - loadingMetrics:', loadingMetrics);
+
   const loadData = async () => {
     try {
       const [noticesData, linksData, callsData] = await Promise.all([

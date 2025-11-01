@@ -96,11 +96,14 @@ export interface MLFullStock {
   id: string;
   ml_account_id: string;
   ml_item_id: string;
-  sku: string;
-  available_quantity: number;
-  reserved_quantity: number;
-  warehouse_id: string;
-  last_updated: string;
+  inventory_id: string;
+  available_units: number;
+  reserved_units: number;
+  inbound_units: number;
+  damaged_units: number;
+  lost_units: number;
+  stock_status: string;
+  synced_at: string;
   mercado_livre_products?: {
     title: string;
     thumbnail: string;

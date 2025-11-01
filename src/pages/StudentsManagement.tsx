@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import InputMask from "react-input-mask";
 import {
   Table,
   TableBody,
@@ -29,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Plus, Pencil, Trash2, ExternalLink, X, CheckCircle2, XCircle, User, Rocket, Package, Warehouse, RefreshCw, Building2 } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, ExternalLink, X, CheckCircle2, XCircle, User, Rocket, Package, Warehouse, RefreshCw, Building2, Store, Mail, Truck, PackageCheck, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Sidebar } from "@/components/Sidebar";
@@ -38,6 +39,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Student, Plan } from "@/types/students";
 import type { JourneyTemplate, StudentWithJourney } from "@/types/journeys";
+import MLider from "@/assets/MLider.png";
+import MLiderGold from "@/assets/MLiderGold.png";
+import MLiderPlatinum from "@/assets/MLiderPlatinum.png";
 
 // Interfaces removidas - usando tipos centralizados de @/types/students e @/types/journeys
 
@@ -47,6 +51,18 @@ type StudentWithJourneyExtended = StudentWithJourney & {
   in_progress_milestones?: Record<string, Array<{ title: string }>>;
   milestones_status?: Record<string, 'not_started' | 'in_progress' | 'completed'>;
   student_apps?: Array<{ id: string; name: string; color: string }>;
+  manager_name?: string | null;
+  manager_id?: string | null;
+  has_ml_decola?: boolean;
+  has_ml_flex?: boolean;
+  has_agencies?: boolean;
+  has_ml_full?: boolean;
+  has_ml_leader?: boolean;
+  ml_leader_level?: string | null;
+  ml_accounts_count?: number;
+  has_correios?: boolean;
+  has_coleta?: boolean;
+  has_envio_proprio?: boolean;
 };
 
 const DEFAULT_PASSWORD = "12345678";
@@ -80,6 +96,7 @@ export default function StudentsManagement() {
     turma: "",
     estado: "",
     estrutura_vendedor: "CPF",
+    cpf: "",
     tipo_pj: "",
     cnpj: "",
     possui_contador: false,
@@ -259,7 +276,7 @@ export default function StudentsManagement() {
     // Fetch Mercado Livre metrics for all students
     const { data: mlMetricsData } = await supabase
       .from("mercado_livre_metrics")
-      .select("student_id, has_decola, has_full, ml_account_id, updated_at")
+      .select("student_id, has_decola, has_full, is_mercado_lider, mercado_lider_level, ml_account_id, updated_at")
       .in("student_id", filteredStudentIds)
       .order("updated_at", { ascending: false });
 
@@ -268,6 +285,13 @@ export default function StudentsManagement() {
       .from("mercado_livre_products")
       .select("student_id, shipping_mode, logistic_type")
       .in("student_id", filteredStudentIds);
+
+    // Fetch count of ML accounts per student (only active accounts)
+    const { data: mlAccountsData } = await supabase
+      .from("mercado_livre_accounts")
+      .select("student_id")
+      .in("student_id", filteredStudentIds)
+      .eq("is_active", true);
 
     if (journeyIds.length === 0) {
       setStudents(profilesData || []);
@@ -356,21 +380,59 @@ export default function StudentsManagement() {
       }, [] as typeof studentMetricsRaw);
       const has_ml_decola = studentMetrics.some(m => m.has_decola === true);
       const has_ml_full = studentMetrics.some(m => m.has_full === true);
-      
-      // FLEX: shipping_mode = 'me2' AND logistic_type = 'self_service'
+
+      // Mercado Líder - maior nível entre as contas do aluno
+      const leaderRank: Record<string, number> = { platinum: 3, gold: 2, silver: 1, bronze: 1 };
+      let ml_leader_level: string | null = null;
+      let has_ml_leader = false;
+      studentMetrics.forEach(m => {
+        if (m.is_mercado_lider) {
+          has_ml_leader = true;
+          const curr = (m.mercado_lider_level || '').toLowerCase();
+          if (!ml_leader_level) {
+            ml_leader_level = curr;
+          } else {
+            const prevRank = leaderRank[ml_leader_level] || 0;
+            const currRank = leaderRank[curr] || 0;
+            if (currRank > prevRank) ml_leader_level = curr;
+          }
+        }
+      });
+
+      // Produtos do aluno
       const studentProducts = mlProductsData?.filter(p => p.student_id === profile.id) || [];
+      
+      // CORREIOS: shipping_mode = 'drop_off' OR (me2 AND logistic_type = 'drop_off')
+      const has_correios = studentProducts.some(p => 
+        p.shipping_mode === 'drop_off' || (p.shipping_mode === 'me2' && p.logistic_type === 'drop_off')
+      );
+
+      // FLEX: shipping_mode = 'me2' AND logistic_type = 'self_service'
       const has_ml_flex = studentProducts.some(p => 
         p.shipping_mode === 'me2' && p.logistic_type === 'self_service'
       );
 
-      // Check if student has agencies (products with xd_drop_off logistic type)
+      // AGÊNCIAS: shipping_mode = 'me2' AND logistic_type = 'xd_drop_off'
       const has_agencies = studentProducts.some(p => 
-        p.logistic_type === 'xd_drop_off'
+        p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
+      );
+
+      // COLETA: shipping_mode = 'me2' AND logistic_type = 'cross_docking'
+      const has_coleta = studentProducts.some(p => 
+        p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
+      );
+
+      // ENVIO PRÓPRIO: shipping_mode = 'not_specified'
+      const has_envio_proprio = studentProducts.some(p => 
+        p.shipping_mode === 'not_specified'
       );
 
       // Get manager name
       const manager = managers.find(m => m.id === journey?.manager_id);
       const manager_name = manager?.full_name;
+
+      // Count ML accounts for this student
+      const ml_accounts_count = mlAccountsData?.filter(acc => acc.student_id === profile.id).length || 0;
 
       return {
         ...profile,
@@ -385,6 +447,12 @@ export default function StudentsManagement() {
         has_ml_flex,
         has_ml_full,
         has_agencies,
+        has_ml_leader,
+        ml_leader_level,
+        ml_accounts_count,
+        has_correios,
+        has_coleta,
+        has_envio_proprio,
       };
     }) || [];
 
@@ -439,6 +507,11 @@ export default function StudentsManagement() {
         sistemas_externos: formData.sistemas_externos,
         mentoria_status: formData.mentoria_status,
       };
+
+      // Enviar CPF se estrutura for CPF
+      if (formData.estrutura_vendedor === 'CPF') {
+        studentData.cpf = formData.cpf;
+      }
 
       // Só enviar tipo_pj e cnpj se estrutura for PJ
       if (formData.estrutura_vendedor === 'PJ') {
@@ -524,6 +597,7 @@ export default function StudentsManagement() {
         turma: formData.turma,
         estado: formData.estado,
         estrutura_vendedor: formData.estrutura_vendedor,
+        cpf: formData.estrutura_vendedor === "CPF" ? formData.cpf : null,
         tipo_pj: formData.estrutura_vendedor === "PJ" ? formData.tipo_pj : null,
         cnpj: formData.estrutura_vendedor === "PJ" ? formData.cnpj : null,
         possui_contador: formData.possui_contador,
@@ -634,8 +708,8 @@ export default function StudentsManagement() {
 
 🗑️ Dados removidos:
 ${Object.entries(data.data_deleted)
-  .filter(([_, count]) => count > 0)
-  .map(([table, count]) => `• ${table}: ${count} registros`)
+  .filter(([_, count]) => (count as number) > 0)
+  .map(([table, count]) => `• ${table}: ${(count as number)} registros`)
   .join('\n')}
       `;
 
@@ -662,7 +736,7 @@ ${Object.entries(data.data_deleted)
     }
   };
 
-  const openEditDialog = (student: Student) => {
+  const openEditDialog = (student: any) => {
     setSelectedStudent(student);
     setFormData({
       full_name: student.full_name,
@@ -671,6 +745,7 @@ ${Object.entries(data.data_deleted)
       turma: student.turma || "",
       estado: (student as any).estado || "",
       estrutura_vendedor: student.estrutura_vendedor || "CPF",
+      cpf: (student as any).cpf || "",
       tipo_pj: student.tipo_pj || "",
       cnpj: (student as any).cnpj || "",
       possui_contador: student.possui_contador ?? false,
@@ -799,7 +874,7 @@ ${Object.entries(data.data_deleted)
     setSelectedStudentMilestones(filteredMilestones);
   };
 
-  const openViewDetailsDialog = (student: Student) => {
+  const openViewDetailsDialog = (student: any) => {
     navigate(`/gestor/aluno/${student.id}`);
   };
 
@@ -946,6 +1021,7 @@ ${Object.entries(data.data_deleted)
       turma: "",
       estado: "",
       estrutura_vendedor: "CPF",
+      cpf: "",
       tipo_pj: "",
       cnpj: "",
       possui_contador: false,
@@ -998,11 +1074,21 @@ ${Object.entries(data.data_deleted)
 
       <div className="grid gap-2">
         <Label htmlFor="phone">Telefone</Label>
-        <Input
-          id="phone"
+        <InputMask
+          mask="(99) 99999-9999"
           value={formData.phone}
           onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-        />
+        >
+          {/* @ts-ignore */}
+          {(inputProps: any) => (
+            <Input
+              {...inputProps}
+              id="phone"
+              type="tel"
+              placeholder="(11) 99999-8888"
+            />
+          )}
+        </InputMask>
       </div>
 
       <div className="grid gap-2">
@@ -1061,6 +1147,26 @@ ${Object.entries(data.data_deleted)
         </Select>
       </div>
 
+      {formData.estrutura_vendedor === "CPF" && (
+        <div className="grid gap-2">
+          <Label htmlFor="cpf">Número do CPF</Label>
+          <InputMask
+            mask="999.999.999-99"
+            value={formData.cpf}
+            onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
+          >
+            {/* @ts-ignore */}
+            {(inputProps: any) => (
+              <Input
+                {...inputProps}
+                id="cpf"
+                placeholder="000.000.000-00"
+              />
+            )}
+          </InputMask>
+        </div>
+      )}
+
       {formData.estrutura_vendedor === "PJ" && (
         <>
           <div className="grid gap-2">
@@ -1079,12 +1185,20 @@ ${Object.entries(data.data_deleted)
           {formData.tipo_pj && (
             <div className="grid gap-2">
               <Label htmlFor="cnpj">Número do CNPJ</Label>
-              <Input
-                id="cnpj"
+              <InputMask
+                mask="99.999.999/9999-99"
                 value={formData.cnpj}
                 onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
-                placeholder="00.000.000/0000-00"
-              />
+              >
+                {/* @ts-ignore */}
+                {(inputProps: any) => (
+                  <Input
+                    {...inputProps}
+                    id="cnpj"
+                    placeholder="00.000.000/0000-00"
+                  />
+                )}
+              </InputMask>
             </div>
           )}
         </>
@@ -1431,6 +1545,23 @@ ${Object.entries(data.data_deleted)
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+
+              {/* Dialog de Edição */}
+              <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Editar Aluno</DialogTitle>
+                    <DialogDescription>Atualize os dados do aluno</DialogDescription>
+                  </DialogHeader>
+                  <StudentForm />
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleUpdateStudent}>Salvar Alterações</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
 
@@ -1439,19 +1570,25 @@ ${Object.entries(data.data_deleted)
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="font-semibold">Nome</TableHead>
-                    <TableHead className="font-semibold">Email</TableHead>
+                    <TableHead className="font-semibold">Gestor</TableHead>
                     <TableHead className="font-semibold">Plano</TableHead>
-                    <TableHead className="font-semibold">CPF/CNPJ</TableHead>
                     <TableHead className="font-semibold text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <User className="h-4 w-4" />
                         <span>Contador</span>
                       </div>
                     </TableHead>
+                    <TableHead className="font-semibold">CPF/CNPJ</TableHead>
                     <TableHead className="font-semibold text-center">
                       <div className="flex items-center justify-center gap-1.5">
-                        <Rocket className="h-4 w-4" />
-                        <span>Decola</span>
+                        <Store className="h-4 w-4" />
+                        <span>Contas</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Mail className="h-4 w-4" />
+                        <span>Correios</span>
                       </div>
                     </TableHead>
                     <TableHead className="font-semibold text-center">
@@ -1468,8 +1605,32 @@ ${Object.entries(data.data_deleted)
                     </TableHead>
                     <TableHead className="font-semibold text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        <PackageCheck className="h-4 w-4" />
+                        <span>Coleta</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
                         <Warehouse className="h-4 w-4" />
                         <span>Full</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Truck className="h-4 w-4" />
+                        <span>Envio Próprio</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Rocket className="h-4 w-4" />
+                        <span>Decola</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span>Ícone</span>
+                        <span>Líder</span>
                       </div>
                     </TableHead>
                     <TableHead className="text-right font-semibold">Ações</TableHead>
@@ -1490,55 +1651,88 @@ ${Object.entries(data.data_deleted)
                       >
                         <TableCell className="font-medium">
                           <div>
-                            <div>
-                              {student.full_name}
-                              {student.mentoria_status !== "Ativo" && (
-                                <span className="text-muted-foreground italic ml-2">(Inativo)</span>
-                              )}
-                            </div>
-                            {student.manager_name && (
-                              <div className="text-sm text-muted-foreground/60 mt-0.5">
-                                {student.manager_name}
-                              </div>
+                            {student.full_name}
+                            {student.mentoria_status !== "Ativo" && (
+                              <span className="text-muted-foreground italic ml-2">(Inativo)</span>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{student.email}</TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {student.manager_name ? student.manager_name.split(' ')[0] : "-"}
+                          </span>
+                        </TableCell>
                         <TableCell>
                           <span className="font-medium">{student.turma || "-"}</span>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={documentType === 'CPF' ? 'secondary' : documentType === 'MEI' ? 'default' : 'outline'}>
-                              {documentType}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">{documentNumber}</span>
-                          </div>
-                        </TableCell>
                         <TableCell className="text-center">
                           {student.possui_contador ? (
-                            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mx-auto" />
+                            <Check className="h-5 w-5 text-green-600 dark:text-green-400 mx-auto" />
                           ) : (
-                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                            <X className="h-5 w-5 text-red-500 dark:text-red-400 mx-auto" />
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {student.has_ml_decola ? (
-                            <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mx-auto" />
+                          <Badge variant={documentType === 'CPF' ? 'secondary' : documentType === 'MEI' ? 'default' : 'outline'}>
+                            {documentType}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.ml_accounts_count && student.ml_accounts_count > 0 ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <Store className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                {student.ml_accounts_count}
+                              </span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                const managerName = student.manager_name || "seu gestor";
+                                const studentPhone = student.phone?.replace(/\D/g, '') || "";
+                                if (studentPhone) {
+                                  const message = `Ola ${student.full_name}!\n\nEstou enviando esta mensagem para lembrar voce de cadastrar sua conta do Mercado Livre no sistema ML PRO.\n\nAcesse: https://ml-pro-five.vercel.app/\n\nIsso e importante para que ${managerName} possa acompanhar melhor o seu progresso e ajudar voce a alcançar melhores resultados!\n\nQualquer duvida, estou a disposicao!`;
+                                  const whatsappUrl = `https://wa.me/55${studentPhone}?text=${encodeURIComponent(message)}`;
+                                  window.open(whatsappUrl, '_blank');
+                                } else {
+                                  toast({
+                                    title: "Telefone não cadastrado",
+                                    description: "Este aluno não possui um telefone cadastrado.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                              className="inline-flex items-center justify-center hover:opacity-70 transition-opacity cursor-pointer"
+                              title="Enviar lembrete via WhatsApp"
+                            >
+                              <X className="h-5 w-5 text-red-500 dark:text-red-400" />
+                            </button>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_correios ? (
+                            <CheckCircle2 className="h-5 w-5 text-cyan-600 dark:text-cyan-400 mx-auto" />
                           ) : (
                             <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
                           )}
                         </TableCell>
                         <TableCell className="text-center">
                           {student.has_ml_flex ? (
-                            <CheckCircle2 className="h-5 w-5 text-purple-600 dark:text-purple-400 mx-auto" />
+                            <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mx-auto" />
                           ) : (
                             <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
                           )}
                         </TableCell>
                         <TableCell className="text-center">
                           {student.has_agencies ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mx-auto" />
+                            <CheckCircle2 className="h-5 w-5 text-purple-600 dark:text-purple-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_coleta ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mx-auto" />
                           ) : (
                             <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
                           )}
@@ -1548,6 +1742,45 @@ ${Object.entries(data.data_deleted)
                             <CheckCircle2 className="h-5 w-5 text-orange-600 dark:text-orange-400 mx-auto" />
                           ) : (
                             <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_envio_proprio ? (
+                            <CheckCircle2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400 mx-auto" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground/40 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_ml_decola ? (
+                            <Check className="h-5 w-5 text-green-600 dark:text-green-400 mx-auto" />
+                          ) : (
+                            <X className="h-5 w-5 text-red-500 dark:text-red-400 mx-auto" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {student.has_ml_leader ? (
+                            <span className="inline-flex items-center justify-center gap-2">
+                              <img
+                                src={
+                                  student.ml_leader_level === 'platinum' ? MLiderPlatinum : 
+                                  student.ml_leader_level === 'gold' ? MLiderGold : 
+                                  MLider
+                                }
+                                alt="Selo Mercado Líder"
+                                className="h-5 w-5"
+                              />
+                              <span className="text-sm font-medium">
+                                {
+                                  student.ml_leader_level === 'platinum' ? 'Mercado Líder Platinum' : 
+                                  student.ml_leader_level === 'gold' ? 'Mercado Líder Gold' : 
+                                  student.ml_leader_level === 'silver' ? 'Mercado Líder' :
+                                  'Mercado Líder'
+                                }
+                              </span>
+                            </span>
+                          ) : (
+                            <X className="h-5 w-5 text-red-500 dark:text-red-400 mx-auto" />
                           )}
                         </TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -1566,307 +1799,6 @@ ${Object.entries(data.data_deleted)
             </div>
           </TabsContent>
         </Tabs>
-
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Editar Aluno</DialogTitle>
-              <DialogDescription>Atualize os dados do aluno</DialogDescription>
-            </DialogHeader>
-            <StudentForm />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleUpdateStudent}>Salvar Alterações</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isViewDetailsDialogOpen} onOpenChange={setIsViewDetailsDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                Detalhes de {selectedStudent?.full_name}
-              </DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-6 py-4">
-              {/* Seção 1: Informações do Aluno */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">Informações do Aluno</CardTitle>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        openEditDialog(selectedStudent!);
-                        setIsViewDetailsDialogOpen(false);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4 mr-2" />
-                      Editar
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Nome completo</Label>
-                    <p className="text-sm font-medium">{selectedStudent?.full_name}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Email</Label>
-                    <p className="text-sm font-medium">{selectedStudent?.email}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Telefone</Label>
-                    <p className="text-sm font-medium">{selectedStudent?.phone || "-"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Turma ML PRO</Label>
-                    <p className="text-sm font-medium">{selectedStudent?.turma || "-"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Estado</Label>
-                    <p className="text-sm font-medium">{(selectedStudent as any)?.estado || "-"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Estrutura do vendedor</Label>
-                    <p className="text-sm font-medium">{selectedStudent?.estrutura_vendedor || "-"}</p>
-                  </div>
-                  {selectedStudent?.estrutura_vendedor === "PJ" && (
-                    <>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Tipo de PJ</Label>
-                        <p className="text-sm font-medium">{selectedStudent?.tipo_pj || "-"}</p>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">CNPJ</Label>
-                        <p className="text-sm font-medium">{(selectedStudent as any)?.cnpj || "-"}</p>
-                      </div>
-                    </>
-                  )}
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Possui contador</Label>
-                    <p className="text-sm font-medium">{selectedStudent?.possui_contador ? "Sim" : "Não"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Caixa (Capital de Giro)</Label>
-                    <p className="text-sm font-medium">
-                      {selectedStudent?.caixa 
-                        ? `R$ ${Number(selectedStudent.caixa).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : "-"
-                      }
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Hub Logístico</Label>
-                    <p className="text-sm font-medium">{selectedStudent?.hub_logistico || "-"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Sistemas Externos</Label>
-                    <p className="text-sm font-medium">{selectedStudent?.sistemas_externos || "-"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Status da Mentoria</Label>
-                    <p className="text-sm font-medium">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          selectedStudent?.mentoria_status === "Ativo"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                            : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
-                        }`}
-                      >
-                        {selectedStudent?.mentoria_status || "Ativo"}
-                      </span>
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Seção 2: Apps e Extensões */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Apps e Extensões</h3>
-                  <Select onValueChange={handleAddAppToStudent}>
-                    <SelectTrigger className="w-[200px] bg-background">
-                      <SelectValue placeholder="+ Adicionar App" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      {availableApps
-                        .filter(app => !studentApps.some(sa => sa.app_id === app.id))
-                        .map(app => (
-                          <SelectItem key={app.id} value={app.id}>
-                            {app.name}
-                          </SelectItem>
-                        ))
-                      }
-                      {availableApps.filter(app => !studentApps.some(sa => sa.app_id === app.id)).length === 0 && (
-                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                          Todos os apps já foram adicionados
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {studentApps.length === 0 ? (
-                    <p className="text-sm text-muted-foreground col-span-2 text-center py-4">
-                      Nenhum app ou extensão cadastrado
-                    </p>
-                  ) : (
-                    studentApps.map((studentApp) => {
-                      const app = studentApp.apps_extensions;
-                      return (
-                        <div
-                          key={studentApp.id}
-                          className="flex items-start gap-3 p-3 border rounded-lg bg-card"
-                        >
-                          <div
-                            className="w-3 h-3 rounded-full mt-1 flex-shrink-0"
-                            style={{ backgroundColor: app.color || "#3B82F6" }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <h4 className="font-medium text-sm">{app.name}</h4>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 flex-shrink-0"
-                                onClick={() => handleRemoveAppFromStudent(studentApp.id)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                            {app.description && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {app.description}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                              {app.url && (
-                                <a
-                                  href={app.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                                >
-                                  Link <ExternalLink className="h-3 w-3" />
-                                </a>
-                              )}
-                              {app.price && (
-                                <span className="text-xs text-muted-foreground">
-                                  R$ {Number(app.price).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês
-                                </span>
-                              )}
-                              {app.coupon && (
-                                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
-                                  {app.coupon}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {/* Seção 3: Jornada */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Jornada</h3>
-                  <Select 
-                    value={dialogJourneyId} 
-                    onValueChange={(value) => {
-                      setDialogJourneyId(value);
-                      if (selectedStudent) {
-                        fetchMilestonesForJourney(selectedStudent.id, value);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-[200px] bg-background">
-                      <SelectValue placeholder="Selecione a jornada" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      {journeyTemplates.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-3">
-                  {selectedStudentMilestones.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-8">
-                      Nenhuma etapa encontrada para esta jornada
-                    </p>
-                  ) : (
-                    selectedStudentMilestones.map((milestone) => (
-                      <div
-                        key={milestone.id}
-                        className="flex items-start gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="flex-1">
-                          <h4 className="font-medium mb-1">{milestone.title}</h4>
-                          {milestone.description && (
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {milestone.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-2">
-                            <Label htmlFor={`status-${milestone.id}`} className="text-xs">
-                              Status:
-                            </Label>
-                            <Select
-                              value={milestone.status}
-                              onValueChange={(value) => handleUpdateMilestoneStatus(milestone.id, value)}
-                            >
-                              <SelectTrigger id={`status-${milestone.id}`} className="w-[180px] h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="not_started">Não iniciado</SelectItem>
-                                <SelectItem value="in_progress">Em progresso</SelectItem>
-                                <SelectItem value="completed">Concluído</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              milestone.status === 'completed'
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : milestone.status === 'in_progress'
-                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                                : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                            }`}
-                          >
-                            {milestone.status === 'completed' ? 'Concluído' : 
-                             milestone.status === 'in_progress' ? 'Em progresso' : 
-                             'Não iniciado'}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button onClick={() => setIsViewDetailsDialogOpen(false)}>
-                Fechar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );

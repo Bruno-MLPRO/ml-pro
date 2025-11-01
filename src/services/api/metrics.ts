@@ -191,20 +191,35 @@ export async function getConsolidatedMetrics(
 
 /**
  * Busca métricas de Product Ads para um array de contas
+ * Query otimizada buscando apenas campos necessários
  */
 export async function getProductAdsMetrics(accountIds: string[]): Promise<ProductAdsMetrics | null> {
   if (!accountIds || accountIds.length === 0) {
     return null;
   }
 
+  // Query otimizada: busca apenas campos necessários para cálculo
   const { data: campaignsData, error } = await supabase
     .from('mercado_livre_campaigns')
-    .select('*')
-    .in('account_id', accountIds);
+    .select('total_spend, ad_revenue, advertised_sales, status, products_count')
+    .in('ml_account_id', accountIds);
 
   if (error) {
     console.error('Error loading Product Ads metrics:', error);
     return null;
+  }
+
+  if (!campaignsData || campaignsData.length === 0) {
+    // Retornar métricas zeradas se não houver campanhas
+    return {
+      totalSpend: 0,
+      totalRevenue: 0,
+      totalSales: 0,
+      roas: 0,
+      acos: 0,
+      totalProductsInAds: 0,
+      activeCampaigns: 0
+    };
   }
 
   return calculateAdsMetrics((campaignsData || []) as MLCampaign[]);

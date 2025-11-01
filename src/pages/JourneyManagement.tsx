@@ -45,14 +45,13 @@ import {
 // Interfaces removidas - usando tipos centralizados de @/types/journeys
 import type { MilestoneTemplate, JourneyTemplate } from "@/types/journeys";
 
-const PHASES = ['Onboarding', 'Estrutura Inicial', 'Profissionalização'];
-
 // SortableMilestoneProps local estendido com campos específicos desta página
 interface SortableMilestoneProps {
   milestone: MilestoneTemplate;
   isLast: boolean;
   isEditing: boolean;
   editForm: MilestoneTemplate;
+  availablePhases: string[];
   onEdit: (milestone: MilestoneTemplate) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -65,6 +64,7 @@ const SortableMilestone = ({
   isLast,
   isEditing,
   editForm,
+  availablePhases,
   onEdit,
   onSave,
   onCancel,
@@ -130,7 +130,7 @@ const SortableMilestone = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PHASES.map((phase) => (
+                {availablePhases.map((phase) => (
                   <SelectItem key={phase} value={phase}>
                     {phase}
                   </SelectItem>
@@ -222,6 +222,8 @@ const JourneyManagement = () => {
     phase: 'Onboarding',
     order_index: 0,
   });
+  
+  const [availablePhases, setAvailablePhases] = useState<string[]>(['Onboarding', 'Estrutura Inicial', 'Profissionalização']);
 
   useEffect(() => {
     if (!authLoading && (!user || (userRole !== 'manager' && userRole !== 'administrator'))) {
@@ -272,6 +274,14 @@ const JourneyManagement = () => {
 
       if (error) throw error;
       setMilestones(data || []);
+      
+      // Extrair fases únicas dos milestones existentes
+      if (data && data.length > 0) {
+        const uniquePhases = [...new Set(data.map(m => m.phase))].filter(Boolean);
+        if (uniquePhases.length > 0) {
+          setAvailablePhases(uniquePhases);
+        }
+      }
     } catch (error) {
       console.error('Error loading milestones:', error);
     }
@@ -542,7 +552,7 @@ const JourneyManagement = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {PHASES.map((phase) => (
+                        {availablePhases.map((phase) => (
                           <SelectItem key={phase} value={phase}>
                             {phase}
                           </SelectItem>
@@ -582,6 +592,7 @@ const JourneyManagement = () => {
                       isLast={index === milestones.length - 1}
                       isEditing={editingId === milestone.id}
                       editForm={editForm}
+                      availablePhases={availablePhases}
                       onEdit={startEdit}
                       onSave={saveEdit}
                       onCancel={cancelEdit}

@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, User as UserIcon, Lock, Check } from "lucide-react";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
+import InputMask from "react-input-mask";
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Senha atual é obrigatória"),
@@ -327,13 +328,22 @@ export default function Profile() {
                     <div>
                       <Label htmlFor="phone">Telefone</Label>
                       {isEditingProfile ? (
-                        <Input
-                          id="phone"
+                        <InputMask
+                          mask="(99) 99999-9999"
                           value={editForm.phone}
                           onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                          placeholder="(00) 00000-0000"
-                          className="mt-1"
-                        />
+                        >
+                          {/* @ts-ignore */}
+                          {(inputProps: any) => (
+                            <Input
+                              {...inputProps}
+                              id="phone"
+                              type="tel"
+                              placeholder="(11) 99999-8888"
+                              className="mt-1"
+                            />
+                          )}
+                        </InputMask>
                       ) : (
                         <p className="text-foreground font-medium mt-1">{profileData.phone || "-"}</p>
                       )}
@@ -344,13 +354,21 @@ export default function Profile() {
                       <div>
                         <Label htmlFor="cpf">CPF</Label>
                         {isEditingProfile ? (
-                          <Input
-                            id="cpf"
+                          <InputMask
+                            mask="999.999.999-99"
                             value={editForm.cpf}
                             onChange={(e) => setEditForm({ ...editForm, cpf: e.target.value })}
-                            placeholder="000.000.000-00"
-                            className="mt-1"
-                          />
+                          >
+                            {/* @ts-ignore */}
+                            {(inputProps: any) => (
+                              <Input
+                                {...inputProps}
+                                id="cpf"
+                                placeholder="000.000.000-00"
+                                className="mt-1"
+                              />
+                            )}
+                          </InputMask>
                         ) : (
                           <p className="text-foreground font-medium mt-1">{profileData?.cpf || "-"}</p>
                         )}
@@ -378,14 +396,22 @@ export default function Profile() {
                       <div>
                         <Label htmlFor="cnpj">Número do CNPJ</Label>
                         {isEditingProfile ? (
-                          <Input
-                            id="cnpj"
+                          <InputMask
+                            mask="99.999.999/9999-99"
                             value={editForm.cnpj}
                             onChange={(e) => setEditForm({ ...editForm, cnpj: e.target.value })}
-                            placeholder="00.000.000/0000-00"
                             disabled={editForm.tipo_pj === "Não tenho" || !editForm.tipo_pj}
-                            className="mt-1"
-                          />
+                          >
+                            {/* @ts-ignore */}
+                            {(inputProps: any) => (
+                              <Input
+                                {...inputProps}
+                                id="cnpj"
+                                placeholder="00.000.000/0000-00"
+                                className="mt-1"
+                              />
+                            )}
+                          </InputMask>
                         ) : (
                           <p className="text-foreground font-medium mt-1">{profileData?.cnpj || "-"}</p>
                         )}
@@ -535,13 +561,21 @@ export default function Profile() {
                     <div>
                       <Label htmlFor="cep">CEP</Label>
                       {isEditingProfile ? (
-                        <Input
-                          id="cep"
+                        <InputMask
+                          mask="99999-999"
                           value={editForm.cep}
                           onChange={(e) => setEditForm({ ...editForm, cep: e.target.value })}
-                          placeholder="00000-000"
-                          className="mt-1"
-                        />
+                        >
+                          {/* @ts-ignore */}
+                          {(inputProps: any) => (
+                            <Input
+                              {...inputProps}
+                              id="cep"
+                              placeholder="00000-000"
+                              className="mt-1"
+                            />
+                          )}
+                        </InputMask>
                       ) : (
                         <p className="text-foreground font-medium mt-1">{profileData?.cep || "-"}</p>
                       )}

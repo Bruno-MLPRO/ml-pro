@@ -25,7 +25,8 @@ export function calculateAdsMetrics(campaigns: MLCampaign[]): ProductAdsMetrics 
   const totalSpend = activeCampaigns.reduce((sum, c) => sum + (Number(c.total_spend) || 0), 0);
   const totalRevenue = activeCampaigns.reduce((sum, c) => sum + (Number(c.ad_revenue) || 0), 0);
   const totalSales = activeCampaigns.reduce((sum, c) => sum + (Number(c.advertised_sales) || 0), 0);
-  const totalProductsInAds = activeCampaigns.reduce((sum, c) => sum + (c.advertised_sales || 0), 0);
+  // Usar products_count se disponível, senão usar advertised_sales como fallback
+  const totalProductsInAds = activeCampaigns.reduce((sum, c) => sum + (Number(c.products_count || c.advertised_sales) || 0), 0);
 
   return {
     totalSpend,

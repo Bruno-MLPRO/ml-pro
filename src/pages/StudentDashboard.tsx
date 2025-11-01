@@ -16,8 +16,8 @@ import { useMLAccounts, useSyncMLAccount } from '@/hooks/queries/useMLAccounts';
 import { useStudentMetrics, useStudentMonthlyMetrics } from '@/hooks/queries/useMLMetrics';
 import { useMLOrders } from '@/hooks/queries/useMLOrders';
 import { useProductAdsMetrics } from '@/hooks/queries/useConsolidatedMetrics';
+import { useShippingStats } from '@/hooks/queries/useShippingStats';
 import { formatCurrency, formatDescription } from '@/lib/formatters';
-import { calculateShippingStats } from '@/lib/calculations';
 import type { MLAccount, MLMetrics } from '@/types/mercadoLivre';
 import type { ShippingStats, ProductAdsMetrics } from '@/types/metrics';
 import type { Notice, ImportantLink, CallSchedule } from '@/types/common';
@@ -48,8 +48,8 @@ const StudentDashboard = () => {
   const accountIds = mlAccounts.map(acc => acc.id);
   const { data: productAdsMetrics } = useProductAdsMetrics(accountIds);
   
-  // Calcular shipping stats dos produtos ativos
-  const [shippingStats, setShippingStats] = useState<ShippingStats | null>(null);
+  // Calcular shipping stats dos produtos ativos - usando React Query para cache
+  const { data: shippingStats } = useShippingStats(user?.id || null, accountIds);
 
   // Tratar parâmetros de retorno do OAuth do ML
   useEffect(() => {
@@ -209,25 +209,6 @@ const StudentDashboard = () => {
       };
     }
   }, [user, userRole, authLoading, navigate]);
-
-  // Calcular shipping stats quando produtos mudarem
-  useEffect(() => {
-    if (mlAccounts.length > 0 && user) {
-      // Buscar produtos ativos para calcular shipping stats
-      supabase
-        .from('mercado_livre_products')
-        .select('shipping_mode, logistic_type, status')
-        .eq('student_id', user.id)
-        .eq('status', 'active')
-        .then(({ data: products }) => {
-          if (products) {
-            // calculateShippingStats já retorna o formato correto (com objetos)
-            const stats = calculateShippingStats(products as any);
-            setShippingStats(stats);
-          }
-        });
-    }
-  }, [mlAccounts, user]);
 
   const loadDashboardData = async () => {
     try {
@@ -618,7 +599,7 @@ const StudentDashboard = () => {
           )}
 
           {/* Badges de Tipo de Envio */}
-          {mlAccounts.length > 0 && shippingStats && (
+          {shippingStats && (
             <Card className="mb-6">
               <CardHeader>
                 <div className="flex items-center gap-2">

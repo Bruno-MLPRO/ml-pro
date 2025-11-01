@@ -9,7 +9,8 @@ import type {
   MLFullStock, 
   MLCampaign,
   ProductHealth,
-  HealthHistory
+  HealthHistory,
+  MLSellerRecovery
 } from '@/types/mercadoLivre';
 import type { PaginatedOrdersResult } from '@/types/metrics';
 
@@ -151,6 +152,90 @@ export async function getMLOrders(
 }
 
 /**
+ * Busca dados diários dos últimos 30 dias para uma conta ML
+ */
+export async function getMLDailyMetrics(
+  accountId: string,
+  studentId?: string,
+  periodDays: number = 30
+): Promise<Array<{ date: string; sales: number; revenue: number; ticket: number }>> {
+  const periodStart = new Date();
+  periodStart.setDate(periodStart.getDate() - periodDays);
+  
+  let allOrders: any[] = [];
+  let currentPage = 0;
+  let hasMore = true;
+  
+  while (hasMore && currentPage < MAX_PAGES) {
+    const rangeStart = currentPage * PAGE_SIZE;
+    const rangeEnd = rangeStart + PAGE_SIZE - 1;
+    
+    let query = supabase
+      .from('mercado_livre_orders')
+      .select('total_amount, paid_amount, date_created, ml_order_id')
+      .eq('ml_account_id', accountId)
+      .eq('status', 'paid')
+      .gte('date_created', periodStart.toISOString())
+      .order('date_created', { ascending: true })
+      .range(rangeStart, rangeEnd);
+    
+    const { data: pageOrders, error } = await query;
+    
+    if (error) {
+      throw error;
+    }
+    
+    if (pageOrders && pageOrders.length > 0) {
+      allOrders = [...allOrders, ...pageOrders];
+      currentPage++;
+      
+      if (pageOrders.length < PAGE_SIZE) {
+        hasMore = false;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  // Agrupar por dia
+  const dailyData = new Map<string, { sales: number; revenue: number }>();
+  
+  allOrders.forEach(order => {
+    const date = new Date(order.date_created).toISOString().split('T')[0];
+    const paidAmount = Number(order.paid_amount) || 0;
+    
+    if (!dailyData.has(date)) {
+      dailyData.set(date, { sales: 0, revenue: 0 });
+    }
+    
+    const dayData = dailyData.get(date)!;
+    dayData.sales += 1;
+    dayData.revenue += paidAmount;
+  });
+
+  // Preencher todos os dias dos últimos 30 dias (mesmo sem dados)
+  const result: Array<{ date: string; sales: number; revenue: number; ticket: number }> = [];
+  
+  for (let i = periodDays - 1; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+    
+    const dayData = dailyData.get(dateStr) || { sales: 0, revenue: 0 };
+    const ticket = dayData.sales > 0 ? dayData.revenue / dayData.sales : 0;
+    
+    result.push({
+      date: dateStr,
+      sales: dayData.sales,
+      revenue: dayData.revenue,
+      ticket: ticket
+    });
+  }
+
+  return result;
+}
+
+/**
  * Busca estoque FULL de uma conta ML
  */
 export async function getMLFullStock(accountId: string): Promise<MLFullStock[]> {
@@ -272,16 +357,35 @@ export async function getMLHealthHistory(
 }
 
 /**
- * Busca dados completos de uma conta ML (métricas, produtos, estoque, health)
+ * Busca dados de seller recovery (Garantia de Reputação)
+ */
+export async function getMLSellerRecovery(accountId: string): Promise<MLSellerRecovery | null> {
+  const { data, error } = await supabase
+    .from('mercado_livre_seller_recovery')
+    .select('*')
+    .eq('ml_account_id', accountId)
+    .maybeSingle();
+  
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching seller recovery:', error);
+    return null;
+  }
+  
+  return data;
+}
+
+/**
+ * Busca dados completos de uma conta ML (métricas, produtos, estoque, health, seller recovery)
  */
 export async function getMLAccountData(accountId: string, studentId?: string) {
-  const [metrics, products, stock, health, history, campaigns] = await Promise.all([
+  const [metrics, products, stock, health, history, campaigns, sellerRecovery] = await Promise.all([
     getMLMetrics(accountId),
     getMLProducts(accountId, studentId),
     getMLFullStock(accountId),
     getMLProductHealth(accountId),
     getMLHealthHistory(accountId, 30),
-    getMLCampaigns(accountId, studentId)
+    getMLCampaigns(accountId, studentId),
+    getMLSellerRecovery(accountId)
   ]);
   
   // Enriquecer produtos com health data
@@ -304,7 +408,8 @@ export async function getMLAccountData(accountId: string, studentId?: string) {
     stock,
     health,
     history,
-    campaigns
+    campaigns,
+    sellerRecovery
   };
 }
 

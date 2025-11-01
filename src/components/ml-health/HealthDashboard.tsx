@@ -115,19 +115,9 @@ export function HealthDashboard({ products, historyData, onSelectItem, onSync, l
               <h3 className="text-lg font-semibold mb-2">
                 Dados de Performance Não Disponíveis
               </h3>
-              <p className="text-muted-foreground mb-2">
+              <p className="text-muted-foreground mb-6">
                 A API do Mercado Livre não retornou dados de performance para seus anúncios.
               </p>
-              <p className="text-sm text-muted-foreground mb-4">
-                Não se preocupe! Vamos calcular um score estimado baseado nas características 
-                dos seus produtos (fotos, descrição, dados fiscais, etc).
-              </p>
-              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6 max-w-2xl mx-auto">
-                <p className="text-sm text-blue-900 dark:text-blue-100">
-                  💡 <strong>Nota:</strong> O score estimado tem precisão de ~60% e serve 
-                  como guia para melhorias. Estamos trabalhando para obter dados oficiais da API.
-                </p>
-              </div>
             </div>
             <Button 
               onClick={onSync}
@@ -137,12 +127,12 @@ export function HealthDashboard({ products, historyData, onSelectItem, onSync, l
               {loading ? (
                 <>
                   <RefreshCw className="animate-spin h-4 w-4 mr-2" />
-                  Calculando Scores...
+                  Sincronizando...
                 </>
               ) : (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Calcular Score Estimado Agora
+                  Sincronizar Score
                 </>
               )}
             </Button>

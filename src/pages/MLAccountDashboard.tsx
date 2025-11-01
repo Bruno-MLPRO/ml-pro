@@ -27,6 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 // Interfaces removidas - usando tipos centralizados de @/types/mercadoLivre
 import type { MLAccount, MLSellerRecovery, ItemHealth, Campaign, ProductAd, MLFullStock, MLProduct, HealthGoal } from "@/types/mercadoLivre";
+import { formatCurrency } from "@/lib/formatters";
 
 // MLMetrics local ainda necessário pois tem campos específicos diferentes do tipo centralizado
 interface MLMetrics {
@@ -95,6 +96,7 @@ export default function MLAccountDashboard() {
   const [metrics, setMetrics] = useState<MLMetrics | null>(null);
   const [products, setProducts] = useState<MLProduct[]>([]);
   const [fullStock, setFullStock] = useState<MLFullStock[]>([]);
+  const [sellerRecovery, setSellerRecovery] = useState<MLSellerRecovery | null>(null);
   const [loading, setLoading] = useState(false);
   const [adsFilter, setAdsFilter] = useState<'low_quality_photos' | 'no_description' | 'no_tax_data'>('low_quality_photos');
   const [shippingStats, setShippingStats] = useState<{
@@ -117,6 +119,68 @@ export default function MLAccountDashboard() {
   const [hasActiveCampaigns, setHasActiveCampaigns] = useState<boolean | null>(null);
   const [checkingProductAds, setCheckingProductAds] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
+
+  // Função auxiliar para verificar se a garantia está ativa
+  const isGuaranteeActive = (): boolean => {
+    // PRIORIDADE 1: Se has_decola está true nas métricas, considera ativo (calculado pelo ml-sync-data baseado em real_level + protection_end_date)
+    if (metrics?.has_decola) return true;
+    
+    // PRIORIDADE 2: Se tem protection_end_date no futuro, considera ativo
+    if (metrics?.protection_end_date) {
+      const endDate = new Date(metrics.protection_end_date);
+      const now = new Date();
+      if (endDate > now) return true;
+    }
+    
+    // PRIORIDADE 3: Se tem real_reputation_level, indica que Decola está ativo (protegendo a reputação)
+    if (metrics?.real_reputation_level && metrics?.protection_end_date) {
+      const endDate = new Date(metrics.protection_end_date);
+      const now = new Date();
+      if (endDate > now) return true;
+    }
+    
+    // PRIORIDADE 4: Verificar sellerRecovery sincronizado (pode não estar sempre disponível)
+    if (sellerRecovery) {
+      // Status ACTIVE indica garantia ativa
+      if (sellerRecovery.status === 'ACTIVE') return true;
+      
+      // Se guarantee_status é 'ON', está ativo
+      if (sellerRecovery.guarantee_status === 'ON') return true;
+      
+      // Se tem end_date no futuro, ainda está ativo mesmo que status não seja ACTIVE
+      if (sellerRecovery.end_date) {
+        const endDate = new Date(sellerRecovery.end_date);
+        const now = new Date();
+        if (endDate > now) return true;
+      }
+      
+      // Se está AVAILABLE e tem program_type com init_date, significa que foi ativado
+      if (sellerRecovery.status === 'AVAILABLE' && sellerRecovery.program_type && sellerRecovery.init_date) {
+        // Se tem end_date, verifica se ainda está válido
+        if (sellerRecovery.end_date) {
+          const endDate = new Date(sellerRecovery.end_date);
+          const now = new Date();
+          if (endDate > now) return true;
+        } else {
+          // Se não tem end_date mas tem init_date, pode estar ativo sem problemas ainda
+          return true;
+        }
+      }
+      
+      // Se não está FINISHED ou UNAVAILABLE e tem program_type com init_date, existe programa ativo
+      if (sellerRecovery.status !== 'FINISHED_BY_DATE' && 
+          sellerRecovery.status !== 'FINISHED_BY_ISSUES' && 
+          sellerRecovery.status !== 'FINISHED_BY_LEVEL' &&
+          sellerRecovery.status !== 'FINISHED_BY_USER' &&
+          sellerRecovery.status !== 'UNAVAILABLE' &&
+          sellerRecovery.program_type &&
+          sellerRecovery.init_date) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
 
   useEffect(() => {
     if (mlAccounts.length > 0 && !selectedAccountId) {
@@ -168,6 +232,7 @@ export default function MLAccountDashboard() {
       setMetrics(accountData.metrics);
       setProducts(accountData.products || []);
       setFullStock(accountData.stock || []);
+      setSellerRecovery(accountData.sellerRecovery || null);
       
       // Calcular shipping stats
       if (accountData.products) {
@@ -720,8 +785,8 @@ export default function MLAccountDashboard() {
                     )}
                   </div>
 
-                  {/* Programa Decola */}
-                  {metrics.has_decola && (
+                  {/* Garantia de Reputação */}
+                  {isGuaranteeActive() && (
                     <Card className="bg-muted/50">
                       <CardContent className="pt-4">
                         <div className="space-y-4">
@@ -729,67 +794,212 @@ export default function MLAccountDashboard() {
                           <div className="flex items-start gap-3">
                             <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
                             <div className="flex-1">
-                              <h4 className="font-medium text-sm mb-1">Programa Decola Ativo</h4>
+                              <h4 className="font-medium text-sm mb-1">
+                                Garantia de Reputação Ativa
+                                {sellerRecovery.program_type === 'NEWBIE_GRNTEE' && ' (Programa Decola)'}
+                                {sellerRecovery.program_type === 'RECOVERY_GRNTEE' && ' (Benefício de Reputação)'}
+                              </h4>
                               <p className="text-sm text-muted-foreground">
                                 Sua reputação está sendo protegida.
                               </p>
                             </div>
                           </div>
 
-                          {/* Contador de Problemas */}
-                          <div className="space-y-2 pl-8">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">Problemas no Programa</span>
-                              <span className={`text-sm font-bold ${
-                                metrics.decola_problems_count >= 4 ? 'text-red-500' :
-                                metrics.decola_problems_count >= 3 ? 'text-orange-500' :
-                                'text-green-500'
-                              }`}>
-                                {metrics.decola_problems_count}/5
-                              </span>
+                          {/* Reputação Real */}
+                          {(metrics?.real_reputation_level || sellerRecovery?.current_level) && (
+                            <div className="pl-8">
+                              <p className="text-xs text-muted-foreground mb-2">Reputação Real:</p>
+                              <ReputationBadge
+                                color={(() => {
+                                  // PRIORIDADE: real_reputation_level (da API /users/$USER_ID) > current_level (da API seller recovery)
+                                  // real_level vem como "red", "orange", "yellow", "light_green", "green"
+                                  // current_level pode vir como "newbie", "1_red", "2_orange", "3_yellow", "4_light_green", "5_green"
+                                  const level = metrics?.real_reputation_level || sellerRecovery?.current_level || 'gray';
+                                  
+                                  if (!level || level === 'newbie') return 'gray';
+                                  
+                                  // Formato simples (da API /users/$USER_ID): "red", "orange", "yellow", "light_green", "green"
+                                  if (level === 'red') return 'red';
+                                  if (level === 'orange') return 'orange';
+                                  if (level === 'yellow') return 'yellow';
+                                  if (level === 'light_green') return 'light_green';
+                                  if (level === 'green') return 'dark_green'; // green = verde escuro (5_green)
+                                  
+                                  // Formato com prefixo (da API seller recovery): "1_red", "2_orange", "3_yellow", "4_light_green", "5_green"
+                                  if (level.includes('green') && (level.startsWith('5') || level === 'green')) return 'dark_green';
+                                  if (level.includes('light_green') || level.includes('green')) return 'light_green';
+                                  if (level.includes('yellow')) return 'yellow';
+                                  if (level.includes('orange')) return 'orange';
+                                  if (level.includes('red')) return 'red';
+                                  
+                                  return 'gray';
+                                })()}
+                                levelId={metrics?.real_reputation_level || sellerRecovery?.current_level || null}
+                                positiveRate={metrics?.positive_ratings_rate || 0}
+                                totalTransactions={metrics?.reputation_transactions_total || 0}
+                              />
+                              {/* Exibir Power Seller Status se disponível */}
+                              {metrics?.is_mercado_lider && metrics?.mercado_lider_level && (
+                                <div className="mt-2 flex items-center gap-2">
+                                  <Badge variant="outline" className="text-xs">
+                                    👑 Power Seller: {metrics.mercado_lider_level === 'platinum' ? 'Platinum' : 
+                                                       metrics.mercado_lider_level === 'gold' ? 'Gold' : 
+                                                       metrics.mercado_lider_level === 'silver' ? 'Silver' : 
+                                                       metrics.mercado_lider_level === 'bronze' ? 'Bronze' : 
+                                                       metrics.mercado_lider_level}
+                                  </Badge>
+                                </div>
+                              )}
                             </div>
-                            
-                            <Progress 
-                              value={(metrics.decola_problems_count / 5) * 100} 
-                              className={`h-2 ${
-                                metrics.decola_problems_count >= 4 ? '[&>div]:bg-red-500' :
-                                metrics.decola_problems_count >= 3 ? '[&>div]:bg-orange-500' :
-                                '[&>div]:bg-green-500'
-                              }`}
-                            />
-                            
-                            {metrics.decola_problems_count >= 4 && (
-                              <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" />
-                                Atenção! Você está próximo do limite de problemas.
-                              </p>
-                            )}
-                            
-                            <p className="text-xs text-muted-foreground">
-                              Ao atingir 5 problemas (reclamações + atrasos + cancelamentos), 
-                              o Programa Decola será encerrado e sua reputação real será exibida.
-                            </p>
-                          </div>
+                          )}
 
-                          {/* Data de expiração */}
-                          {metrics.protection_end_date && (
-                            <div className="pl-8 pt-2 border-t">
+                          {/* Contador de Problemas */}
+                          {(sellerRecovery || metrics?.has_decola || metrics?.decola_problems_count !== undefined) && (
+                            <div className="space-y-2 pl-8">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">Problemas</span>
+                                <span className={`text-sm font-bold ${
+                                  (() => {
+                                    // Se Decola está ativo, calcular problemas das métricas REAIS primeiro
+                                    if (metrics?.has_decola) {
+                                      const problemsFromMetrics = (metrics.claims_value || 0) + (metrics.delayed_handling_value || 0) + (metrics.cancellations_value || 0);
+                                      if (problemsFromMetrics >= 4) return 'text-red-500';
+                                      if (problemsFromMetrics >= 3) return 'text-orange-500';
+                                      return 'text-green-500';
+                                    }
+                                    // Se tem sellerRecovery, usar seus valores
+                                    if (sellerRecovery) {
+                                      const totalIssues = sellerRecovery.total_issues ?? (sellerRecovery.claims_qty + sellerRecovery.delay_qty + sellerRecovery.cancel_qty);
+                                      const maxIssues = sellerRecovery.max_issues_allowed ?? 5;
+                                      if (totalIssues >= maxIssues - 1) return 'text-red-500';
+                                      if (totalIssues >= maxIssues - 2) return 'text-orange-500';
+                                      return 'text-green-500';
+                                    }
+                                    // Fallback para decola_problems_count
+                                    const problems = metrics.decola_problems_count ?? 0;
+                                    if (problems >= 4) return 'text-red-500';
+                                    if (problems >= 3) return 'text-orange-500';
+                                    return 'text-green-500';
+                                  })()
+                                }`}>
+                                  {(() => {
+                                    // PRIORIDADE 1: Se Decola está ativo, calcular das métricas REAIS
+                                    if (metrics?.has_decola) {
+                                      const problemsFromMetrics = (metrics.claims_value || 0) + (metrics.delayed_handling_value || 0) + (metrics.cancellations_value || 0);
+                                      const maxIssues = sellerRecovery?.max_issues_allowed ?? 5;
+                                      return `${problemsFromMetrics}/${maxIssues}`;
+                                    }
+                                    // PRIORIDADE 2: Se tem sellerRecovery, usar seus valores
+                                    if (sellerRecovery) {
+                                      const totalIssues = sellerRecovery.total_issues ?? (sellerRecovery.claims_qty + sellerRecovery.delay_qty + sellerRecovery.cancel_qty);
+                                      const maxIssues = sellerRecovery.max_issues_allowed ?? 5;
+                                      return `${totalIssues}/${maxIssues}`;
+                                    }
+                                    // PRIORIDADE 3: Fallback para decola_problems_count
+                                    return `${metrics.decola_problems_count ?? 0}/5`;
+                                  })()}
+                                </span>
+                              </div>
+                              
+                              <Progress 
+                                value={(() => {
+                                  // PRIORIDADE 1: Se Decola está ativo, calcular das métricas REAIS
+                                  if (metrics?.has_decola) {
+                                    const problemsFromMetrics = (metrics.claims_value || 0) + (metrics.delayed_handling_value || 0) + (metrics.cancellations_value || 0);
+                                    const maxIssues = sellerRecovery?.max_issues_allowed ?? 5;
+                                    return (problemsFromMetrics / maxIssues) * 100;
+                                  }
+                                  // PRIORIDADE 2: Se tem sellerRecovery, usar seus valores
+                                  if (sellerRecovery) {
+                                    const totalIssues = sellerRecovery.total_issues ?? (sellerRecovery.claims_qty + sellerRecovery.delay_qty + sellerRecovery.cancel_qty);
+                                    const maxIssues = sellerRecovery.max_issues_allowed ?? 5;
+                                    return (totalIssues / maxIssues) * 100;
+                                  }
+                                  // PRIORIDADE 3: Fallback
+                                  return ((metrics.decola_problems_count ?? 0) / 5) * 100;
+                                })()} 
+                                className={`h-2 ${
+                                  (() => {
+                                    // PRIORIDADE 1: Se Decola está ativo, calcular das métricas REAIS
+                                    if (metrics?.has_decola) {
+                                      const problemsFromMetrics = (metrics.claims_value || 0) + (metrics.delayed_handling_value || 0) + (metrics.cancellations_value || 0);
+                                      if (problemsFromMetrics >= 4) return '[&>div]:bg-red-500';
+                                      if (problemsFromMetrics >= 3) return '[&>div]:bg-orange-500';
+                                      return '[&>div]:bg-green-500';
+                                    }
+                                    // PRIORIDADE 2: Se tem sellerRecovery, usar seus valores
+                                    if (sellerRecovery) {
+                                      const totalIssues = sellerRecovery.total_issues ?? (sellerRecovery.claims_qty + sellerRecovery.delay_qty + sellerRecovery.cancel_qty);
+                                      const maxIssues = sellerRecovery.max_issues_allowed ?? 5;
+                                      if (totalIssues >= maxIssues - 1) return '[&>div]:bg-red-500';
+                                      if (totalIssues >= maxIssues - 2) return '[&>div]:bg-orange-500';
+                                      return '[&>div]:bg-green-500';
+                                    }
+                                    // PRIORIDADE 3: Fallback
+                                    const problems = metrics.decola_problems_count ?? 0;
+                                    if (problems >= 4) return '[&>div]:bg-red-500';
+                                    if (problems >= 3) return '[&>div]:bg-orange-500';
+                                    return '[&>div]:bg-green-500';
+                                  })()
+                                }`}
+                              />
+                              
+                              {(() => {
+                                // PRIORIDADE 1: Se Decola está ativo, calcular das métricas REAIS
+                                if (metrics?.has_decola) {
+                                  const problemsFromMetrics = (metrics.claims_value || 0) + (metrics.delayed_handling_value || 0) + (metrics.cancellations_value || 0);
+                                  const maxIssues = sellerRecovery?.max_issues_allowed ?? 5;
+                                  return problemsFromMetrics >= maxIssues - 1;
+                                }
+                                // PRIORIDADE 2: Se tem sellerRecovery
+                                if (sellerRecovery) {
+                                  const totalIssues = sellerRecovery.total_issues ?? (sellerRecovery.claims_qty + sellerRecovery.delay_qty + sellerRecovery.cancel_qty);
+                                  const maxIssues = sellerRecovery.max_issues_allowed ?? 5;
+                                  return totalIssues >= maxIssues - 1;
+                                }
+                                // PRIORIDADE 3: Fallback
+                                return (metrics.decola_problems_count ?? 0) >= 4;
+                              })() && (
+                                <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Atenção! Você está próximo do limite de problemas.
+                                </p>
+                              )}
+                              
                               <p className="text-xs text-muted-foreground">
-                                Proteção válida até: {new Date(metrics.protection_end_date).toLocaleDateString('pt-BR')}
+                                Ao atingir {(sellerRecovery?.max_issues_allowed ?? 5)} problemas (reclamações + atrasos + cancelamentos), 
+                                a Garantia de Reputação será encerrada e sua reputação real será exibida.
                               </p>
                             </div>
                           )}
 
-                          {/* Reputação Real */}
-                          {metrics.real_reputation_level && (
+                          {/* Válido até */}
+                          {(sellerRecovery?.end_date || metrics?.protection_end_date) && (
                             <div className="pl-8 pt-2 border-t">
-                              <p className="text-xs text-muted-foreground mb-2">Reputação Real:</p>
-                              <ReputationBadge
-                                color={metrics.real_reputation_level}
-                                levelId={null}
-                                positiveRate={metrics.positive_ratings_rate}
-                                totalTransactions={metrics.reputation_transactions_total}
-                              />
+                              <p className="text-xs text-muted-foreground mb-1">Válido até:</p>
+                              <p className="text-sm font-medium">
+                                {new Date(sellerRecovery?.end_date || metrics.protection_end_date || '').toLocaleDateString('pt-BR')}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Valor de garantia */}
+                          {sellerRecovery?.guarantee_price && (
+                            <div className="pl-8 pt-2 border-t">
+                              <p className="text-xs text-muted-foreground mb-1">Valor de garantia:</p>
+                              <p className="text-sm font-medium">
+                                {formatCurrency(sellerRecovery.guarantee_price)}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Valor de bonus em ADS */}
+                          {sellerRecovery?.advertising_amount && (
+                            <div className="pl-8 pt-2 border-t">
+                              <p className="text-xs text-muted-foreground mb-1">Valor de bonus em ADS:</p>
+                              <p className="text-sm font-medium">
+                                {formatCurrency(sellerRecovery.advertising_amount)}
+                              </p>
                             </div>
                           )}
                         </div>
@@ -803,21 +1013,39 @@ export default function MLAccountDashboard() {
                       <div className="flex items-center justify-between">
                         <CardTitle>Reputação</CardTitle>
                         <Badge 
-                          variant={metrics.has_decola ? "default" : "outline"}
+                          variant={isGuaranteeActive() ? "default" : "outline"}
                           className="ml-auto"
                         >
-                          {metrics.has_decola ? <CheckCircle2 className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
-                          Decola {metrics.has_decola ? "Ativo" : "Inativo"}
+                          {isGuaranteeActive() ? (
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                          ) : (
+                            <XCircle className="w-3 h-3 mr-1" />
+                          )}
+                          Garantia {isGuaranteeActive() ? "Ativa" : "Inativa"}
                         </Badge>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <ReputationBadge
-                        color={metrics.reputation_color}
-                        levelId={metrics.reputation_level}
-                        positiveRate={metrics.positive_ratings_rate}
-                        totalTransactions={metrics.reputation_transactions_total}
-                      />
+                      <div className="space-y-3">
+                        <ReputationBadge
+                          color={metrics.reputation_color}
+                          levelId={metrics.reputation_level}
+                          positiveRate={metrics.positive_ratings_rate}
+                          totalTransactions={metrics.reputation_transactions_total}
+                        />
+                        {/* Exibir Power Seller Status */}
+                        {metrics.is_mercado_lider && metrics.mercado_lider_level && (
+                          <div className="flex items-center gap-2 pt-2 border-t">
+                            <Badge variant="outline" className="text-xs font-semibold">
+                              👑 Power Seller: {metrics.mercado_lider_level === 'platinum' ? 'Platinum' : 
+                                                 metrics.mercado_lider_level === 'gold' ? 'Gold' : 
+                                                 metrics.mercado_lider_level === 'silver' ? 'Silver' : 
+                                                 metrics.mercado_lider_level === 'bronze' ? 'Bronze' : 
+                                                 metrics.mercado_lider_level}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
 

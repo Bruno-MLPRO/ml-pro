@@ -17,13 +17,15 @@ export function useConsolidatedMetrics(periodDays: number = 30) {
 
 /**
  * Hook para buscar métricas de Product Ads de múltiplas contas
+ * Otimizado com cache mais longo e sem refetch no foco da janela
  */
 export function useProductAdsMetrics(accountIds: string[]) {
   return useQuery({
     queryKey: ['product-ads-metrics', accountIds.sort().join(',')],
     queryFn: () => getProductAdsMetrics(accountIds),
     enabled: accountIds.length > 0,
-    staleTime: 2 * 60 * 1000 // 2 minutos
+    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
+    refetchOnWindowFocus: false // Não refaz query ao focar a janela
   });
 }
 

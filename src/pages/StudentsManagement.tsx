@@ -280,11 +280,12 @@ export default function StudentsManagement() {
       .in("student_id", filteredStudentIds)
       .order("updated_at", { ascending: false });
 
-    // Fetch Mercado Livre products to check for FLEX
+    // Fetch Mercado Livre products to check for shipping types (only active)
     const { data: mlProductsData } = await supabase
       .from("mercado_livre_products")
-      .select("student_id, shipping_mode, logistic_type")
-      .in("student_id", filteredStudentIds);
+      .select("student_id, shipping_mode, logistic_type, shipping_modes, logistic_types, status")
+      .in("student_id", filteredStudentIds)
+      .eq("status", "active");
 
     // Fetch count of ML accounts per student (only active accounts)
     const { data: mlAccountsData } = await supabase
@@ -402,29 +403,49 @@ export default function StudentsManagement() {
       // Produtos do aluno
       const studentProducts = mlProductsData?.filter(p => p.student_id === profile.id) || [];
       
+      // Helper function to check if product has specific logistic type
+      const hasLogisticType = (product: any, type: string): boolean => {
+        // Check new JSONB field (only if it has values)
+        if (product.logistic_types && Array.isArray(product.logistic_types) && product.logistic_types.length > 0) {
+          return product.logistic_types.includes(type);
+        }
+        // If JSONB is empty or null, fallback to old field
+        return product.logistic_type === type;
+      };
+
+      // Helper function to check if product has specific shipping mode
+      const hasShippingMode = (product: any, mode: string): boolean => {
+        // Check new JSONB field (only if it has values)
+        if (product.shipping_modes && Array.isArray(product.shipping_modes) && product.shipping_modes.length > 0) {
+          return product.shipping_modes.includes(mode);
+        }
+        // If JSONB is empty or null, fallback to old field
+        return product.shipping_mode === mode;
+      };
+
       // CORREIOS: shipping_mode = 'drop_off' OR (me2 AND logistic_type = 'drop_off')
       const has_correios = studentProducts.some(p => 
-        p.shipping_mode === 'drop_off' || (p.shipping_mode === 'me2' && p.logistic_type === 'drop_off')
+        hasShippingMode(p, 'drop_off') || (hasShippingMode(p, 'me2') && hasLogisticType(p, 'drop_off'))
       );
 
       // FLEX: shipping_mode = 'me2' AND logistic_type = 'self_service'
       const has_ml_flex = studentProducts.some(p => 
-        p.shipping_mode === 'me2' && p.logistic_type === 'self_service'
+        hasShippingMode(p, 'me2') && hasLogisticType(p, 'self_service')
       );
 
       // AGÊNCIAS: shipping_mode = 'me2' AND logistic_type = 'xd_drop_off'
       const has_agencies = studentProducts.some(p => 
-        p.shipping_mode === 'me2' && p.logistic_type === 'xd_drop_off'
+        hasShippingMode(p, 'me2') && hasLogisticType(p, 'xd_drop_off')
       );
 
       // COLETA: shipping_mode = 'me2' AND logistic_type = 'cross_docking'
       const has_coleta = studentProducts.some(p => 
-        p.shipping_mode === 'me2' && p.logistic_type === 'cross_docking'
+        hasShippingMode(p, 'me2') && hasLogisticType(p, 'cross_docking')
       );
 
       // ENVIO PRÓPRIO: shipping_mode = 'not_specified'
       const has_envio_proprio = studentProducts.some(p => 
-        p.shipping_mode === 'not_specified'
+        hasShippingMode(p, 'not_specified')
       );
 
       // Get manager name

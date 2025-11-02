@@ -1,4 +1,4 @@
-import { Home, Users, User, Settings, LogOut, ListChecks, GraduationCap, UsersRound, ShoppingBag } from "lucide-react";
+import { Home, Users, User, Settings, LogOut, ListChecks, GraduationCap, UsersRound, ShoppingBag, TrendingUp, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -75,6 +75,34 @@ export const Sidebar = () => {
               title="Equipe"
             >
               <UsersRound className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/gestor/metricas')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/gestor/metricas'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Métricas e Desempenho"
+            >
+              <TrendingUp className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/gestor/financeiro')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/gestor/financeiro'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Gestão Financeira"
+            >
+              <Wallet className="w-5 h-5" strokeWidth={1.5} />
             </Button>
             <Button
               variant="ghost"

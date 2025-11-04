@@ -135,7 +135,7 @@ export interface Manager {
   full_name: string;
   email: string;
   phone: string | null;
-  role: 'manager' | 'administrator';
+  role: 'manager' | 'administrator' | 'closer';
   active_students: number;
   inactive_students: number;
 }

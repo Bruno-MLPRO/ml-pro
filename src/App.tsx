@@ -21,6 +21,7 @@ import MLAccountDashboard from "./pages/MLAccountDashboard";
 import ConsultantBoard from "./pages/ConsultantBoard";
 import MetricsPerformance from "./pages/MetricsPerformance";
 import FinancialManagement from "./pages/FinancialManagement";
+import AcquisitionHub from "./pages/AcquisitionHub";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/gestor/equipe" element={<TeamManagement />} />
             <Route path="/gestor/metricas" element={<MetricsPerformance />} />
             <Route path="/gestor/financeiro" element={<FinancialManagement />} />
+            <Route path="/gestor/aquisicao" element={<AcquisitionHub />} />
             <Route path="/aluno/dashboard" element={<StudentDashboard />} />
             <Route path="/aluno/jornadas" element={<StudentJourney />} />
             <Route path="/aluno/contas-ml" element={<MLAccountDashboard />} />

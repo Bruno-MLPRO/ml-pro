@@ -1,4 +1,4 @@
-import { Home, Users, User, Settings, LogOut, ListChecks, GraduationCap, UsersRound, ShoppingBag, TrendingUp, Wallet } from "lucide-react";
+import { Home, Users, User, Settings, LogOut, ListChecks, GraduationCap, UsersRound, ShoppingBag, TrendingUp, Wallet, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -61,6 +61,20 @@ export const Sidebar = () => {
               title="Alunos"
             >
               <GraduationCap className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/gestor/aquisicao')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/gestor/aquisicao'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Hub de Aquisição"
+            >
+              <Target className="w-5 h-5" strokeWidth={1.5} />
             </Button>
             <Button
               variant="ghost"
@@ -162,6 +176,37 @@ export const Sidebar = () => {
               title="Alunos"
             >
               <GraduationCap className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/perfil')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/perfil'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Perfil"
+            >
+              <User className="w-5 h-5" strokeWidth={1.5} />
+            </Button>
+          </>
+        ) : userRole === 'closer' ? (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/gestor/aquisicao')}
+              className={cn(
+                "w-12 h-12 rounded-xl transition-all duration-200",
+                location.pathname === '/gestor/aquisicao'
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "text-foreground-secondary hover:text-foreground hover:bg-background-elevated"
+              )}
+              title="Hub de Aquisição"
+            >
+              <Target className="w-5 h-5" strokeWidth={1.5} />
             </Button>
             <Button
               variant="ghost"

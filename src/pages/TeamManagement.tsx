@@ -68,7 +68,7 @@ export default function TeamManagement() {
     email: "",
     phone: "",
     password: "",
-    role: "manager" as "manager" | "administrator",
+    role: "manager" as "manager" | "administrator" | "closer",
   });
 
   useEffect(() => {
@@ -117,11 +117,11 @@ export default function TeamManagement() {
     try {
       setLoading(true);
       
-      // Get all managers and administrators from user_roles
+      // Get all managers, administrators and closers from user_roles
       const { data: managerRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role')
-        .in('role', ['manager', 'administrator']);
+        .in('role', ['manager', 'administrator', 'closer']);
 
       if (rolesError) throw rolesError;
 
@@ -169,7 +169,7 @@ export default function TeamManagement() {
             full_name: profile.full_name,
             email: profile.email,
             phone: profile.phone,
-            role: (roleInfo?.role || 'manager') as 'manager' | 'administrator',
+            role: (roleInfo?.role || 'manager') as 'manager' | 'administrator' | 'closer',
             active_students: activeStudents,
             inactive_students: inactiveStudents,
           };
@@ -417,7 +417,7 @@ export default function TeamManagement() {
                                 email: manager.email,
                                 phone: manager.phone || "",
                                 password: "",
-                                role: (roleData?.role || "manager") as "manager" | "administrator"
+                                role: (roleData?.role || "manager") as "manager" | "administrator" | "closer"
                               });
 
                               // Load students assigned to this manager
@@ -507,7 +507,7 @@ export default function TeamManagement() {
                 <Label htmlFor="role">Tipo de Acesso *</Label>
                 <Select 
                   value={formData.role} 
-                  onValueChange={(value: "manager" | "administrator") => 
+                  onValueChange={(value: "manager" | "administrator" | "closer") => 
                     setFormData({ ...formData, role: value })
                   }
                 >
@@ -517,6 +517,7 @@ export default function TeamManagement() {
                   <SelectContent>
                     <SelectItem value="manager">Gestor</SelectItem>
                     <SelectItem value="administrator">Administrador</SelectItem>
+                    <SelectItem value="closer">Closer</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

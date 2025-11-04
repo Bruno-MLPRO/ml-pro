@@ -14,6 +14,8 @@ const Index = () => {
         navigate('/gestor/dashboard');
       } else if (userRole === 'student') {
         navigate('/aluno/dashboard');
+      } else if (userRole === 'closer') {
+        navigate('/gestor/aquisicao');
       }
     }
   }, [user, userRole, loading, navigate]);
